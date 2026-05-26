@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+/* ============================================================
+   DESIGN TOKENS — 股票平台設計系統
+   台灣習慣：紅漲綠跌
+   ============================================================ */
+
+:root {
+  /* --- 主色盤 --- */
+  --color-brand:          #3B82F6;   /* 品牌藍 */
+  --color-brand-hover:    #2563EB;
+
+  /* --- 行情語意色 --- */
+  --color-up:             #EF4444;   /* 上漲紅 */
+  --color-up-subtle:      rgba(239, 68, 68, 0.12);
+  --color-down:           #22C55E;   /* 下跌綠 */
+  --color-down-subtle:    rgba(34, 197, 94, 0.12);
+  --color-flat:           #6B7280;   /* 平盤灰 */
+
+  /* --- 三大法人識別色 --- */
+  --color-foreign:        #F59E0B;   /* 外資 琥珀 */
+  --color-trust:          #8B5CF6;   /* 投信 紫 */
+  --color-dealer:         #06B6D4;   /* 自營 青 */
+
+  /* --- 介面層 (淺色主題) --- */
+  --bg-base:              #F9FAFB;
+  --bg-surface:           #FFFFFF;
+  --bg-elevated:          #F3F4F6;
+  --bg-overlay:           rgba(0,0,0,0.5);
+
+  --border:               #E5E7EB;
+  --border-strong:        #D1D5DB;
+
+  --text-primary:         #111827;
+  --text-secondary:       #4B5563;
+  --text-tertiary:        #9CA3AF;
+  --text-inverse:         #FFFFFF;
+
+  /* --- 間距系統（8px grid）--- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* --- 字型 --- */
+  --font-sans:   "Noto Sans TC", "Inter", system-ui, sans-serif;
+  --font-mono:   "JetBrains Mono", "Roboto Mono", monospace;
+
+  /* --- 字級 --- */
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-lg:   16px;
+  --text-xl:   18px;
+  --text-2xl:  22px;
+  --text-3xl:  28px;
+
+  /* --- 圓角 --- */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+
+  /* --- 陰影 --- */
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.14);
+
+  /* --- 面板尺寸 --- */
+  --panel-left:   220px;
+  --panel-right:  320px;
+  --header-h:     52px;
+  --statusbar-h:  28px;
+
+  /* --- 過渡動畫 --- */
+  --transition-fast:   100ms ease;
+  --transition-base:   200ms ease;
+  --transition-slow:   350ms ease;
+}
+
+/* ============================================================
+   深色主題（預設）— 專業交易者偏好深色
+   ============================================================ */
+[data-theme="dark"], :root {
+  --bg-base:              #0F1117;
+  --bg-surface:           #161B27;
+  --bg-elevated:          #1E2535;
+  --bg-overlay:           rgba(0,0,0,0.7);
+
+  --border:               #2A3045;
+  --border-strong:        #374060;
+
+  --text-primary:         #E2E8F0;
+  --text-secondary:       #94A3B8;
+  --text-tertiary:        #4B5563;
+  --text-inverse:         #111827;
+}
+
+/* 淺色主題覆蓋 */
+[data-theme="light"] {
+  --bg-base:              #F9FAFB;
+  --bg-surface:           #FFFFFF;
+  --bg-elevated:          #F3F4F6;
+
+  --border:               #E5E7EB;
+  --border-strong:        #D1D5DB;
+
+  --text-primary:         #111827;
+  --text-secondary:       #4B5563;
+  --text-tertiary:        #9CA3AF;
+}
+
+/* ============================================================
+   TAILWIND v4 主題整合
+   ============================================================ */
+@theme inline {
+  --color-brand:        var(--color-brand);
+  --color-up:           var(--color-up);
+  --color-down:         var(--color-down);
+  --color-flat:         var(--color-flat);
+  --color-foreign:      var(--color-foreign);
+  --color-trust:        var(--color-trust);
+  --color-dealer:       var(--color-dealer);
+
+  --color-bg-base:      var(--bg-base);
+  --color-bg-surface:   var(--bg-surface);
+  --color-bg-elevated:  var(--bg-elevated);
+
+  --color-border:       var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+
+  --font-sans:          var(--font-sans);
+  --font-mono:          var(--font-mono);
+
+  --radius-sm:          var(--radius-sm);
+  --radius-md:          var(--radius-md);
+  --radius-lg:          var(--radius-lg);
+}
+
+/* ============================================================
+   GLOBAL BASE STYLES
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+/* 數字欄位統一使用等寬字型 */
+.num {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* 行情顏色 utility classes */
+.text-up   { color: var(--color-up); }
+.text-down { color: var(--color-down); }
+.text-flat { color: var(--color-flat); }
+.bg-up     { background-color: var(--color-up-subtle); }
+.bg-down   { background-color: var(--color-down-subtle); }
