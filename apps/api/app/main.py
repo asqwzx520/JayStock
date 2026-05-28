@@ -3,8 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.api.v1 import quotes, kline, chips, market, screener, watchlist
+from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback
 from app.tasks.scheduler import start_scheduler, stop_scheduler
+
+# ── Sentry error monitoring（可選，需設定 SENTRY_DSN）────────────────────────
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.asyncio import AsyncioIntegration
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        integrations=[FastApiIntegration(), AsyncioIntegration()],
+        traces_sample_rate=0.05,
+        environment="production" if not settings.debug else "development",
+    )
 
 
 @asynccontextmanager
@@ -31,9 +43,11 @@ app.add_middleware(
 app.include_router(quotes.router,    prefix="/api/v1", tags=["quotes"])
 app.include_router(kline.router,     prefix="/api/v1", tags=["kline"])
 app.include_router(chips.router,     prefix="/api/v1", tags=["chips"])
+app.include_router(margin.router,    prefix="/api/v1", tags=["margin"])
 app.include_router(market.router,    prefix="/api/v1", tags=["market"])
 app.include_router(screener.router,  prefix="/api/v1", tags=["screener"])
 app.include_router(watchlist.router, prefix="/api/v1", tags=["watchlist"])
+app.include_router(feedback.router,  prefix="/api/v1", tags=["feedback"])
 
 
 @app.get("/health")

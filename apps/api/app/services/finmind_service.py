@@ -69,3 +69,44 @@ async def fetch_institutional(
         data = resp.json()
 
     return data.get("data", [])
+
+
+async def fetch_market_chips_all(target_date: date) -> list[dict]:
+    """當日全市場三大法人買賣超 — 不指定 data_id 取全部"""
+    params = {
+        "dataset":    "TaiwanStockInstitutionalInvestorsBuySell",
+        "start_date": target_date.isoformat(),
+        "end_date":   target_date.isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+    return data.get("data", [])
+
+
+async def fetch_margin(
+    symbol: str,
+    start: date | None = None,
+    end: date | None = None,
+) -> list[dict]:
+    """融資融券餘額 — TaiwanStockMarginPurchaseShortSale"""
+    if end is None:
+        end = date.today()
+    if start is None:
+        start = end - timedelta(days=120)
+
+    params = {
+        "dataset": "TaiwanStockMarginPurchaseShortSale",
+        "data_id": symbol,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "token": settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+
+    return data.get("data", [])

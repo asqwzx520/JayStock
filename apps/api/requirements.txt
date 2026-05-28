@@ -10,3 +10,8 @@ python-dotenv==1.1.0
 google-generativeai==0.8.5
 pytest==8.3.5
 pytest-asyncio==0.26.0
+yfinance>=0.2.50
+# M6: Error monitoring
+sentry-sdk[fastapi]>=2.0.0
+# M6: email validation in feedback endpoint
+email-validator>=2.0.0

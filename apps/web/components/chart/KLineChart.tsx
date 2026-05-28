@@ -17,20 +17,21 @@ import {
   CrosshairMode,
   LineStyle,
 } from "lightweight-charts";
-import type { KlineBar } from "@/lib/api";
+import type { KlineBar, ChipsBar } from "@/lib/api";
 import { sma, ema, bollinger, macd, rsi, kd, type OHLCV } from "@/lib/indicators";
 
-export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD";
+export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS";
 
 interface KLineChartProps {
   data: KlineBar[];
   indicators: IndicatorType[];
+  chipsData?: ChipsBar[];
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
-export default function KLineChart({ data, indicators }: KLineChartProps) {
+export default function KLineChart({ data, indicators, chipsData }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<ISeriesApi<SeriesType>[]>([]);
@@ -44,6 +45,11 @@ export default function KLineChart({ data, indicators }: KLineChartProps) {
       chartRef.current = null;
       seriesRefs.current = [];
     }
+
+    // ── Chips overlay layout ──────────────────────────────────
+    // When CHIPS active, carve bottom 48% for 3 institutional lanes
+    const hasChipsOverlay =
+      indicators.includes("CHIPS") && !!chipsData && chipsData.length > 0;
 
     const chart = createChart(container, {
       width: container.clientWidth,
@@ -63,7 +69,10 @@ export default function KLineChart({ data, indicators }: KLineChartProps) {
       },
       rightPriceScale: {
         borderColor: "#2A3045",
-        scaleMargins: { top: 0.05, bottom: 0.25 },
+        scaleMargins: {
+          top: 0.05,
+          bottom: hasChipsOverlay ? 0.50 : 0.25,
+        },
       },
       timeScale: {
         borderColor: "#2A3045",
@@ -106,7 +115,10 @@ export default function KLineChart({ data, indicators }: KLineChartProps) {
       priceScaleId: "volume",
     });
     volumeSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
+      // When chips overlay is active, squeeze volume into a mid-stripe
+      scaleMargins: hasChipsOverlay
+        ? { top: 0.53, bottom: 0.42 }
+        : { top: 0.80, bottom: 0 },
     });
     volumeSeries.setData(volumeData);
     seriesRefs.current.push(volumeSeries);
@@ -298,8 +310,47 @@ export default function KLineChart({ data, indicators }: KLineChartProps) {
       seriesRefs.current.push(kLine, dLine);
     }
 
+    // ── 法人籌碼疊圖 ─────────────────────────────────────────
+    if (hasChipsOverlay && chipsData) {
+      const chipsMap = new Map(chipsData.map((c) => [c.date, c]));
+
+      type ChipsSeries = { key: "foreign_net" | "trust_net" | "dealer_net"; upColor: string; id: string; top: number; bottom: number };
+      const lanes: ChipsSeries[] = [
+        { key: "foreign_net", upColor: "rgba(245,158,11,0.75)",  id: "chips_f", top: 0.62, bottom: 0.26 },
+        { key: "trust_net",   upColor: "rgba(139,92,246,0.75)",  id: "chips_t", top: 0.76, bottom: 0.12 },
+        { key: "dealer_net",  upColor: "rgba(6,182,212,0.75)",   id: "chips_d", top: 0.88, bottom: 0.02 },
+      ];
+      const DOWN_COLOR = "rgba(239,68,68,0.65)";
+
+      for (const lane of lanes) {
+        const series = chart.addSeries(HistogramSeries, {
+          priceScaleId:     lane.id,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        series.priceScale().applyOptions({
+          scaleMargins:  { top: lane.top, bottom: lane.bottom },
+          borderVisible: false,
+        });
+        series.setData(
+          data
+            .filter((d) => chipsMap.has(d.date))
+            .map((d) => {
+              const c = chipsMap.get(d.date)!;
+              const val = c[lane.key] as number;
+              return {
+                time:  d.date as Time,
+                value: val,
+                color: val >= 0 ? lane.upColor : DOWN_COLOR,
+              };
+            })
+        );
+        seriesRefs.current.push(series);
+      }
+    }
+
     chart.timeScale().fitContent();
-  }, [data, indicators]);
+  }, [data, indicators, chipsData]);
 
   useEffect(() => {
     buildChart();

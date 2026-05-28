@@ -34,3 +34,7 @@ Thumbs.db
 # IDE
 .vscode/settings.json
 .idea/
+
+# Claude Code session data
+.claude/
+*.jsonl

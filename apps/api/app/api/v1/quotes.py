@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.services.twse_fetcher import fetch_quotes
+from app.services.market_service import fetch_us_quote
 
 router = APIRouter()
 
@@ -23,3 +24,15 @@ async def get_quotes_batch(symbols: str):
     if len(symbol_list) > 50:
         raise HTTPException(status_code=400, detail="Max 50 symbols per request")
     return await fetch_quotes(symbol_list)
+
+
+@router.get("/quotes/us/{symbol}")
+async def get_us_quote(symbol: str):
+    """
+    取得美股報價（Yahoo Finance / yfinance）
+    例：GET /api/v1/quotes/us/AAPL
+    """
+    result = await fetch_us_quote(symbol)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"US symbol {symbol.upper()} not found")
+    return result

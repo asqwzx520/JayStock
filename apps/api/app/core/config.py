@@ -25,5 +25,18 @@ class Settings(BaseSettings):
     # Data sources
     finmind_token: str = ""
 
+    # Email Digest (SMTP)
+    digest_smtp_host: str = "smtp.gmail.com"
+    digest_smtp_port: int = 587
+    digest_smtp_user: str = ""
+    digest_smtp_pass: str = ""
+    digest_recipients: str = ""   # comma-separated emails
+
+    # Error Monitoring
+    sentry_dsn: str = ""
+
+    # Data / file storage
+    data_dir: str = "/tmp"
+
 
 settings = Settings()
