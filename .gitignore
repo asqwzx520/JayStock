@@ -38,3 +38,5 @@ Thumbs.db
 # Claude Code session data
 .claude/
 *.jsonl
+
+.vercel
