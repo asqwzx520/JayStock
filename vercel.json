@@ -1,7 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @stock-platform/web build",
-  "outputDirectory": "apps/web/.next",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "framework": "nextjs",
-  "devCommand": "pnpm --filter @stock-platform/web dev"
-}
