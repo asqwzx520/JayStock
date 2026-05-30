@@ -394,3 +394,47 @@ export interface USQuote {
 export function getUSQuote(symbol: string) {
   return fetcher<USQuote>(`/api/v1/quotes/us/${encodeURIComponent(symbol)}`);
 }
+
+// ── Price Alert Notifications ────────────────────────────────────────────────
+export interface AlertNotification {
+  id:         string;
+  symbol:     string;
+  alert_type: "above" | "below";
+  threshold:  number;
+  price:      number;
+  created_at: string;
+}
+
+export interface AlertsResponse {
+  notifications: AlertNotification[];
+}
+
+function alertsFetcher<T>(path: string, init?: RequestInit): Promise<T> {
+  const uid = getUserId();
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-ID": uid,
+      ...(init?.headers ?? {}),
+    },
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
+    if (res.status === 204) return undefined as T;
+    return res.json() as T;
+  });
+}
+
+export const alertsApi = {
+  getUnread: () =>
+    alertsFetcher<AlertsResponse>("/api/v1/alerts"),
+
+  markRead: (id: string) =>
+    alertsFetcher<void>(`/api/v1/alerts/${id}/read`, { method: "POST" }),
+
+  markAllRead: () =>
+    alertsFetcher<void>("/api/v1/alerts/read-all", { method: "POST" }),
+
+  delete: (id: string) =>
+    alertsFetcher<void>(`/api/v1/alerts/${id}`, { method: "DELETE" }),
+};

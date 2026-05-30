@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import FeedbackWidget from "@/components/ui/FeedbackWidget";
+import AlertsToast    from "@/components/ui/AlertsToast";
 
 // ── Site-wide Metadata ────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -98,6 +99,7 @@ export default function RootLayout({
       <body className="h-full overflow-hidden">
         {children}
         <FeedbackWidget />
+        <AlertsToast />
       </body>
     </html>
   );
