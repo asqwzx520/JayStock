@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Disable overly-strict rules introduced in eslint-config-next@16
+  // that flag valid async data-fetch patterns inside useEffect.
+  {
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/use-memo": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
