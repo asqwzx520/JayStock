@@ -3,12 +3,15 @@
 import type { IndicatorType } from "./KLineChart";
 
 const INDICATORS: { key: IndicatorType; label: string; desc: string; special?: boolean }[] = [
-  { key: "MA",    label: "MA",   desc: "移動平均線" },
-  { key: "EMA",   label: "EMA",  desc: "指數移動平均" },
-  { key: "BOLL",  label: "BOLL", desc: "布林通道" },
-  { key: "MACD",  label: "MACD", desc: "指數平滑異同" },
-  { key: "RSI",   label: "RSI",  desc: "相對強弱指標" },
-  { key: "KD",    label: "KD",   desc: "隨機指標" },
+  { key: "MA",    label: "MA",   desc: "移動平均線 MA(5/10/20/60)" },
+  { key: "EMA",   label: "EMA",  desc: "指數移動平均 EMA(12/26)" },
+  { key: "BOLL",  label: "BOLL", desc: "布林通道 (20,2)" },
+  { key: "MACD",  label: "MACD", desc: "指數平滑異同移動平均" },
+  { key: "RSI",   label: "RSI",  desc: "相對強弱指標 (14)" },
+  { key: "KD",    label: "KD",   desc: "隨機指標 KD(9)" },
+  { key: "VWAP",  label: "VWAP", desc: "成交量加權均價（分K累積 / 日K滾動20）", special: false },
+  { key: "WR",    label: "%R",   desc: "Williams %R 超買超賣 (14)" },
+  { key: "OBV",   label: "OBV",  desc: "能量潮 On Balance Volume" },
   { key: "CHIPS", label: "法人", desc: "三大法人疊圖", special: true },
 ];
 

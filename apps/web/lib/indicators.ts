@@ -174,6 +174,78 @@ export function rsi(data: number[], period = 14): RSIResult {
   return { values };
 }
 
+// ── VWAP (成交量加權平均價) ────────────────────────────────────────────────────
+/**
+ * period = 0 時做累積 VWAP（適合盤中分K，整個 session 累積）
+ * period > 0 時做滾動 VWAP（適合日K，預設 period=20）
+ */
+export function vwap(bars: OHLCV[], period = 20): (number | null)[] {
+  const result: (number | null)[] = [];
+  let cumTPV = 0;
+  let cumV = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const tp = (bars[i].high + bars[i].low + bars[i].close) / 3;
+    if (period === 0) {
+      // 累積模式（分K session VWAP）
+      cumTPV += tp * bars[i].volume;
+      cumV   += bars[i].volume;
+      result.push(cumV > 0 ? cumTPV / cumV : null);
+    } else {
+      // 滾動模式（日K rolling VWAP）
+      const start = Math.max(0, i - period + 1);
+      let sumTPV = 0, sumV = 0;
+      for (let j = start; j <= i; j++) {
+        const tpj = (bars[j].high + bars[j].low + bars[j].close) / 3;
+        sumTPV += tpj * bars[j].volume;
+        sumV   += bars[j].volume;
+      }
+      result.push(sumV > 0 ? sumTPV / sumV : null);
+    }
+  }
+  return result;
+}
+
+// ── Williams %R ───────────────────────────────────────────────────────────────
+export interface WRResult {
+  values: (number | null)[];
+}
+
+export function wr(bars: OHLCV[], period = 14): WRResult {
+  const values: (number | null)[] = [];
+  for (let i = 0; i < bars.length; i++) {
+    if (i < period - 1) { values.push(null); continue; }
+    let highest = -Infinity, lowest = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      if (bars[j].high > highest) highest = bars[j].high;
+      if (bars[j].low  < lowest)  lowest  = bars[j].low;
+    }
+    values.push(
+      highest === lowest ? -50 : ((highest - bars[i].close) / (highest - lowest)) * -100
+    );
+  }
+  return { values };
+}
+
+// ── OBV (能量潮) ──────────────────────────────────────────────────────────────
+export interface OBVResult {
+  values: number[];
+}
+
+export function obv(bars: OHLCV[]): OBVResult {
+  const values: number[] = [0];
+  for (let i = 1; i < bars.length; i++) {
+    const prev = values[values.length - 1];
+    if (bars[i].close > bars[i - 1].close) {
+      values.push(prev + bars[i].volume);
+    } else if (bars[i].close < bars[i - 1].close) {
+      values.push(prev - bars[i].volume);
+    } else {
+      values.push(prev);
+    }
+  }
+  return { values };
+}
+
 export interface KDResult {
   k: (number | null)[];
   d: (number | null)[];

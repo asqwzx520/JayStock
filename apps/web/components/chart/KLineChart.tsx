@@ -32,9 +32,9 @@ function barTime(d: ChartBar): Time {
 function barDate(d: ChartBar): string | undefined {
   return "date" in d ? d.date : undefined;
 }
-import { sma, ema, bollinger, macd, rsi, kd, type OHLCV } from "@/lib/indicators";
+import { sma, ema, bollinger, macd, rsi, kd, vwap, wr, obv, type OHLCV } from "@/lib/indicators";
 
-export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS";
+export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "WR" | "OBV";
 
 // ── Heikin-Ashi 計算 ──────────────────────────────────────────────────────────
 function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
@@ -401,6 +401,66 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
       dLine.setData(dData);
 
       seriesRefs.current.push(kLine, dLine);
+    }
+
+    if (indicators.includes("VWAP")) {
+      // VWAP：疊在主圖價格軸（分K 用累積模式，日K 用滾動 20 根）
+      const vwapValues = vwap(bars, isIntraday ? 0 : 20);
+      const vwapData: LineData<Time>[] = [];
+      vwapValues.forEach((v, i) => {
+        if (v !== null) vwapData.push({ time: barTime(data[i]), value: v });
+      });
+      const vwapLine = chart.addSeries(LineSeries, {
+        color: "#E879F9",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: "VWAP",
+      });
+      vwapLine.setData(vwapData);
+      seriesRefs.current.push(vwapLine);
+    }
+
+    if (indicators.includes("WR")) {
+      const wrResult = wr(bars, 14);
+      const wrData: LineData<Time>[] = [];
+      wrResult.values.forEach((v, i) => {
+        if (v !== null) wrData.push({ time: barTime(data[i]), value: v });
+      });
+      const wrLine = chart.addSeries(LineSeries, {
+        color: "#FB923C",
+        lineWidth: 1,
+        priceScaleId: "wr",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        title: "%R",
+      });
+      wrLine.priceScale().applyOptions({
+        scaleMargins: { top: 0.7, bottom: 0.02 },
+      });
+      wrLine.setData(wrData);
+      seriesRefs.current.push(wrLine);
+    }
+
+    if (indicators.includes("OBV")) {
+      const obvResult = obv(bars);
+      const obvData: LineData<Time>[] = obvResult.values.map((v, i) => ({
+        time: barTime(data[i]), value: v,
+      }));
+      const obvLine = chart.addSeries(LineSeries, {
+        color: "#22D3EE",
+        lineWidth: 1,
+        priceScaleId: "obv",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        title: "OBV",
+      });
+      obvLine.priceScale().applyOptions({
+        scaleMargins: { top: 0.7, bottom: 0.02 },
+      });
+      obvLine.setData(obvData);
+      seriesRefs.current.push(obvLine);
     }
 
     // ── 法人籌碼疊圖 ─────────────────────────────────────────
