@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.services.twse_fetcher import fetch_quotes
-from app.services.market_service import fetch_us_quote
+from app.services.market_service import fetch_us_quote, fetch_stock_news
 
 router = APIRouter()
 
@@ -36,3 +36,15 @@ async def get_us_quote(symbol: str):
     if result is None:
         raise HTTPException(status_code=404, detail=f"US symbol {symbol.upper()} not found")
     return result
+
+
+@router.get("/news/{symbol}")
+async def get_stock_news(symbol: str):
+    """
+    取得個股新聞（Yahoo Finance / yfinance）
+    台股：GET /api/v1/news/2330
+    美股：GET /api/v1/news/AAPL
+    快取 TTL：10 分鐘
+    """
+    news = await fetch_stock_news(symbol)
+    return {"symbol": symbol.upper(), "count": len(news), "news": news}

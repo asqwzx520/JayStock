@@ -231,7 +231,9 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `watchlist_${activeGroup.name}_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click(); URL.revokeObjectURL(url);
+    a.click();
+    // 延遲 revoke，確保瀏覽器已開始下載
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function exportJSON() {
@@ -239,7 +241,8 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `watchlist_${new Date().toISOString().slice(0,10)}.json`;
-    a.click(); URL.revokeObjectURL(url);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function saveAlert(iid: string) {

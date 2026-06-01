@@ -449,6 +449,26 @@ export function getMarketRanking() {
   return fetcher<MarketRankingResponse>("/api/v1/market/ranking");
 }
 
+// ── Stock News (個股新聞) ────────────────────────────────────────────────────
+export interface NewsItem {
+  title:        string;
+  publisher:    string;
+  link:         string;
+  published_at: number;   // Unix timestamp（秒）
+  thumbnail:    string | null;
+  type:         string;
+}
+
+export interface StockNewsResponse {
+  symbol: string;
+  count:  number;
+  news:   NewsItem[];
+}
+
+export function getStockNews(symbol: string) {
+  return fetcher<StockNewsResponse>(`/api/v1/news/${encodeURIComponent(symbol)}`);
+}
+
 // ── Price Alert Notifications ────────────────────────────────────────────────
 export interface AlertNotification {
   id:         string;

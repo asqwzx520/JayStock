@@ -158,9 +158,10 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
       const hollowData = data.map((d) => ({
         time:  barTime(d),
         open:  d.open, high: d.high, low: d.low, close: d.close,
-        color:       d.close >= d.open ? "rgba(0,0,0,0)" : "#22C55E",
-        borderColor: d.close >= d.open ? "#EF4444"       : "#22C55E",
-        wickColor:   d.close >= d.open ? "#EF4444"       : "#22C55E",
+        // 嚴格 > 讓 doji（close=open）顯示實心，而非透明消失
+        color:       d.close > d.open ? "rgba(0,0,0,0)" : "#22C55E",
+        borderColor: d.close > d.open ? "#EF4444"       : "#22C55E",
+        wickColor:   d.close > d.open ? "#EF4444"       : "#22C55E",
       }));
       const series = chart.addSeries(CandlestickSeries, {
         upColor: "rgba(0,0,0,0)", downColor: "#22C55E",

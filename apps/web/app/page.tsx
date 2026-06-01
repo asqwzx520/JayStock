@@ -62,6 +62,19 @@ const ScreenerPanel = dynamic(
     ),
   }
 );
+
+const StockNews = dynamic(
+  () => import("@/components/market/StockNews"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full"
+           style={{ color: "var(--text-tertiary)" }}>
+        載入新聞…
+      </div>
+    ),
+  }
+);
 import {
   getQuote,
   getKline,
@@ -84,7 +97,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "kline" | "chips" | "market" | "screener";
+type ViewTab   = "kline" | "chips" | "market" | "screener" | "news";
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -325,7 +338,7 @@ export default function Home() {
                 className="flex items-center gap-0.5 rounded p-0.5"
                 style={{ background: "var(--bg-elevated)" }}
               >
-                {(["kline", "chips", "market", "screener"] as ViewTab[]).map((tab) => (
+                {(["kline", "chips", "market", "screener", "news"] as ViewTab[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setViewTab(tab)}
@@ -335,16 +348,17 @@ export default function Home() {
                       color: viewTab === tab ? "#fff" : "var(--text-secondary)",
                     }}
                   >
-                    {tab === "kline" ? "K線"
-                      : tab === "chips" ? "籌碼"
-                      : tab === "market" ? "大盤法人"
-                      : "選股"}
+                    {tab === "kline"   ? "K線"
+                      : tab === "chips"   ? "籌碼"
+                      : tab === "market"  ? "大盤法人"
+                      : tab === "screener"? "選股"
+                      : "新聞"}
                   </button>
                 ))}
               </div>
 
-              {/* K線週期 or 籌碼天數 (hidden in market/screener tab) */}
-              {viewTab === "market" || viewTab === "screener" ? null : viewTab === "kline" ? (
+              {/* K線週期 or 籌碼天數 (hidden in market/screener/news tab) */}
+              {viewTab === "market" || viewTab === "screener" || viewTab === "news" ? null : viewTab === "kline" ? (
                 <>
                   <PeriodSelector active={period} onChange={setPeriod} />
                   <ChartTypeSelector active={chartType} onChange={setChartType} />
@@ -490,6 +504,11 @@ export default function Home() {
                   setViewTab("kline");
                 }}
               />
+            )}
+
+            {/* 個股新聞 */}
+            {viewTab === "news" && (
+              <StockNews symbol={symbol} />
             )}
 
             {/* 籌碼 — 融資融券 */}

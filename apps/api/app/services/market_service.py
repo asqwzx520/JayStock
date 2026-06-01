@@ -517,3 +517,60 @@ async def fetch_us_quote(symbol: str) -> Optional[dict]:
 
     _us_quote_cache[sym_upper] = {"data": result, "ts": now}
     return result
+
+
+# ── 個股新聞 ─────────────────────────────────────────────────────────────────
+
+_news_cache: dict = {}
+_NEWS_TTL = 600  # 10 分鐘快取
+
+def _fetch_news_sync(ticker_sym: str) -> list[dict]:
+    """同步從 yfinance 抓個股新聞（在 executor 執行）"""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker_sym)
+        raw = t.news
+        # yfinance 版本差異：news 可能是 None 或非 list（dict）
+        if not isinstance(raw, list):
+            raw = []
+        result = []
+        for item in raw[:20]:
+            thumb = None
+            if item.get("thumbnail"):
+                resolutions = item["thumbnail"].get("resolutions", [])
+                if resolutions:
+                    thumb = resolutions[-1].get("url")
+            result.append({
+                "title":        item.get("title", ""),
+                "publisher":    item.get("publisher", ""),
+                "link":         item.get("link", ""),
+                "published_at": item.get("providerPublishTime", 0),  # Unix timestamp
+                "thumbnail":    thumb,
+                "type":         item.get("type", "STORY"),
+            })
+        return result
+    except Exception as exc:
+        logger.debug("news fetch %s: %s", ticker_sym, exc)
+        return []
+
+
+async def fetch_stock_news(symbol: str) -> list[dict]:
+    """
+    取得個股新聞（yfinance）
+    台股加 .TW 後綴；美股直接用原代碼。
+    快取 TTL：10 分鐘
+    """
+    key = symbol.upper()
+    now = time.time()
+    cached = _news_cache.get(key)
+    if cached and now - cached.get("ts", 0) < _NEWS_TTL:
+        return cached["data"]
+
+    # 台股代碼：4~6 位數字（可帶 1 個英文後綴），如 2330、0050、00878、00631L
+    import re as _re
+    ticker_sym = f"{symbol}.TW" if _re.match(r"^\d{4,6}[A-Za-z]?$", symbol) else symbol.upper()
+    loop = asyncio.get_event_loop()
+    news = await loop.run_in_executor(None, _fetch_news_sync, ticker_sym)
+
+    _news_cache[key] = {"data": news, "ts": now}
+    return news
