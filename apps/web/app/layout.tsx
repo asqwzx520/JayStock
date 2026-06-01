@@ -95,8 +95,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-TW" data-theme="dark" className="h-full antialiased">
+    <html lang="zh-TW" suppressHydrationWarning className="h-full antialiased">
       <body className="h-full overflow-hidden">
+        {/* 防 FOUC：在 React hydration 前讀 localStorage 並設 data-theme */}
+        <script
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('stockpulse_theme')||'dark';document.documentElement.dataset.theme=t;}catch(e){}})();` }}
+        />
         {children}
         <FeedbackWidget />
         <AlertsToast />

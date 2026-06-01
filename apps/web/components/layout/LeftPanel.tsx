@@ -212,6 +212,36 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     setEditingNote(null); setNoteInput("");
   }
 
+  // ── 匯出 ──────────────────────────────────────────────────────────────────
+  function exportCSV() {
+    if (!activeGroup) return;
+    const rows = groupItems(state, activeGroup.id);
+    const header = "﻿代碼,名稱,現價,漲跌幅(%),備注";
+    const lines = rows.map(it => {
+      const q = quotes[it.symbol];
+      return [
+        it.symbol,
+        q?.name ?? "",
+        q?.price?.toFixed(2) ?? "",
+        q ? (q.change_pct >= 0 ? "+" : "") + q.change_pct.toFixed(2) : "",
+        `"${(it.note ?? "").replace(/"/g, '""')}"`,
+      ].join(",");
+    });
+    const blob = new Blob([[header, ...lines].join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `watchlist_${activeGroup.name}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `watchlist_${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
   function saveAlert(iid: string) {
     const above = alertAbove ? parseFloat(alertAbove) : null;
     const below = alertBelow ? parseFloat(alertBelow) : null;
@@ -499,9 +529,28 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
         )}
       </div>
 
-      {/* Footer: sync status hint */}
-      <div className="shrink-0 px-3 py-1.5 text-[9px]" style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
-        {getUserId().slice(0, 8)}… · 已同步
+      {/* Footer: sync status + export */}
+      <div className="shrink-0 px-3 py-1.5 flex items-center justify-between text-[9px]"
+        style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
+        <span>{getUserId().slice(0, 8)}… · 已同步</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={exportCSV}
+            title="匯出目前群組 CSV"
+            className="px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 9 }}
+          >
+            CSV↓
+          </button>
+          <button
+            onClick={exportJSON}
+            title="匯出全部自選股 JSON"
+            className="px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", fontSize: 9 }}
+          >
+            JSON↓
+          </button>
+        </div>
       </div>
 
       </> /* end watchlist mode */}

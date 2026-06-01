@@ -4,6 +4,25 @@ import { useState, useRef, useEffect } from "react";
 import type { StockItem } from "@/lib/api";
 import { searchStocks } from "@/lib/api";
 
+// ── Theme Toggle ──────────────────────────────────────────────────────────────
+function useTheme() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const t = (document.documentElement.dataset.theme || "dark") as "dark" | "light";
+    setTheme(t);
+  }, []);
+
+  function toggle() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("stockpulse_theme", next); } catch {}
+  }
+
+  return { theme, toggle };
+}
+
 interface HeaderProps {
   currentSymbol: string;
   onSelectStock: (symbol: string, name: string) => void;
@@ -16,6 +35,7 @@ export default function Header({ currentSymbol, onSelectStock }: HeaderProps) {
   const [activeIdx, setActiveIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     if (!query.trim()) {
@@ -126,6 +146,21 @@ export default function Header({ currentSymbol, onSelectStock }: HeaderProps) {
       >
         {currentSymbol || "—"}
       </div>
+
+      {/* Theme Toggle */}
+      <button
+        onClick={toggle}
+        title={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
+        className="flex items-center justify-center w-7 h-7 rounded transition-colors text-base shrink-0"
+        style={{
+          background: "var(--bg-elevated)",
+          color: "var(--text-secondary)",
+          border: "1px solid var(--border)",
+        }}
+        aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
+      >
+        {theme === "dark" ? "☀" : "🌙"}
+      </button>
     </header>
   );
 }
