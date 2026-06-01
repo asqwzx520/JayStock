@@ -6,6 +6,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  AreaSeries,
   type IChartApi,
   type ISeriesApi,
   type SeriesType,
@@ -18,6 +19,9 @@ import {
   LineStyle,
 } from "lightweight-charts";
 import type { KlineBar, IntradayBar, ChipsBar } from "@/lib/api";
+
+/** K線圖類型 */
+export type ChartType = "candle" | "hollow" | "heikin_ashi" | "line" | "area";
 
 /** 統一 bar 型別：日K 用 KlineBar（有 date），分K 用 IntradayBar（有 time number） */
 export type ChartBar = KlineBar | IntradayBar;
@@ -32,16 +36,33 @@ import { sma, ema, bollinger, macd, rsi, kd, type OHLCV } from "@/lib/indicators
 
 export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS";
 
+// ── Heikin-Ashi 計算 ──────────────────────────────────────────────────────────
+function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
+  const result: CandlestickData<Time>[] = [];
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
+    const haClose = (bar.open + bar.high + bar.low + bar.close) / 4;
+    const haOpen = i === 0
+      ? (bar.open + bar.close) / 2
+      : (result[i - 1].open + result[i - 1].close) / 2;
+    const haHigh = Math.max(bar.high, haOpen, haClose);
+    const haLow  = Math.min(bar.low,  haOpen, haClose);
+    result.push({ time: barTime(bar), open: haOpen, high: haHigh, low: haLow, close: haClose });
+  }
+  return result;
+}
+
 interface KLineChartProps {
   data: ChartBar[];
   indicators: IndicatorType[];
   chipsData?: ChipsBar[];
+  chartType?: ChartType;
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
-export default function KLineChart({ data, indicators, chipsData }: KLineChartProps) {
+export default function KLineChart({ data, indicators, chipsData, chartType = "candle" }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<ISeriesApi<SeriesType>[]>([]);
@@ -59,10 +80,14 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
     // 判斷是否為分K（first bar 的 time 是 number）
     const isIntraday = data.length > 0 && typeof barTime(data[0]) === "number";
 
+    // line/area 不支援 CHIPS 疊圖（無 OHLC 空間）
+    const isOHLC = chartType === "candle" || chartType === "hollow" || chartType === "heikin_ashi";
+
     // ── Chips overlay layout ──────────────────────────────────
     // When CHIPS active, carve bottom 48% for 3 institutional lanes
     const hasChipsOverlay =
       !isIntraday &&
+      isOHLC &&
       indicators.includes("CHIPS") &&
       !!chipsData &&
       chipsData.length > 0;
@@ -99,24 +124,76 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
 
     chartRef.current = chart;
 
-    const candles: CandlestickData<Time>[] = data.map((d) => ({
-      time:  barTime(d),
-      open:  d.open,
-      high:  d.high,
-      low:   d.low,
-      close: d.close,
-    }));
+    // ── 主 series（依 chartType 分流）────────────────────────
+    if (chartType === "line") {
+      // 折線圖：收盤價連線
+      const lineData: LineData<Time>[] = data.map((d) => ({
+        time: barTime(d), value: d.close,
+      }));
+      const series = chart.addSeries(LineSeries, {
+        color: "#3B82F6",
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+      series.setData(lineData);
+      seriesRefs.current.push(series);
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#EF4444",
-      downColor: "#22C55E",
-      borderUpColor: "#EF4444",
-      borderDownColor: "#22C55E",
-      wickUpColor: "#EF4444",
-      wickDownColor: "#22C55E",
-    });
-    candleSeries.setData(candles);
-    seriesRefs.current.push(candleSeries);
+    } else if (chartType === "area") {
+      // 面積圖：收盤價填色
+      const areaData: LineData<Time>[] = data.map((d) => ({
+        time: barTime(d), value: d.close,
+      }));
+      const series = chart.addSeries(AreaSeries, {
+        lineColor: "#3B82F6",
+        topColor: "rgba(59,130,246,0.25)",
+        bottomColor: "rgba(59,130,246,0)",
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+      series.setData(areaData as Parameters<typeof series.setData>[0]);
+      seriesRefs.current.push(series);
+
+    } else if (chartType === "hollow") {
+      // 空心K棒：收漲→空心紅框，收跌→實心綠
+      const hollowData = data.map((d) => ({
+        time:  barTime(d),
+        open:  d.open, high: d.high, low: d.low, close: d.close,
+        color:       d.close >= d.open ? "rgba(0,0,0,0)" : "#22C55E",
+        borderColor: d.close >= d.open ? "#EF4444"       : "#22C55E",
+        wickColor:   d.close >= d.open ? "#EF4444"       : "#22C55E",
+      }));
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: "rgba(0,0,0,0)", downColor: "#22C55E",
+        borderUpColor: "#EF4444", borderDownColor: "#22C55E",
+        wickUpColor: "#EF4444",   wickDownColor: "#22C55E",
+      });
+      series.setData(hollowData as CandlestickData<Time>[]);
+      seriesRefs.current.push(series);
+
+    } else if (chartType === "heikin_ashi") {
+      // 平均K棒 (Heikin-Ashi)
+      const haData = computeHeikinAshi(data);
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: "#EF4444", downColor: "#22C55E",
+        borderUpColor: "#EF4444", borderDownColor: "#22C55E",
+        wickUpColor: "#EF4444",   wickDownColor: "#22C55E",
+      });
+      series.setData(haData);
+      seriesRefs.current.push(series);
+
+    } else {
+      // 標準蠟燭 (candle，預設)
+      const candles: CandlestickData<Time>[] = data.map((d) => ({
+        time: barTime(d), open: d.open, high: d.high, low: d.low, close: d.close,
+      }));
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor: "#EF4444",        downColor: "#22C55E",
+        borderUpColor: "#EF4444", borderDownColor: "#22C55E",
+        wickUpColor: "#EF4444",   wickDownColor: "#22C55E",
+      });
+      candleSeries.setData(candles);
+      seriesRefs.current.push(candleSeries);
+    }
 
     const volumeData: HistogramData<Time>[] = data.map((d) => ({
       time:  barTime(d),
@@ -367,7 +444,7 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
     }
 
     chart.timeScale().fitContent();
-  }, [data, indicators, chipsData]);
+  }, [data, indicators, chipsData, chartType]);
 
   useEffect(() => {
     buildChart();

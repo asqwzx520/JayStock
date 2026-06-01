@@ -6,10 +6,11 @@ import Header from "@/components/layout/Header";
 import LeftPanel from "@/components/layout/LeftPanel";
 import RightPanel from "@/components/layout/RightPanel";
 // Type-only imports (erased at runtime — safe to keep static)
-import type { IndicatorType } from "@/components/chart/KLineChart";
-import type { Period }        from "@/components/chart/PeriodSelector";
-import IndicatorSelector from "@/components/chart/IndicatorSelector";
-import PeriodSelector    from "@/components/chart/PeriodSelector";
+import type { IndicatorType, ChartType } from "@/components/chart/KLineChart";
+import type { Period }                   from "@/components/chart/PeriodSelector";
+import IndicatorSelector  from "@/components/chart/IndicatorSelector";
+import PeriodSelector     from "@/components/chart/PeriodSelector";
+import ChartTypeSelector  from "@/components/chart/ChartTypeSelector";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
@@ -138,6 +139,7 @@ export default function Home() {
   const [klineData, setKlineData]       = useState<ChartBar[]>([]);
   const [period, setPeriod]             = useState<Period>("daily");
   const [indicators, setIndicators]     = useState<IndicatorType[]>(["MA"]);
+  const [chartType, setChartType]       = useState<ChartType>("candle");
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
   // 法人疊圖 (chips in K-line view)
@@ -343,7 +345,10 @@ export default function Home() {
 
               {/* K線週期 or 籌碼天數 (hidden in market/screener tab) */}
               {viewTab === "market" || viewTab === "screener" ? null : viewTab === "kline" ? (
-                <PeriodSelector active={period} onChange={setPeriod} />
+                <>
+                  <PeriodSelector active={period} onChange={setPeriod} />
+                  <ChartTypeSelector active={chartType} onChange={setChartType} />
+                </>
               ) : (
                 <div className="flex items-center gap-1">
                   {CHIPS_DAYS.map((d) => (
@@ -424,6 +429,7 @@ export default function Home() {
                       data={klineData}
                       indicators={indicators}
                       chipsData={klineChipsData}
+                      chartType={chartType}
                     />
                     {/* Chip-lane labels when overlay active */}
                     {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
