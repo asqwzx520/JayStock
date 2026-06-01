@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import type { Quote, WatchlistState, WatchlistGroup, WatchlistItem } from "@/lib/api";
 import { getQuotesBatch, watchlistApi, getUserId } from "@/lib/api";
+
+const HotRanking = dynamic(() => import("@/components/market/HotRanking"), { ssr: false });
 
 // ── localStorage helpers ───────────────────────────────────────────────────
 const LS_KEY = "stockpulse_watchlist_v2";
@@ -44,6 +47,7 @@ interface Props {
 }
 
 export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
+  const [panelMode, setPanelMode]   = useState<"watchlist" | "ranking">("watchlist");
   const [state, setState]           = useState<WatchlistState>(DEFAULT_STATE);
   const [activeGid, setActiveGid]   = useState<string>("default");
   const [quotes, setQuotes]         = useState<Record<string, Quote>>({});
@@ -230,6 +234,33 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       className="shrink-0 border-r flex flex-col overflow-hidden hidden lg:flex"
       style={{ width: "var(--panel-left)", background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
+      {/* Top mode switcher: 自選股 / 熱門 */}
+      <div className="shrink-0 flex border-b" style={{ borderColor: "var(--border)" }}>
+        {(["watchlist", "ranking"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setPanelMode(mode)}
+            className="flex-1 py-1.5 text-xs font-medium transition-colors"
+            style={{
+              color:        panelMode === mode ? "var(--color-accent)" : "var(--text-tertiary)",
+              borderBottom: panelMode === mode ? "2px solid var(--color-accent)" : "2px solid transparent",
+            }}
+          >
+            {mode === "watchlist" ? "自選股" : "熱門排行"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── 熱門排行模式 ── */}
+      {panelMode === "ranking" && (
+        <div className="flex-1 min-h-0">
+          <HotRanking onSelectSymbol={onSelectStock} />
+        </div>
+      )}
+
+      {/* ── 自選股模式 ── */}
+      {panelMode === "watchlist" && <>
+
       {/* Group tabs */}
       <div className="shrink-0 flex items-center gap-0.5 px-2 pt-2 pb-1.5 overflow-x-auto"
         style={{ borderBottom: "1px solid var(--border)" }}>
@@ -472,6 +503,8 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       <div className="shrink-0 px-3 py-1.5 text-[9px]" style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
         {getUserId().slice(0, 8)}… · 已同步
       </div>
+
+      </> /* end watchlist mode */}
     </aside>
   );
 }

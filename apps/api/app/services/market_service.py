@@ -339,6 +339,140 @@ async def fetch_sector_heatmap() -> list[dict]:
     return sectors
 
 
+# ── 熱門排行 ─────────────────────────────────────────────────────────────────
+
+_ranking_cache: dict = {}
+_RANKING_TTL = 180  # 3 分鐘快取
+
+# 排行股票池（市值前 150，覆蓋 90%+ 市場成交量）
+_RANKING_POOL: list[str] = [
+    "2330","2317","2454","2881","2882","2891","2886","2308","3711","2303",
+    "2412","1301","1303","2002","2207","2382","4938","6505","0050","2603",
+    "2884","2885","2880","5880","2890","2892","3008","2379","2357","2395",
+    "3034","2344","2337","6415","2408","3661","2356","2324","3045","4904",
+    "1216","2912","3481","2409","2474","2059","8046","3533","2610","2618",
+    "2049","3017","2609","2615","1326","6669","2301","2327","0056","5871",
+    "2376","2385","6278","3231","2353","2360","2377","3006","2369","3702",
+    "4919","3044","2441","6116","2429","5904","1590","2345","4958","8299",
+    "3037","4966","6763","2347","3443","2383","6510","5483","6270","3706",
+    "2388","3004","2393","6770","3596","3443","2360","2377","6669","3008",
+    "2347","6415","2344","3034","2337","4938","3661","2356","2324","2395",
+    "4904","3045","2891","2886","2884","2885","2887","2892","5880","1326",
+    "2612","5876","2801","2820","2867","5876","2823","2824","2834","2836",
+    "2838","2845","2847","2849","2851","2855","2856","2858","2867","2880",
+]
+
+_MIS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://mis.twse.com.tw/",
+}
+_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+
+
+async def _fetch_batch_quotes(symbols: list[str]) -> dict[str, dict]:
+    """批次從 mis.twse 抓取即時報價，每批最多 50 檔"""
+    result: dict[str, dict] = {}
+    BATCH = 50
+    async with httpx.AsyncClient(timeout=10) as client:
+        for i in range(0, len(symbols), BATCH):
+            batch = symbols[i:i + BATCH]
+            ex_ch = "|".join(f"tse_{s}.tw" for s in batch)
+            try:
+                resp = await client.get(
+                    _MIS_URL, params={"ex_ch": ex_ch}, headers=_MIS_HEADERS
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                for item in data.get("msgArray", []):
+                    sym = item.get("c", "")
+                    if not sym:
+                        continue
+                    try:
+                        z = item.get("z", "-")
+                        y = item.get("y", "0")
+                        price    = float(z) if z and z != "-" else float(y)
+                        prev     = float(y) if y and y != "-" else price
+                        chg      = round(price - prev, 2)
+                        chg_pct  = round(chg / prev * 100, 2) if prev else 0.0
+                        vol      = int(item.get("v", 0) or 0)
+                        result[sym] = {
+                            "symbol":     sym,
+                            "name":       item.get("n", sym),
+                            "price":      price,
+                            "change":     chg,
+                            "change_pct": chg_pct,
+                            "volume":     vol,
+                        }
+                    except (ValueError, TypeError):
+                        continue
+            except Exception as exc:
+                logger.debug("ranking batch fetch error: %s", exc)
+    return result
+
+
+async def fetch_market_ranking() -> dict:
+    """
+    取得熱門排行：漲幅 Top 20 / 跌幅 Top 20 / 爆量 Top 20
+    快取 3 分鐘，使用 screener 快取 + mis.twse 雙來源
+    """
+    now = time.time()
+    if _ranking_cache.get("data") and now - _ranking_cache.get("ts", 0) < _RANKING_TTL:
+        return _ranking_cache["data"]
+
+    # ── 1. 先嘗試從 screener _metrics 取得（有 vol_ratio）────────────────
+    merged: dict[str, dict] = {}
+    try:
+        from app.services import screener_service  # type: ignore
+        metrics: dict = screener_service._metrics  # type: ignore[attr-defined]
+        for sym, m in metrics.items():
+            merged[sym] = {
+                "symbol":     sym,
+                "name":       m.get("name", sym),
+                "price":      m.get("price", 0.0),
+                "change":     0.0,
+                "change_pct": m.get("change_pct", 0.0),
+                "volume":     m.get("volume", 0),
+                "vol_ratio":  m.get("vol_ratio", 1.0),
+            }
+    except Exception as exc:
+        logger.debug("ranking: screener metrics unavailable — %s", exc)
+
+    # ── 2. 補全排行池（mis.twse 批次）────────────────────────────────────
+    missing = [s for s in _RANKING_POOL if s not in merged]
+    if missing:
+        try:
+            batch_quotes = await _fetch_batch_quotes(missing)
+            for sym, q in batch_quotes.items():
+                if sym not in merged:
+                    merged[sym] = {**q, "vol_ratio": 1.0}
+        except Exception as exc:
+            logger.debug("ranking: batch fetch failed — %s", exc)
+
+    if not merged:
+        return {}
+
+    all_stocks = list(merged.values())
+
+    def _top(items: list[dict], key: str, reverse: bool, n: int = 20) -> list[dict]:
+        valid = [s for s in items if s.get(key) is not None]
+        return sorted(valid, key=lambda x: x[key], reverse=reverse)[:n]
+
+    result = {
+        "gainers":    _top(all_stocks, "change_pct", True),
+        "losers":     _top(all_stocks, "change_pct", False),
+        "volume":     _top(all_stocks, "vol_ratio",  True),
+        "updated_at": time.strftime("%H:%M:%S", time.localtime(now)),
+    }
+
+    _ranking_cache["data"] = result
+    _ranking_cache["ts"]   = now
+    return result
+
+
 # ── 美股報價（單檔）─────────────────────────────────────────────────────────
 
 async def fetch_us_quote(symbol: str) -> Optional[dict]:

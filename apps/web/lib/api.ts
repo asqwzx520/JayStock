@@ -427,6 +427,28 @@ export function getUSQuote(symbol: string) {
   return fetcher<USQuote>(`/api/v1/quotes/us/${encodeURIComponent(symbol)}`);
 }
 
+// ── Market Ranking (熱門排行) ────────────────────────────────────────────────
+export interface RankingStock {
+  symbol:     string;
+  name:       string;
+  price:      number;
+  change:     number;
+  change_pct: number;
+  volume:     number;
+  vol_ratio:  number;
+}
+
+export interface MarketRankingResponse {
+  gainers:    RankingStock[];
+  losers:     RankingStock[];
+  volume:     RankingStock[];
+  updated_at: string;
+}
+
+export function getMarketRanking() {
+  return fetcher<MarketRankingResponse>("/api/v1/market/ranking");
+}
+
 // ── Price Alert Notifications ────────────────────────────────────────────────
 export interface AlertNotification {
   id:         string;

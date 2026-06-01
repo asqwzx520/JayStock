@@ -8,6 +8,7 @@ from app.services.market_service import (
     fetch_indices,
     fetch_market_breadth,
     fetch_sector_heatmap,
+    fetch_market_ranking,
 )
 
 router = APIRouter()
@@ -181,3 +182,16 @@ async def get_market_chips_summary(
 
     _chips_cache[cache_key] = {"ts": time.time(), "data": result}
     return result
+
+
+@router.get("/market/ranking")
+async def get_market_ranking():
+    """
+    熱門排行榜：漲幅 Top 20 / 跌幅 Top 20 / 爆量 Top 20
+    資料來源：screener 快取 + mis.twse 即時補全
+    快取 TTL：3 分鐘
+    """
+    data = await fetch_market_ranking()
+    if not data:
+        raise HTTPException(status_code=503, detail="Ranking data unavailable")
+    return data
