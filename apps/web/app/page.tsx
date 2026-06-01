@@ -64,16 +64,24 @@ const ScreenerPanel = dynamic(
 import {
   getQuote,
   getKline,
+  getIntradayKline,
   getChips,
   getMargin,
+  INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
+  type IntradayBar,
+  type IntradayPeriod,
   type ChipsBar,
   type ChipsCumulative,
   type ChipsStreakMap,
   type MarginBar,
   type MarginResponse,
 } from "@/lib/api";
+import type { ChartBar } from "@/components/chart/KLineChart";
+
+const isIntradayPeriod = (p: string): p is IntradayPeriod =>
+  (INTRADAY_PERIODS as string[]).includes(p);
 
 type ViewTab   = "kline" | "chips" | "market" | "screener";
 type ChipsSubTab = "institutional" | "margin";
@@ -126,8 +134,8 @@ export default function Home() {
   const [stockName, setStockName] = useState("台積電");
   const [quote, setQuote]         = useState<Quote | null>(null);
 
-  // K線
-  const [klineData, setKlineData]       = useState<KlineBar[]>([]);
+  // K線（日K = KlineBar[], 分K = IntradayBar[]）
+  const [klineData, setKlineData]       = useState<ChartBar[]>([]);
   const [period, setPeriod]             = useState<Period>("daily");
   const [indicators, setIndicators]     = useState<IndicatorType[]>(["MA"]);
   const [loading, setLoading]           = useState(false);
@@ -154,16 +162,27 @@ export default function Home() {
   // 籌碼子 tab
   const [chipsSubTab, setChipsSubTab] = useState<ChipsSubTab>("institutional");
 
-  // ── 載入 K 線 ──────────────────────────────────────────────────
+  // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
     setLoading(true); setError("");
     try {
-      const [q, k] = await Promise.all([
-        getQuote(sym).catch(() => null),
-        getKline(sym, prd),
-      ]);
-      if (q) { setQuote(q); setStockName(q.name); }
-      setKlineData(k.data);
+      if (isIntradayPeriod(prd)) {
+        // 分K：呼叫 /kline/{symbol}/intraday
+        const [q, k] = await Promise.all([
+          getQuote(sym).catch(() => null),
+          getIntradayKline(sym, prd),
+        ]);
+        if (q) { setQuote(q); setStockName(q.name); }
+        setKlineData(k.data as IntradayBar[]);
+      } else {
+        // 日/週/月 K
+        const [q, k] = await Promise.all([
+          getQuote(sym).catch(() => null),
+          getKline(sym, prd),
+        ]);
+        if (q) { setQuote(q); setStockName(q.name); }
+        setKlineData(k.data as KlineBar[]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "載入失敗");
       setKlineData([]);
@@ -216,14 +235,14 @@ export default function Home() {
   // K 線：symbol / period 變動時重載
   useEffect(() => { loadKline(symbol, period); }, [symbol, period, loadKline]);
 
-  // K 線法人疊圖：CHIPS 指標開啟時或 symbol 變動時載入
+  // K 線法人疊圖：CHIPS 指標開啟時或 symbol 變動時載入（分K不支援）
   useEffect(() => {
-    if (indicators.includes("CHIPS")) {
+    if (indicators.includes("CHIPS") && !isIntradayPeriod(period)) {
       loadKlineChips(symbol);
     } else {
       setKlineChipsData([]);
     }
-  }, [symbol, indicators, loadKlineChips]);
+  }, [symbol, indicators, period, loadKlineChips]);
 
   // 籌碼：切換到 chips tab 或 symbol/days 改變時重載
   useEffect(() => {

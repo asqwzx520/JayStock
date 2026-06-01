@@ -17,13 +17,23 @@ import {
   CrosshairMode,
   LineStyle,
 } from "lightweight-charts";
-import type { KlineBar, ChipsBar } from "@/lib/api";
+import type { KlineBar, IntradayBar, ChipsBar } from "@/lib/api";
+
+/** 統一 bar 型別：日K 用 KlineBar（有 date），分K 用 IntradayBar（有 time number） */
+export type ChartBar = KlineBar | IntradayBar;
+
+function barTime(d: ChartBar): Time {
+  return ("time" in d ? d.time : d.date) as Time;
+}
+function barDate(d: ChartBar): string | undefined {
+  return "date" in d ? d.date : undefined;
+}
 import { sma, ema, bollinger, macd, rsi, kd, type OHLCV } from "@/lib/indicators";
 
 export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS";
 
 interface KLineChartProps {
-  data: KlineBar[];
+  data: ChartBar[];
   indicators: IndicatorType[];
   chipsData?: ChipsBar[];
 }
@@ -46,10 +56,16 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
       seriesRefs.current = [];
     }
 
+    // 判斷是否為分K（first bar 的 time 是 number）
+    const isIntraday = data.length > 0 && typeof barTime(data[0]) === "number";
+
     // ── Chips overlay layout ──────────────────────────────────
     // When CHIPS active, carve bottom 48% for 3 institutional lanes
     const hasChipsOverlay =
-      indicators.includes("CHIPS") && !!chipsData && chipsData.length > 0;
+      !isIntraday &&
+      indicators.includes("CHIPS") &&
+      !!chipsData &&
+      chipsData.length > 0;
 
     const chart = createChart(container, {
       width: container.clientWidth,
@@ -75,18 +91,19 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
         },
       },
       timeScale: {
-        borderColor: "#2A3045",
-        timeVisible: false,
+        borderColor:  "#2A3045",
+        timeVisible:  isIntraday,   // 分K 顯示時間軸 HH:MM
+        secondsVisible: false,
       },
     });
 
     chartRef.current = chart;
 
     const candles: CandlestickData<Time>[] = data.map((d) => ({
-      time: d.date as Time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
+      time:  barTime(d),
+      open:  d.open,
+      high:  d.high,
+      low:   d.low,
       close: d.close,
     }));
 
@@ -102,12 +119,11 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
     seriesRefs.current.push(candleSeries);
 
     const volumeData: HistogramData<Time>[] = data.map((d) => ({
-      time: d.date as Time,
+      time:  barTime(d),
       value: d.volume,
-      color:
-        d.close >= d.open
-          ? "rgba(239, 68, 68, 0.3)"
-          : "rgba(34, 197, 94, 0.3)",
+      color: d.close >= d.open
+        ? "rgba(239, 68, 68, 0.3)"
+        : "rgba(34, 197, 94, 0.3)",
     }));
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -138,7 +154,7 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
         const lineData: LineData<Time>[] = [];
         values.forEach((v, i) => {
           if (v !== null) {
-            lineData.push({ time: data[i].date as Time, value: v });
+            lineData.push({ time: barTime(data[i]), value: v });
           }
         });
         const series = chart.addSeries(LineSeries, {
@@ -158,7 +174,7 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
         const lineData: LineData<Time>[] = [];
         values.forEach((v, i) => {
           if (v !== null) {
-            lineData.push({ time: data[i].date as Time, value: v });
+            lineData.push({ time: barTime(data[i]), value: v });
           }
         });
         const series = chart.addSeries(LineSeries, {
@@ -178,7 +194,7 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
         const lineData: LineData<Time>[] = [];
         values.forEach((v, i) => {
           if (v !== null) {
-            lineData.push({ time: data[i].date as Time, value: v });
+            lineData.push({ time: barTime(data[i]), value: v });
           }
         });
         const series = chart.addSeries(LineSeries, {
@@ -204,18 +220,18 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
 
       m.macd.forEach((v, i) => {
         if (v !== null) {
-          macdLineData.push({ time: data[i].date as Time, value: v });
+          macdLineData.push({ time: barTime(data[i]), value: v });
         }
       });
       m.signal.forEach((v, i) => {
         if (v !== null) {
-          signalLineData.push({ time: data[i].date as Time, value: v });
+          signalLineData.push({ time: barTime(data[i]), value: v });
         }
       });
       m.histogram.forEach((v, i) => {
         if (v !== null) {
           histData.push({
-            time: data[i].date as Time,
+            time:  barTime(data[i]),
             value: v,
             color: v >= 0 ? "rgba(239, 68, 68, 0.6)" : "rgba(34, 197, 94, 0.6)",
           });
@@ -258,7 +274,7 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
       const lineData: LineData<Time>[] = [];
       r.values.forEach((v, i) => {
         if (v !== null) {
-          lineData.push({ time: data[i].date as Time, value: v });
+          lineData.push({ time: barTime(data[i]), value: v });
         }
       });
       const series = chart.addSeries(LineSeries, {
@@ -280,10 +296,10 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
       const kData: LineData<Time>[] = [];
       const dData: LineData<Time>[] = [];
       result.k.forEach((v, i) => {
-        if (v !== null) kData.push({ time: data[i].date as Time, value: v });
+        if (v !== null) kData.push({ time: barTime(data[i]), value: v });
       });
       result.d.forEach((v, i) => {
-        if (v !== null) dData.push({ time: data[i].date as Time, value: v });
+        if (v !== null) dData.push({ time: barTime(data[i]), value: v });
       });
 
       const kLine = chart.addSeries(LineSeries, {
@@ -334,12 +350,13 @@ export default function KLineChart({ data, indicators, chipsData }: KLineChartPr
         });
         series.setData(
           data
-            .filter((d) => chipsMap.has(d.date))
+            .filter((d) => { const dt = barDate(d); return !!dt && chipsMap.has(dt); })
             .map((d) => {
-              const c = chipsMap.get(d.date)!;
+              const dt  = barDate(d)!;
+              const c   = chipsMap.get(dt)!;
               const val = c[lane.key] as number;
               return {
-                time:  d.date as Time,
+                time:  barTime(d),
                 value: val,
                 color: val >= 0 ? lane.upColor : DOWN_COLOR,
               };

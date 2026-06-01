@@ -3,8 +3,11 @@ FinMind API 客戶端 — 台股歷史 K 線 + 三大法人
 https://finmindtrade.com/
 """
 import httpx
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from app.core.config import settings
+
+_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 
@@ -44,6 +47,51 @@ async def fetch_daily_kline(
         }
         for r in rows
     ]
+
+
+async def fetch_intraday_kline(
+    symbol: str,
+    target_date: date | None = None,
+) -> list[dict]:
+    """
+    1 分鐘 K 線 — TaiwanStockPriceMinute
+    回傳每根 bar 的 time 為 Unix timestamp（秒，台北時區轉換）。
+    """
+    if target_date is None:
+        target_date = date.today()
+
+    params = {
+        "dataset":    "TaiwanStockPriceMinute",
+        "data_id":    symbol,
+        "start_date": target_date.isoformat(),
+        "end_date":   target_date.isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+
+    rows = data.get("data", [])
+    result = []
+    for r in rows:
+        # FinMind 格式：date = "2024-01-02 09:01:00"
+        raw_dt = r.get("date", "")
+        try:
+            dt = datetime.strptime(raw_dt, "%Y-%m-%d %H:%M:%S")
+            dt = dt.replace(tzinfo=_TZ_TAIPEI)
+            ts = int(dt.timestamp())
+        except ValueError:
+            continue
+        result.append({
+            "time":   ts,
+            "open":   float(r["open"]),
+            "high":   float(r["max"]),
+            "low":    float(r["min"]),
+            "close":  float(r["close"]),
+            "volume": int(r.get("volume", 0)),
+        })
+    return result
 
 
 async def fetch_institutional(

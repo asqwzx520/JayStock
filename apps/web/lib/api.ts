@@ -64,6 +64,38 @@ export function getKline(symbol: string, period = "daily") {
   return fetcher<KlineResponse>(`/api/v1/kline/${symbol}?period=${period}`);
 }
 
+// ── Intraday K-line (分K) ───────────────────────────────────────────────────
+export interface IntradayBar {
+  time:   number;  // Unix timestamp (秒)
+  open:   number;
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number;
+}
+
+export interface IntradayResponse {
+  symbol: string;
+  period: string;
+  date:   string;
+  count:  number;
+  data:   IntradayBar[];
+}
+
+export type IntradayPeriod = "1m" | "5m" | "15m" | "30m" | "60m";
+export const INTRADAY_PERIODS: IntradayPeriod[] = ["1m", "5m", "15m", "30m", "60m"];
+
+export function getIntradayKline(
+  symbol: string,
+  period: IntradayPeriod = "5m",
+  date?: string,
+) {
+  const qs = date ? `&date=${date}` : "";
+  return fetcher<IntradayResponse>(
+    `/api/v1/kline/${symbol}/intraday?period=${period}${qs}`,
+  );
+}
+
 export function searchStocks(query: string) {
   return fetcher<SearchResponse>(
     `/api/v1/market/search?q=${encodeURIComponent(query)}`
