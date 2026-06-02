@@ -1,9 +1,9 @@
 # PRD — 頂尖股票分析平台（股票工作區）
 
-> **版本：** v0.1 草稿  
-> **撰寫日期：** 2026-05-26  
-> **撰寫者：** PM（待補）  
-> **狀態：** 待確認
+> **版本：** v0.2  
+> **撰寫日期：** 2026-05-26 | **最後更新：** 2026-06-03  
+> **撰寫者：** PM  
+> **狀態：** 進行中（整體約 93% 完成，詳見 [PROGRESS.md](PROGRESS.md)）
 
 ---
 
@@ -39,14 +39,14 @@
 
 | 功能點 | 說明 | 優先級 |
 |--------|------|--------|
-| 大盤指數列 | 台灣加權指數、TAIEX、NASDAQ、S&P500、費半即時跳動 | P0 |
-| 個股報價表 | 自選股即時價格、漲跌幅、成交量、委買委賣 | P0 |
-| 盤中熱門排行 | 成交量爆量、漲幅 Top 20、跌幅 Top 20 | P0 |
-| 市場廣度儀錶板 | 上漲/下跌家數比、漲停/跌停家數 | P1 |
-| 盤後彙整報告 | 三大法人買賣超日報 auto-refresh | P1 |
-| 國際市場連動板 | 道瓊期貨、美債 10Y 殖利率、DXY、黃金、油價 | P1 |
+| 大盤指數列 | 台灣加權指數、TAIEX、NASDAQ、S&P500、費半即時跳動 | P0 | ✅ |
+| 個股報價表 | 自選股即時價格、漲跌幅、成交量、委買委賣 | P0 | ✅ |
+| 盤中熱門排行 | 成交量爆量、漲幅 Top 20、跌幅 Top 20 | P0 | ✅ |
+| 市場廣度儀錶板 | 上漲/下跌家數比、漲停/跌停家數 | P1 | ✅ |
+| 盤後彙整報告 | 三大法人買賣超日報 auto-refresh | P1 | ✅ |
+| 國際市場連動板 | 道瓊期貨、美債 10Y 殖利率、DXY、黃金、油價 | P1 | 部分（yfinance）|
 
-**資料更新頻率目標：** 盤中 ≤ 3 秒延遲（WebSocket push），盤後靜態資料 ≤ 5 分鐘自動刷新。
+**資料更新頻率目標：** 盤中 ≤ 5 秒延遲（WebSocket push ✅），盤後靜態資料 ≤ 5 分鐘自動刷新。
 
 ---
 
@@ -218,8 +218,8 @@
 | 層 | 技術 | 說明 | 費用 |
 |----|------|------|------|
 | 前端部署 | **Vercel** Free | 靜態 + SSR，100GB 流量/月 | 免費 |
-| 後端部署 | **Render** Free / **Fly.io** Free | Render 免費層閒置 15 分鐘睡眠，冷啟動 30–60 秒（MVP 可接受）；⚠️ Render 免費 PostgreSQL 30 天未使用自動硬刪除，**資料庫請用 Supabase** | 免費 |
-| 資料庫 | **Supabase** Free | PostgreSQL 500MB + Auth，**不自動刪除**，優先使用 | 免費 |
+| 後端部署 | **Render** Free / **Fly.io** Free | Render 閒置會睡眠（可接受 MVP）| 免費 |
+| 資料庫 | **Supabase** Free | PostgreSQL 500MB + Auth | 免費 |
 | 快取 | **Upstash Redis** Free | 10,000 命令/天 | 免費 |
 | CDN | **Cloudflare** Free | 靜態資源 + DDoS 防護 | 免費 |
 | 監控 | **Sentry** Free | 5,000 errors/月 | 免費 |
@@ -233,7 +233,7 @@
 
 | 資料類型 | 來源 | 費用 | 備註 |
 |---------|------|------|------|
-| **盤中即時報價** | **TWSE 非官方 Endpoint** | 免費 | `mis.twse.com.tw` API，5–10 秒更新，社群廣泛使用；⚠️ 非官方無 SLA，需加防護：User-Agent 模擬瀏覽器、≥5 秒請求間隔、Circuit Breaker（連續 3 次失敗切換 FinMind）；詳見 ARCHITECTURE.md §3.3 |
+| **盤中即時報價** | **TWSE 非官方 Endpoint** | 免費 | `mis.twse.com.tw` API，5–10 秒更新，社群廣泛使用 |
 | 歷史日/週/月 K 線 | **FinMind Open API** | 免費層 | 速率限制可接受，MVP 首選 |
 | 三大法人每日買賣超 | **TWSE OpenAPI** + FinMind | 免費 | TWSE 每日盤後更新 |
 | 融資融券 | **TWSE OpenAPI** | 免費 | 每日盤後 |
@@ -347,26 +347,24 @@
 
 ---
 
-### M5：市場儀錶板與美股整合（Week 9–10）✅ 已完成
+### M5：市場儀錶板與美股整合（Week 9–10）
 **目標：** 補完大盤監控 + 美股報價
-- [x] 大盤指數即時列（TWII + S&P500 + DJI + NASDAQ + 費半 + 那指期貨，yfinance，60s 刷新）
-- [x] 市場廣度儀錶板（漲跌家數、漲跌停統計，TWSE afterTrading API 真實資料）
-- [x] 產業板塊熱力圖（11 個產業，色溫映射，點擊展開個股明細）
-- [x] 美股基礎支援（yfinance，GET /api/v1/quotes/us/{symbol}）
-- [ ] 盤前 AI 精選推播（Email digest）—— 延至 M6 實作
+- [ ] 大盤指數即時列（台股加權 + 美股三大指數 + 期貨）
+- [ ] 市場廣度儀錶板（漲跌家數、漲跌停統計）
+- [ ] 產業板塊熱力圖
+- [ ] 美股基礎支援（Polygon.io 整合）
+- [ ] 盤前 AI 精選推播（Email digest）
 
 ---
 
-### M6：效能優化與公開上線（Week 11–12）✅ 已完成
+### M6：效能優化與公開上線（Week 11–12）
 **目標：** 生產環境就緒
-- [x] FCP ≤ 1.5s 效能優化（next/dynamic 延遲載入重型元件；next.config.ts Security Headers + Compress）
-- [x] SEO 優化（layout.tsx 完整 OG/Twitter metadata；/stock/[symbol] SSR 個股分享頁）
-- [x] Sentry 錯誤監控（sentry.client.config.ts + sentry.server.config.ts；FastAPI sentry-sdk 整合；ErrorBoundary 元件）
-- [x] Beta 用戶回饋機制（FeedbackWidget.tsx 浮動按鈕；POST /api/v1/feedback JSONL 紀錄）
-- [x] 盤前 AI 精選推播（digest_service.py Gemini Top-5；08:00 APScheduler 排程；SMTP Email）
-- [x] 部署設定（.env.production.example 前後端；requirements.txt sentry-sdk + email-validator）
-- [ ] WebSocket 穩定性壓測（1000 並發連線）—— 需另準備壓測環境
-- [ ] 正式 Domain + SSL + Cloudflare 設定 —— 待購買網域後設定
+- [ ] FCP ≤ 1.5s 效能優化（Code Splitting、Image Optimization）
+- [ ] WebSocket 穩定性壓測（1000 並發連線）
+- [ ] SEO 優化（個股頁 SSR）
+- [ ] Sentry 錯誤監控 + Grafana 儀錶板
+- [ ] 正式 Domain + SSL + Cloudflare 設定
+- [ ] Beta 用戶邀請 + 回饋收集機制
 
 ---
 

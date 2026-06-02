@@ -1,8 +1,10 @@
 # ARCHITECTURE.md — 頂尖股票分析平台系統架構
 
-> **版本：** v0.1  
-> **日期：** 2026-05-26  
-> **配套文件：** [PRD.md](PRD.md)
+> **版本：** v0.2（已更新反映實際部署）  
+> **日期：** 2026-06-03  
+> **配套文件：** [PRD.md](PRD.md) | [PROGRESS.md](PROGRESS.md)
+
+> **⚠️ 實際部署說明：** 前端部署在 Render（非 Vercel）；資料庫使用 Supabase（非自架 PostgreSQL）；Redis/Meilisearch 尚未啟用（未來擴展）；WebSocket 已實作於 `13fe0cb`。
 
 ---
 
@@ -24,7 +26,7 @@
 ┌───────▼──────┐        ┌────────▼──────────┐
 │  Next.js     │        │  FastAPI           │
 │  App Server  │        │  API Server        │
-│  (Vercel)    │        │  (Railway/Render)  │
+│  (Render) ✅ │        │  (Render) ✅       │
 └───────┬──────┘        └────────┬──────────┘
         │                        │
         │               ┌────────┼────────────┐
@@ -168,48 +170,89 @@ type IndicatorType =
 
 ### 3.2 API 端點設計
 
-```
-GET  /api/v1/quotes/{symbol}              # 個股即時報價
-GET  /api/v1/kline/{symbol}?tf=1d&n=500  # K 線資料（最多 2000 根）
-GET  /api/v1/chips/{symbol}?days=30      # 三大法人籌碼
-GET  /api/v1/chips/market                # 全市場法人動向
-GET  /api/v1/market/breadth              # 市場廣度
-GET  /api/v1/market/indices              # 大盤指數
-
-POST /api/v1/screener/run               # 執行選股（含 AI 解析）
-POST /api/v1/screener/backtest          # 回測策略
-
-GET  /api/v1/watchlist                  # 取得自選股（需登入）
-POST /api/v1/watchlist                  # 新增自選股
-PUT  /api/v1/watchlist/{id}             # 更新
-DELETE /api/v1/watchlist/{id}          # 刪除
-
-WS   /ws/quotes                         # 行情 WebSocket
-WS   /ws/alerts                         # 到價提醒 WebSocket
-```
-
-### 3.3 WebSocket 行情推播設計
+> ✅ = 已實作上線 | 🔜 = 計畫中
 
 ```
-客戶端 → 訂閱訊息 → { action: "subscribe", symbols: ["2330", "2317"] }
+# ── 報價 ──────────────────────────────────────────────────────────────
+GET  /api/v1/quotes/{symbol}              ✅ 個股即時報價（TWSE）
+GET  /api/v1/quotes?symbols=2330,2317     ✅ 批次報價（最多 50 檔）
+GET  /api/v1/quotes/us/{symbol}           ✅ 美股報價（yfinance）
+GET  /api/v1/news/{symbol}                ✅ 個股新聞（yfinance，雙格式相容）
 
-服務端行情更新循環（盤中 09:00–13:30）：
-  每 5 秒 GET https://mis.twse.com.tw/stock/api/getStockInfo.jsp
-          ?ex_ch=tse_2330.tw|tse_2317.tw   ← 批次查多檔
+# ── K 線 ──────────────────────────────────────────────────────────────
+GET  /api/v1/kline/{symbol}?period=daily  ✅ 日/週/月 K 線
+GET  /api/v1/kline/{symbol}/intraday      ✅ 分 K（1m/5m/15m/30m/60m）
+
+# ── 籌碼 ──────────────────────────────────────────────────────────────
+GET  /api/v1/chips/{symbol}?days=60       ✅ 三大法人籌碼
+GET  /api/v1/margin/{symbol}              ✅ 融資融券
+
+# ── 市場 ──────────────────────────────────────────────────────────────
+GET  /api/v1/market/indices               ✅ 大盤指數（台股+美股）
+GET  /api/v1/market/ranking               ✅ 漲跌爆量 Top 20
+GET  /api/v1/market/chips                 ✅ 全市場法人動向
+
+# ── 選股 ──────────────────────────────────────────────────────────────
+POST /api/v1/screener/run                 ✅ AI 自然語言選股（Gemini）
+POST /api/v1/screener/backtest            🔜 回測策略（未實作）
+
+# ── 自選股 ────────────────────────────────────────────────────────────
+GET  /api/v1/watchlist                    ✅ 取得自選股（Supabase/memory）
+POST /api/v1/watchlist/sync               ✅ 全量同步
+POST /api/v1/watchlist/groups             ✅ 新增群組
+PUT  /api/v1/watchlist/groups/{id}        ✅ 更新群組
+DELETE /api/v1/watchlist/groups/{id}      ✅ 刪除群組
+POST /api/v1/watchlist/groups/{id}/items  ✅ 新增股票
+DELETE /api/v1/watchlist/items/{id}       ✅ 刪除股票
+PUT  /api/v1/watchlist/items/{id}         ✅ 更新股票（含 sort_order、alert）
+
+# ── 設價提醒 ──────────────────────────────────────────────────────────
+GET  /api/v1/alerts                       ✅ 取得未讀通知
+POST /api/v1/alerts/{id}/read             ✅ 標記已讀
+POST /api/v1/alerts/read-all              ✅ 全部標記已讀
+DELETE /api/v1/alerts/{id}               ✅ 刪除通知
+
+# ── 其他 ──────────────────────────────────────────────────────────────
+POST /api/v1/feedback                     ✅ Beta 用戶回饋
+POST /api/v1/digest/send                  ✅ 手動觸發 AI Email 推播
+GET  /health                              ✅ 健康檢查
+
+# ── WebSocket ─────────────────────────────────────────────────────────
+WS   /ws/quotes?symbols=2330,2317         ✅ 即時行情（盤中5s/盤外30s diff推播）
+WS   /ws/alerts                           🔜 到價提醒即時推播（計畫中）
+```
+
+### 3.3 WebSocket 行情推播設計（✅ 已實作 — `apps/api/app/api/v1/ws.py`）
+
+```
+連接：wss://jaystock.onrender.com/ws/quotes?symbols=2330,2317,0050
+
+訊息格式（Server → Client）：
+  {"type": "quotes", "data": {symbol: QuoteDict, ...}}  ← 有變動時推送
+  {"type": "ping"}                                       ← 無變動心跳
+  {"type": "stale"}                                      ← TWSE circuit open
+  {"type": "error", "msg": "..."}                        ← 抓取失敗
+
+服務端行情更新循環：
+  盤中 09:00–13:35 → 每 5 秒 poll TWSE mis.twse.com.tw
+  盤外             → 每 30 秒 poll（降頻）
       │
       ▼
-  解析回應 → 比對價格是否有變動
+  解析回應 → 比對 last_prices 是否有變動
       │
-      ▼
-  更新 Upstash Redis Hash：quote:{symbol} = { price, change, volume, ... }
-      │
-      ▼
-  僅對「價格有變動」的 symbol 廣播 WebSocket 推播（減少無效封包）
+      ├─ 有變動 → 推送 diff（只含變動的 symbol）
+      └─ 無變動 → 推送 ping
+
+前端 hook（apps/web/lib/useStockWebSocket.ts）：
+  - 自動重連（指數退避 2s → 4s → 8s … 最多 10 次）
+  - symbols 清單改變時自動重連（取最新訂閱清單）
+  - 回傳 { quotes, connected, stale }
 
 注意事項：
-  - TWSE endpoint 為非官方，需加 User-Agent header 模擬瀏覽器
-  - 請求頻率建議 ≥ 5 秒間隔，避免 IP 被封
-  - 盤後（13:30 後）改為每 5 分鐘 poll FinMind 確認收盤價
+  - TWSE endpoint 為非官方，加 User-Agent/Referer header
+  - Circuit Breaker：連續 3 次失敗 → 斷路 5 分鐘（stale 狀態）
+  - 目前為每連線獨立 poll（無共用廣播池），適合低並發場景
+  - 高並發優化方向：共用 ConnectionManager 廣播池（未來實作）
 ```
 
 ---
