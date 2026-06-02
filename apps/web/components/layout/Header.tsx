@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import type { StockItem } from "@/lib/api";
 import { searchStocks } from "@/lib/api";
+
+const AuthButton = dynamic(() => import("@/components/auth/AuthButton"), { ssr: false });
 
 // ── Theme Toggle ──────────────────────────────────────────────────────────────
 function useTheme() {
@@ -146,6 +149,9 @@ export default function Header({ currentSymbol, onSelectStock }: HeaderProps) {
       >
         {currentSymbol || "—"}
       </div>
+
+      {/* Google 登入/登出按鈕 */}
+      <AuthButton />
 
       {/* Theme Toggle */}
       <button

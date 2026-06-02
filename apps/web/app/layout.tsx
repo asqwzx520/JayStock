@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import FeedbackWidget from "@/components/ui/FeedbackWidget";
-import AlertsToast    from "@/components/ui/AlertsToast";
+import FeedbackWidget         from "@/components/ui/FeedbackWidget";
+import AlertsToast            from "@/components/ui/AlertsToast";
+import SessionProviderWrapper from "@/components/auth/SessionProviderWrapper";
+import { auth }               from "@/auth";
 
 // ── Site-wide Metadata ────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -89,11 +91,15 @@ export const viewport: Viewport = {
 };
 
 // ── Root Layout ───────────────────────────────────────────────────────────────
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Server-side session — 未設定 Google OAuth 時 auth() 回傳 null（graceful fallback）
+  let session = null;
+  try { session = await auth(); } catch {}
+
   return (
     <html lang="zh-TW" suppressHydrationWarning className="h-full antialiased">
       <body className="h-full overflow-hidden">
@@ -102,9 +108,11 @@ export default function RootLayout({
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('stockpulse_theme')||'dark';document.documentElement.dataset.theme=t;}catch(e){}})();` }}
         />
-        {children}
-        <FeedbackWidget />
-        <AlertsToast />
+        <SessionProviderWrapper session={session}>
+          {children}
+          <FeedbackWidget />
+          <AlertsToast />
+        </SessionProviderWrapper>
       </body>
     </html>
   );
