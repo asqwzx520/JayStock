@@ -581,17 +581,38 @@ def _parse_news_item(item: dict) -> dict:
 
 
 def _fetch_news_sync(ticker_sym: str) -> list[dict]:
-    """同步從 yfinance 抓個股新聞（在 executor 執行）"""
+    """
+    同步從 yfinance 抓個股新聞（在 executor 執行）。
+    yfinance 1.x 新增 get_news()；舊版用 .news 屬性。
+    兩者都嘗試，取非空的那個。
+    """
     try:
         import yfinance as yf
         t = yf.Ticker(ticker_sym)
-        raw = t.news
-        # yfinance 版本差異：news 可能是 None 或非 list
-        if not isinstance(raw, list):
-            raw = []
+
+        raw: list = []
+
+        # ① 優先用新 API（yfinance >=0.2.x / 1.x）
+        try:
+            result = t.get_news(count=20)
+            if isinstance(result, list) and result:
+                raw = result
+        except Exception:
+            pass
+
+        # ② fallback：舊版 .news 屬性
+        if not raw:
+            try:
+                legacy = t.news
+                if isinstance(legacy, list) and legacy:
+                    raw = legacy
+            except Exception:
+                pass
+
+        logger.debug("news fetch %s: got %d items", ticker_sym, len(raw))
         return [_parse_news_item(item) for item in raw[:20]]
     except Exception as exc:
-        logger.debug("news fetch %s: %s", ticker_sym, exc)
+        logger.debug("news fetch %s error: %s", ticker_sym, exc)
         return []
 
 
