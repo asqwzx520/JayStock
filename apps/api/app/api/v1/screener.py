@@ -18,10 +18,12 @@ import datetime
 import logging
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services.screener_service import get_metrics, get_cache_info
+from app.core.config import settings
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -223,12 +225,16 @@ class RunRequest(BaseModel):
 # ── 端點 ──────────────────────────────────────────────────────────────────────
 
 @router.get("/screener/templates")
-async def list_templates():
+@limiter.limit("60/minute")
+async def list_templates(request: Request):
     return {"templates": TEMPLATES}
 
 
 @router.get("/screener/cache")
-async def cache_status():
+async def cache_status(x_admin_token: Optional[str] = Header(default=None)):
+    """Debug endpoint — requires X-Admin-Token header."""
+    if not settings.admin_token or x_admin_token != settings.admin_token:
+        raise HTTPException(status_code=403, detail="Forbidden")
     info = get_cache_info()
     updated = (
         datetime.datetime.fromtimestamp(info["updated_at"]).isoformat()
@@ -238,7 +244,8 @@ async def cache_status():
 
 
 @router.post("/screener/run")
-async def run_screener(body: RunRequest):
+@limiter.limit("5/minute")
+async def run_screener(request: Request, body: RunRequest):
     # 決定使用哪個模板
     tid = body.template_id
     if not tid and body.nl_query:

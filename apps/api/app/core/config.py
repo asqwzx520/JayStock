@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Error Monitoring
     sentry_dsn: str = ""
 
+    # Admin token — gates internal/debug endpoints (screener/cache, etc.)
+    admin_token: str = ""
+
     # Data / file storage
     data_dir: str = "/tmp"
 

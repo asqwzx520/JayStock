@@ -1,10 +1,18 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging
 from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws
 from app.tasks.scheduler import start_scheduler, stop_scheduler
+
+logger = logging.getLogger(__name__)
 
 # ── Sentry error monitoring（可選，需設定 SENTRY_DSN）────────────────────────
 if settings.sentry_dsn:
@@ -19,8 +27,26 @@ if settings.sentry_dsn:
     )
 
 
+class _RemoveServerHeader(BaseHTTPMiddleware):
+    """Strip the Uvicorn 'server' header to reduce fingerprinting surface."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.pop("server", None)
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.supabase_url and not settings.debug:
+        raise RuntimeError(
+            "SUPABASE_URL must be set in production. "
+            "Set DEBUG=true to allow in-memory fallback in development."
+        )
+    if not settings.supabase_url:
+        logger.warning(
+            "Supabase not configured — running with in-memory fallback. "
+            "NOT suitable for multi-worker production deployments."
+        )
     start_scheduler()
     yield
     stop_scheduler()
@@ -32,6 +58,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(_RemoveServerHeader)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

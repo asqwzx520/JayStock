@@ -1,17 +1,19 @@
 """
 自選股 Watchlist CRUD API
 
-認證策略：X-User-ID header（UUID，由前端 localStorage 產生）
+認證策略：X-User-ID header（UUID v4，由前端 localStorage 產生）
 儲存策略：Supabase（設定時）；未設定自動 fallback 到 in-memory
 """
 
 import uuid
 import logging
 from typing import Optional
-from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.supabase_client import get_supabase
+from app.core.validators import require_user
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -210,10 +212,7 @@ def _get_state(user_id: str) -> dict:
     return _mem_get(user_id)
 
 
-def _require_user(x_user_id: Optional[str]) -> str:
-    if not x_user_id or len(x_user_id) < 8:
-        raise HTTPException(status_code=401, detail="Missing or invalid X-User-ID header")
-    return x_user_id
+_require_user = require_user
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
@@ -242,20 +241,32 @@ class ItemUpdate(BaseModel):
     price_alert_below: Optional[float]     = None
 
 class SyncPayload(BaseModel):
-    groups: list[dict]
+    groups: list[dict] = Field(..., max_length=50)
     items:  dict[str, list[dict]]
+
+    @model_validator(mode="after")
+    def _check_bounds(self):
+        if len(self.items) > 50:
+            raise ValueError("Too many groups in items map (max 50)")
+        total = sum(len(v) for v in self.items.values())
+        if total > 500:
+            raise ValueError("Too many watchlist items in sync payload (max 500)")
+        return self
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/watchlist")
-async def get_watchlist(x_user_id: Optional[str] = Header(default=None)):
+@limiter.limit("60/minute")
+async def get_watchlist(request: Request, x_user_id: Optional[str] = Header(default=None)):
     uid = _require_user(x_user_id)
     return _get_state(uid)
 
 
 @router.post("/watchlist/sync")
+@limiter.limit("20/minute")
 async def sync_watchlist(
+    request: Request,
     payload: SyncPayload,
     x_user_id: Optional[str] = Header(default=None),
 ):

@@ -1,7 +1,7 @@
 import time
 import asyncio
 from datetime import date, timedelta
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from app.services.stock_list import search_stocks, get_stock_list
 from app.services.finmind_service import fetch_institutional
 from app.services.market_service import (
@@ -10,6 +10,7 @@ from app.services.market_service import (
     fetch_sector_heatmap,
     fetch_market_ranking,
 )
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -32,7 +33,8 @@ _DEALER  = {"Dealer_self", "Dealer_Hedging"}
 
 
 @router.get("/market/indices")
-async def get_market_indices():
+@limiter.limit("30/minute")
+async def get_market_indices(request: Request):
     """
     取得大盤指數（台股加權 + 美股三大指數 + 那指期貨 + 費半）
     資料來源：Yahoo Finance（yfinance）
@@ -42,7 +44,8 @@ async def get_market_indices():
 
 
 @router.get("/market/breadth")
-async def get_market_breadth():
+@limiter.limit("30/minute")
+async def get_market_breadth(request: Request):
     """
     取得市場廣度統計：漲跌家數、漲停/跌停家數
     資料來源：TWSE afterTrading/MI_INDEX（盤後），fallback 為 screener 近似值
@@ -54,7 +57,8 @@ async def get_market_breadth():
 
 
 @router.get("/market/sectors")
-async def get_sector_heatmap():
+@limiter.limit("30/minute")
+async def get_sector_heatmap(request: Request):
     """
     取得各產業板塊熱力圖資料（平均漲跌幅 + 漲跌家數）
     基於 screener 快取的 70 檔股票，分 11 個產業計算
@@ -64,7 +68,9 @@ async def get_sector_heatmap():
 
 
 @router.get("/market/search")
+@limiter.limit("60/minute")
 async def stock_search(
+    request: Request,
     q: str = Query(..., min_length=1, description="Search query (symbol or name)"),
     limit: int = Query(20, ge=1, le=50),
 ):
@@ -99,11 +105,19 @@ async def _fetch_one(sym: str, start: date, end: date) -> tuple[str, list]:
 
 
 @router.get("/market/chips/summary")
+@limiter.limit("10/minute")
 async def get_market_chips_summary(
+    request: Request,
     date_str: str = Query(None, alias="date", description="YYYY-MM-DD, default=today"),
     top_n:    int = Query(10, ge=5, le=30),
 ):
-    target = date.fromisoformat(date_str) if date_str else date.today()
+    if date_str:
+        try:
+            target = date.fromisoformat(date_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date 格式需為 YYYY-MM-DD")
+    else:
+        target = date.today()
     cache_key = target.isoformat()
 
     cached = _chips_cache.get(cache_key)
@@ -185,7 +199,8 @@ async def get_market_chips_summary(
 
 
 @router.get("/market/ranking")
-async def get_market_ranking():
+@limiter.limit("20/minute")
+async def get_market_ranking(request: Request):
     """
     熱門排行榜：漲幅 Top 20 / 跌幅 Top 20 / 爆量 Top 20
     資料來源：screener 快取 + mis.twse 即時補全
