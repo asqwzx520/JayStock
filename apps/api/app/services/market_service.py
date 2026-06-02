@@ -524,31 +524,72 @@ async def fetch_us_quote(symbol: str) -> Optional[dict]:
 _news_cache: dict = {}
 _NEWS_TTL = 600  # 10 分鐘快取
 
+def _parse_news_item(item: dict) -> dict:
+    """
+    相容新舊 yfinance 新聞格式：
+    - 舊版（<0.2.37）：flat  {title, publisher, link, providerPublishTime, thumbnail}
+    - 新版（>=0.2.37）：巢狀 {content: {title, pubDate, provider, canonicalUrl, thumbnail}}
+    """
+    content = item.get("content") or {}
+    if content:
+        # ── 新格式 ───────────────────────────────────────────────
+        thumb = None
+        thumb_data = content.get("thumbnail") or {}
+        if thumb_data:
+            resolutions = thumb_data.get("resolutions", [])
+            if resolutions:
+                thumb = resolutions[-1].get("url")
+            elif thumb_data.get("originalUrl"):
+                thumb = thumb_data["originalUrl"]
+
+        published_at = 0
+        pub_str = content.get("pubDate", "")
+        if pub_str:
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                published_at = int(dt.timestamp())
+            except Exception:
+                pass
+
+        provider   = content.get("provider") or {}
+        canonical  = content.get("canonicalUrl") or {}
+        clickthrough = content.get("clickThroughUrl") or {}
+        return {
+            "title":        content.get("title", "") or item.get("title", ""),
+            "publisher":    provider.get("displayName", "") or item.get("publisher", ""),
+            "link":         canonical.get("url", "") or clickthrough.get("url", "") or item.get("link", ""),
+            "published_at": published_at or item.get("providerPublishTime", 0),
+            "thumbnail":    thumb,
+            "type":         item.get("type", "STORY"),
+        }
+    else:
+        # ── 舊格式 ───────────────────────────────────────────────
+        thumb = None
+        if item.get("thumbnail"):
+            resolutions = item["thumbnail"].get("resolutions", [])
+            if resolutions:
+                thumb = resolutions[-1].get("url")
+        return {
+            "title":        item.get("title", ""),
+            "publisher":    item.get("publisher", ""),
+            "link":         item.get("link", ""),
+            "published_at": item.get("providerPublishTime", 0),
+            "thumbnail":    thumb,
+            "type":         item.get("type", "STORY"),
+        }
+
+
 def _fetch_news_sync(ticker_sym: str) -> list[dict]:
     """同步從 yfinance 抓個股新聞（在 executor 執行）"""
     try:
         import yfinance as yf
         t = yf.Ticker(ticker_sym)
         raw = t.news
-        # yfinance 版本差異：news 可能是 None 或非 list（dict）
+        # yfinance 版本差異：news 可能是 None 或非 list
         if not isinstance(raw, list):
             raw = []
-        result = []
-        for item in raw[:20]:
-            thumb = None
-            if item.get("thumbnail"):
-                resolutions = item["thumbnail"].get("resolutions", [])
-                if resolutions:
-                    thumb = resolutions[-1].get("url")
-            result.append({
-                "title":        item.get("title", ""),
-                "publisher":    item.get("publisher", ""),
-                "link":         item.get("link", ""),
-                "published_at": item.get("providerPublishTime", 0),  # Unix timestamp
-                "thumbnail":    thumb,
-                "type":         item.get("type", "STORY"),
-            })
-        return result
+        return [_parse_news_item(item) for item in raw[:20]]
     except Exception as exc:
         logger.debug("news fetch %s: %s", ticker_sym, exc)
         return []
