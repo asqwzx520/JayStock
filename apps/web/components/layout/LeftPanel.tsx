@@ -1,9 +1,27 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { Quote, WatchlistState, WatchlistGroup, WatchlistItem } from "@/lib/api";
-import { getQuotesBatch, watchlistApi, getUserId } from "@/lib/api";
+import { watchlistApi, getUserId } from "@/lib/api";
+import { useStockWebSocket } from "@/lib/useStockWebSocket";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const HotRanking = dynamic(() => import("@/components/market/HotRanking"), { ssr: false });
 
@@ -40,6 +58,34 @@ function groupItems(s: WatchlistState, gid: string): WatchlistItem[] {
   return [...(s.items[gid] ?? [])].sort((a, b) => a.sort_order - b.sort_order);
 }
 
+// ── SortableRow — 拖曳排序容器 ────────────────────────────────────────────
+function SortableRow({
+  id,
+  children,
+}: {
+  id: string;
+  children: (handle: React.HTMLAttributes<HTMLSpanElement>) => React.ReactNode;
+}) {
+  const {
+    attributes, listeners, setNodeRef,
+    transform, transition, isDragging,
+  } = useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform:  CSS.Transform.toString(transform),
+        transition,
+        opacity:    isDragging ? 0.4 : 1,
+        position:   "relative",
+      }}
+    >
+      {children({ ...attributes, ...listeners })}
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 interface Props {
   currentSymbol: string;
@@ -50,16 +96,15 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
   const [panelMode, setPanelMode]   = useState<"watchlist" | "ranking">("watchlist");
   const [state, setState]           = useState<WatchlistState>(DEFAULT_STATE);
   const [activeGid, setActiveGid]   = useState<string>("default");
-  const [quotes, setQuotes]         = useState<Record<string, Quote>>({});
 
   // UI flags
   const [showAddStock, setShowAddStock]   = useState(false);
   const [addInput, setAddInput]           = useState("");
   const [addingGroup, setAddingGroup]     = useState(false);
   const [newGroupName, setNewGroupName]   = useState("");
-  const [editingNote, setEditingNote]     = useState<string | null>(null);   // item id
+  const [editingNote, setEditingNote]     = useState<string | null>(null);
   const [noteInput, setNoteInput]         = useState("");
-  const [alertEditing, setAlertEditing]   = useState<string | null>(null);   // item id
+  const [alertEditing, setAlertEditing]   = useState<string | null>(null);
   const [alertAbove, setAlertAbove]       = useState("");
   const [alertBelow, setAlertBelow]       = useState("");
   const [reorderMode, setReorderMode]     = useState(false);
@@ -71,20 +116,18 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     setState(local);
     setActiveGid(local.groups[0]?.id ?? "default");
 
-    // Attempt backend sync (non-blocking)
     watchlistApi.get()
       .then((remote) => {
-        // Simple merge: backend wins if it has more groups or more items
         const remoteTotal = Object.values(remote.items).flat().length;
         const localTotal  = Object.values(local.items).flat().length;
         const merged = remoteTotal >= localTotal ? remote : local;
         setState(merged);
         lsSave(merged);
       })
-      .catch(() => { /* backend unavailable — localStorage is fine */ });
+      .catch(() => {});
   }, []);
 
-  // ── Debounced backend sync whenever state changes ──────────────────────
+  // ── Debounced backend sync ─────────────────────────────────────────────
   const scheduleSync = useCallback((next: WatchlistState) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
@@ -98,20 +141,34 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     scheduleSync(next);
   }
 
-  // ── Quote polling ──────────────────────────────────────────────────────
-  const allSymbols = [...new Set(Object.values(state.items).flat().map(it => it.symbol))];
+  // ── WebSocket 即時行情（取代 15s REST 輪詢）────────────────────────────
+  const allSymbols = useMemo(
+    () => [...new Set(Object.values(state.items).flat().map(it => it.symbol))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(Object.keys(state.items).map(g => state.items[g].map(i => i.symbol)))]
+  );
+  const { quotes, connected } = useStockWebSocket(allSymbols);
 
-  const fetchQuotes = useCallback(async () => {
-    if (allSymbols.length === 0) return;
-    try { setQuotes(await getQuotesBatch(allSymbols)); } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allSymbols.join(",")]);
+  // ── dnd-kit sensors ────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
-  useEffect(() => {
-    fetchQuotes();
-    const id = setInterval(fetchQuotes, 15_000);
-    return () => clearInterval(id);
-  }, [fetchQuotes]);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const gid = activeGroup?.id;
+    if (!gid) return;
+    const sorted   = groupItems(state, gid);
+    const oldIndex = sorted.findIndex(it => it.id === String(active.id));
+    const newIndex  = sorted.findIndex(it => it.id === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(sorted, oldIndex, newIndex).map((it, i) => ({
+      ...it, sort_order: i,
+    }));
+    update({ ...state, items: { ...state.items, [gid]: reordered } });
+  }
 
   // ── Derived ────────────────────────────────────────────────────────────
   const groups      = sortedGroups(state);
@@ -176,29 +233,6 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     update(next);
   }
 
-  function moveItem(iid: string, dir: -1 | 1) {
-    const gid = activeGroup!.id;
-    const sorted = groupItems(state, gid);
-    const idx = sorted.findIndex(it => it.id === iid);
-    const swap = idx + dir;
-    if (swap < 0 || swap >= sorted.length) return;
-    const reordered = sorted.map((it, i) => {
-      if (i === idx) return { ...it, sort_order: sorted[swap].sort_order };
-      if (i === swap) return { ...it, sort_order: sorted[idx].sort_order };
-      return it;
-    });
-    // Also swap sort_order values directly
-    const aOld = sorted[idx].sort_order;
-    const bOld = sorted[swap].sort_order;
-    const fixed = reordered.map(it => {
-      if (it.id === iid)           return { ...it, sort_order: bOld };
-      if (it.id === sorted[swap].id) return { ...it, sort_order: aOld };
-      return it;
-    });
-    const next: WatchlistState = { ...state, items: { ...state.items, [gid]: fixed } };
-    update(next);
-  }
-
   function saveNote(iid: string) {
     const next: WatchlistState = {
       ...state,
@@ -212,13 +246,13 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     setEditingNote(null); setNoteInput("");
   }
 
-  // ── 匯出 ──────────────────────────────────────────────────────────────────
+  // ── 匯出 ─────────────────────────────────────────────────────────────────
   function exportCSV() {
     if (!activeGroup) return;
-    const rows = groupItems(state, activeGroup.id);
+    const rows   = groupItems(state, activeGroup.id);
     const header = "﻿代碼,名稱,現價,漲跌幅(%),備注";
-    const lines = rows.map(it => {
-      const q = quotes[it.symbol];
+    const lines  = rows.map(it => {
+      const q = quotes[it.symbol] as Quote | undefined;
       return [
         it.symbol,
         q?.name ?? "",
@@ -228,19 +262,20 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       ].join(",");
     });
     const blob = new Blob([[header, ...lines].join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `watchlist_${activeGroup.name}_${new Date().toISOString().slice(0,10)}.csv`;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `watchlist_${activeGroup.name}_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
-    // 延遲 revoke，確保瀏覽器已開始下載
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function exportJSON() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `watchlist_${new Date().toISOString().slice(0,10)}.json`;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `watchlist_${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -267,7 +302,7 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       className="shrink-0 border-r flex flex-col overflow-hidden hidden lg:flex"
       style={{ width: "var(--panel-left)", background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
-      {/* Top mode switcher: 自選股 / 熱門 */}
+      {/* Top mode switcher */}
       <div className="shrink-0 flex border-b" style={{ borderColor: "var(--border)" }}>
         {(["watchlist", "ranking"] as const).map((mode) => (
           <button
@@ -330,17 +365,23 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>
           {activeGroup?.name}
           <span className="ml-1 font-normal normal-case">({items.length})</span>
+          {/* WebSocket 連線指示點 */}
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle"
+            title={connected ? "即時連線中" : "連線中斷，等待重連"}
+            style={{ background: connected ? "var(--color-up)" : "var(--text-tertiary)" }}
+          />
         </span>
         <div className="flex items-center gap-1">
           {/* Reorder toggle */}
           <button onClick={() => setReorderMode(v => !v)}
             className="text-xs px-1.5 py-0.5 rounded transition-colors"
-            title="排序模式"
+            title={reorderMode ? "完成排序" : "拖曳排序"}
             style={{
               background: reorderMode ? "rgba(99,102,241,0.2)" : "var(--bg-elevated)",
               color: reorderMode ? "#818cf8" : "var(--text-tertiary)",
             }}>
-            ⇅
+            ⠿
           </button>
           {/* Delete group */}
           {groups.length > 1 && (
@@ -388,154 +429,169 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
             點擊 ＋ 新增股票
           </div>
         ) : (
-          items.map((item, idx) => {
-            const q          = quotes[item.symbol];
-            const isActive   = item.symbol === currentSymbol;
-            const priceColor = q
-              ? q.change > 0 ? "var(--color-up)" : q.change < 0 ? "var(--color-down)" : "var(--color-flat)"
-              : undefined;
-            const hasAlert   = item.price_alert_above !== null || item.price_alert_below !== null;
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={items.map(it => it.id)} strategy={verticalListSortingStrategy}>
+              {items.map((item) => {
+                const q          = quotes[item.symbol] as Quote | undefined;
+                const isActive   = item.symbol === currentSymbol;
+                const priceColor = q
+                  ? q.change > 0 ? "var(--color-up)" : q.change < 0 ? "var(--color-down)" : "var(--color-flat)"
+                  : undefined;
+                const hasAlert   = item.price_alert_above !== null || item.price_alert_below !== null;
 
-            return (
-              <div key={item.id}>
-                {/* Main row */}
-                <div className="flex items-center group"
-                  style={{ borderLeft: isActive ? "2px solid var(--color-brand)" : "2px solid transparent" }}>
+                return (
+                  <SortableRow key={item.id} id={item.id}>
+                    {(dragHandle) => (
+                      <div>
+                        {/* Main row */}
+                        <div className="flex items-center group"
+                          style={{ borderLeft: isActive ? "2px solid var(--color-brand)" : "2px solid transparent" }}>
 
-                  {/* Reorder arrows */}
-                  {reorderMode && (
-                    <div className="flex flex-col px-0.5 shrink-0">
-                      <button onClick={() => moveItem(item.id, -1)} disabled={idx === 0}
-                        className="text-[10px] leading-none px-0.5 disabled:opacity-20"
-                        style={{ color: "var(--text-tertiary)" }}>▲</button>
-                      <button onClick={() => moveItem(item.id, 1)} disabled={idx === items.length - 1}
-                        className="text-[10px] leading-none px-0.5 disabled:opacity-20"
-                        style={{ color: "var(--text-tertiary)" }}>▼</button>
-                    </div>
-                  )}
+                          {/* Drag handle（排序模式時顯示） */}
+                          {reorderMode && (
+                            <span
+                              {...dragHandle}
+                              className="px-1.5 shrink-0 select-none"
+                              style={{
+                                color: "var(--text-tertiary)",
+                                cursor: "grab",
+                                touchAction: "none",
+                                fontSize: 14,
+                                lineHeight: 1,
+                              }}
+                              title="拖曳排序"
+                            >
+                              ⠿
+                            </span>
+                          )}
 
-                  {/* Stock info button */}
-                  <button onClick={() => onSelectStock(item.symbol)}
-                    className="flex items-center justify-between flex-1 px-2 py-2 text-sm transition-colors min-w-0"
-                    style={{ background: isActive ? "var(--bg-elevated)" : "transparent" }}>
-                    <div className="text-left min-w-0">
-                      <div className="num font-medium flex items-center gap-1" style={{ color: "var(--text-primary)" }}>
-                        {item.symbol}
-                        {hasAlert && <span title="已設到價提醒" style={{ color: "#f59e0b", fontSize: 9 }}>◆</span>}
-                      </div>
-                      <div className="text-xs truncate max-w-[88px]" style={{ color: "var(--text-secondary)" }}>
-                        {q?.name ?? "—"}
-                      </div>
-                    </div>
-                    {q ? (
-                      <div className="text-right num shrink-0">
-                        <div className="text-sm font-medium" style={{ color: priceColor }}>{q.price.toFixed(2)}</div>
-                        <div className="text-xs" style={{ color: priceColor }}>
-                          {q.change_pct > 0 ? "+" : ""}{q.change_pct.toFixed(2)}%
+                          {/* Stock info button */}
+                          <button onClick={() => onSelectStock(item.symbol)}
+                            className="flex items-center justify-between flex-1 px-2 py-2 text-sm transition-colors min-w-0"
+                            style={{ background: isActive ? "var(--bg-elevated)" : "transparent" }}>
+                            <div className="text-left min-w-0">
+                              <div className="num font-medium flex items-center gap-1" style={{ color: "var(--text-primary)" }}>
+                                {item.symbol}
+                                {hasAlert && <span title="已設到價提醒" style={{ color: "#f59e0b", fontSize: 9 }}>◆</span>}
+                              </div>
+                              <div className="text-xs truncate max-w-[88px]" style={{ color: "var(--text-secondary)" }}>
+                                {q?.name ?? "—"}
+                              </div>
+                            </div>
+                            {q ? (
+                              <div className="text-right num shrink-0">
+                                <div className="text-sm font-medium" style={{ color: priceColor }}>{q.price.toFixed(2)}</div>
+                                <div className="text-xs" style={{ color: priceColor }}>
+                                  {q.change_pct > 0 ? "+" : ""}{q.change_pct.toFixed(2)}%
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>…</div>
+                            )}
+                          </button>
+
+                          {/* Action buttons（hover 顯示，排序模式下隱藏） */}
+                          {!reorderMode && (
+                            <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pr-1 gap-0.5">
+                              <button onClick={() => { setAlertEditing(item.id); setAlertAbove(item.price_alert_above?.toString() ?? ""); setAlertBelow(item.price_alert_below?.toString() ?? ""); }}
+                                className="text-[10px] px-1 rounded leading-none"
+                                title="到價提醒"
+                                style={{ color: hasAlert ? "#f59e0b" : "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
+                                🔔
+                              </button>
+                              <button onClick={() => { setEditingNote(item.id); setNoteInput(item.note); }}
+                                className="text-[10px] px-1 rounded leading-none"
+                                title="備注"
+                                style={{ color: item.note ? "#60a5fa" : "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
+                                ✎
+                              </button>
+                              <button onClick={() => removeStock(item.id)}
+                                className="text-[10px] px-1 rounded leading-none"
+                                title="移除"
+                                style={{ color: "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
+                                ✕
+                              </button>
+                            </div>
+                          )}
                         </div>
+
+                        {/* Note editor (inline) */}
+                        {editingNote === item.id && (
+                          <div className="px-2 pb-2 flex gap-1.5">
+                            <input autoFocus value={noteInput}
+                              onChange={(e) => setNoteInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveNote(item.id); if (e.key === "Escape") { setEditingNote(null); } }}
+                              placeholder="備注..."
+                              className="flex-1 text-xs px-2 py-1 rounded outline-none"
+                              style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+                            />
+                            <button onClick={() => saveNote(item.id)}
+                              className="text-xs px-2 py-1 rounded shrink-0"
+                              style={{ background: "var(--color-brand)", color: "#fff" }}>
+                              存
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Note display */}
+                        {item.note && editingNote !== item.id && (
+                          <div className="px-3 pb-1.5 text-[10px]" style={{ color: "#60a5fa", marginTop: -4 }}>
+                            {item.note}
+                          </div>
+                        )}
+
+                        {/* Alert editor (inline) */}
+                        {alertEditing === item.id && (
+                          <div className="px-2 pb-2" style={{ background: "var(--bg-elevated)", borderRadius: 4, margin: "0 6px 4px" }}>
+                            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>到價提醒 — {item.symbol}</div>
+                            <div className="flex gap-1 mb-1">
+                              <span className="text-[10px]" style={{ color: "var(--color-up)", lineHeight: "24px" }}>突破</span>
+                              <input value={alertAbove} onChange={(e) => setAlertAbove(e.target.value)}
+                                placeholder="價格" type="number"
+                                className="flex-1 text-xs px-1.5 py-1 rounded outline-none"
+                                style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+                              />
+                            </div>
+                            <div className="flex gap-1 mb-1.5">
+                              <span className="text-[10px]" style={{ color: "var(--color-down)", lineHeight: "24px" }}>跌破</span>
+                              <input value={alertBelow} onChange={(e) => setAlertBelow(e.target.value)}
+                                placeholder="價格" type="number"
+                                className="flex-1 text-xs px-1.5 py-1 rounded outline-none"
+                                style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+                              />
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => saveAlert(item.id)}
+                                className="flex-1 text-xs py-0.5 rounded"
+                                style={{ background: "var(--color-brand)", color: "#fff" }}>
+                                儲存
+                              </button>
+                              <button onClick={() => { setAlertEditing(null); }}
+                                className="text-xs px-2 py-0.5 rounded"
+                                style={{ background: "var(--bg-surface)", color: "var(--text-tertiary)" }}>
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>…</div>
                     )}
-                  </button>
-
-                  {/* Action buttons (visible on hover) */}
-                  {!reorderMode && (
-                    <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pr-1 gap-0.5">
-                      {/* Alert bell */}
-                      <button onClick={() => { setAlertEditing(item.id); setAlertAbove(item.price_alert_above?.toString() ?? ""); setAlertBelow(item.price_alert_below?.toString() ?? ""); }}
-                        className="text-[10px] px-1 rounded leading-none"
-                        title="到價提醒"
-                        style={{ color: hasAlert ? "#f59e0b" : "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
-                        🔔
-                      </button>
-                      {/* Note */}
-                      <button onClick={() => { setEditingNote(item.id); setNoteInput(item.note); }}
-                        className="text-[10px] px-1 rounded leading-none"
-                        title="備注"
-                        style={{ color: item.note ? "#60a5fa" : "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
-                        ✎
-                      </button>
-                      {/* Remove */}
-                      <button onClick={() => removeStock(item.id)}
-                        className="text-[10px] px-1 rounded leading-none"
-                        title="移除"
-                        style={{ color: "var(--text-tertiary)", background: "var(--bg-elevated)" }}>
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Note editor (inline) */}
-                {editingNote === item.id && (
-                  <div className="px-2 pb-2 flex gap-1.5">
-                    <input autoFocus value={noteInput}
-                      onChange={(e) => setNoteInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveNote(item.id); if (e.key === "Escape") { setEditingNote(null); } }}
-                      placeholder="備注..."
-                      className="flex-1 text-xs px-2 py-1 rounded outline-none"
-                      style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
-                    />
-                    <button onClick={() => saveNote(item.id)}
-                      className="text-xs px-2 py-1 rounded shrink-0"
-                      style={{ background: "var(--color-brand)", color: "#fff" }}>
-                      存
-                    </button>
-                  </div>
-                )}
-
-                {/* Note display */}
-                {item.note && editingNote !== item.id && (
-                  <div className="px-3 pb-1.5 text-[10px]" style={{ color: "#60a5fa", marginTop: -4 }}>
-                    {item.note}
-                  </div>
-                )}
-
-                {/* Alert editor (inline) */}
-                {alertEditing === item.id && (
-                  <div className="px-2 pb-2" style={{ background: "var(--bg-elevated)", borderRadius: 4, margin: "0 6px 4px" }}>
-                    <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>到價提醒 — {item.symbol}</div>
-                    <div className="flex gap-1 mb-1">
-                      <span className="text-[10px]" style={{ color: "var(--color-up)", lineHeight: "24px" }}>突破</span>
-                      <input value={alertAbove} onChange={(e) => setAlertAbove(e.target.value)}
-                        placeholder="價格" type="number"
-                        className="flex-1 text-xs px-1.5 py-1 rounded outline-none"
-                        style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
-                      />
-                    </div>
-                    <div className="flex gap-1 mb-1.5">
-                      <span className="text-[10px]" style={{ color: "var(--color-down)", lineHeight: "24px" }}>跌破</span>
-                      <input value={alertBelow} onChange={(e) => setAlertBelow(e.target.value)}
-                        placeholder="價格" type="number"
-                        className="flex-1 text-xs px-1.5 py-1 rounded outline-none"
-                        style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
-                      />
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => saveAlert(item.id)}
-                        className="flex-1 text-xs py-0.5 rounded"
-                        style={{ background: "var(--color-brand)", color: "#fff" }}>
-                        儲存
-                      </button>
-                      <button onClick={() => { setAlertEditing(null); }}
-                        className="text-xs px-2 py-0.5 rounded"
-                        style={{ background: "var(--bg-surface)", color: "var(--text-tertiary)" }}>
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
+                  </SortableRow>
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
       {/* Footer: sync status + export */}
       <div className="shrink-0 px-3 py-1.5 flex items-center justify-between text-[9px]"
         style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
-        <span>{getUserId().slice(0, 8)}… · 已同步</span>
+        <span>{getUserId().slice(0, 8)}… · {connected ? "即時" : "離線"}</span>
         <div className="flex items-center gap-1">
           <button
             onClick={exportCSV}

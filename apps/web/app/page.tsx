@@ -92,6 +92,7 @@ import {
   type MarginBar,
   type MarginResponse,
 } from "@/lib/api";
+import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
 
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
@@ -269,14 +270,12 @@ export default function Home() {
     if (viewTab === "chips" && chipsSubTab === "margin") loadMargin(symbol, chipsDays);
   }, [symbol, chipsDays, viewTab, chipsSubTab, loadMargin]);
 
-  // 即時報價 15 秒更新
+  // 即時報價：WebSocket（盤中 5s，盤外 30s）
+  const { quotes: wsQuotes } = useStockWebSocket([symbol]);
   useEffect(() => {
-    if (!symbol) return;
-    const id = setInterval(async () => {
-      try { const q = await getQuote(symbol); setQuote(q); } catch { /* silent */ }
-    }, 15_000);
-    return () => clearInterval(id);
-  }, [symbol]);
+    const q = wsQuotes[symbol];
+    if (q) setQuote(q);
+  }, [wsQuotes, symbol]);
 
   function handleSelectStock(sym: string, name?: string) {
     setSymbol(sym);

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts
+from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 # ── Sentry error monitoring（可選，需設定 SENTRY_DSN）────────────────────────
@@ -49,6 +49,7 @@ app.include_router(screener.router,  prefix="/api/v1", tags=["screener"])
 app.include_router(watchlist.router, prefix="/api/v1", tags=["watchlist"])
 app.include_router(feedback.router,  prefix="/api/v1", tags=["feedback"])
 app.include_router(alerts.router,    prefix="/api/v1", tags=["alerts"])
+app.include_router(ws.router,        tags=["websocket"])
 
 
 @app.get("/health")
