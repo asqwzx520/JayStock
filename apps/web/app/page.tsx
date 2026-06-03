@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Header from "@/components/layout/Header";
 import LeftPanel from "@/components/layout/LeftPanel";
 import RightPanel from "@/components/layout/RightPanel";
+import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 // Type-only imports (erased at runtime — safe to keep static)
 import type { IndicatorType, ChartType } from "@/components/chart/KLineChart";
 import type { Period }                   from "@/components/chart/PeriodSelector";
@@ -16,15 +17,7 @@ import ChartTypeSelector  from "@/components/chart/ChartTypeSelector";
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
 const KLineChart = dynamic(
   () => import("@/components/chart/KLineChart"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full"
-           style={{ color: "var(--text-tertiary)" }}>
-        載入圖表中…
-      </div>
-    ),
-  }
+  { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
 const ChipsChart = dynamic(
@@ -39,41 +32,17 @@ const MarginChart = dynamic(
 
 const MarketDashboard = dynamic(
   () => import("@/components/market/MarketDashboard"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full"
-           style={{ color: "var(--text-tertiary)" }}>
-        載入市場儀錶板…
-      </div>
-    ),
-  }
+  { ssr: false, loading: () => <DashboardSkeleton /> }
 );
 
 const ScreenerPanel = dynamic(
   () => import("@/components/screener/ScreenerPanel"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full"
-           style={{ color: "var(--text-tertiary)" }}>
-        載入選股器…
-      </div>
-    ),
-  }
+  { ssr: false, loading: () => <TableSkeleton rows={10} /> }
 );
 
 const StockNews = dynamic(
   () => import("@/components/market/StockNews"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full"
-           style={{ color: "var(--text-tertiary)" }}>
-        載入新聞…
-      </div>
-    ),
-  }
+  { ssr: false, loading: () => <NewsListSkeleton /> }
 );
 import {
   getQuote,
@@ -486,12 +455,7 @@ export default function Home() {
             {/* K 線 */}
             {viewTab === "kline" && (
               <>
-                {loading && klineData.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--text-tertiary)" }}>載入中…</span>
-                  </div>
-                )}
+                {loading && klineData.length === 0 && <ChartSkeleton />}
                 {error && (
                   <div className="absolute inset-0 flex items-center justify-center z-10"
                     style={{ background: "var(--bg-surface)" }}>
@@ -531,12 +495,7 @@ export default function Home() {
             {/* 籌碼 — 三大法人 */}
             {viewTab === "chips" && chipsSubTab === "institutional" && (
               <>
-                {chipsLoading && chipsData.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--text-tertiary)" }}>載入籌碼中…</span>
-                  </div>
-                )}
+                {chipsLoading && chipsData.length === 0 && <ChartSkeleton />}
                 {chipsError && (
                   <div className="absolute inset-0 flex items-center justify-center z-10"
                     style={{ background: "var(--bg-surface)" }}>
@@ -575,12 +534,7 @@ export default function Home() {
             {/* 籌碼 — 融資融券 */}
             {viewTab === "chips" && chipsSubTab === "margin" && (
               <>
-                {marginLoading && marginData.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--text-tertiary)" }}>載入融資券中…</span>
-                  </div>
-                )}
+                {marginLoading && marginData.length === 0 && <ChartSkeleton />}
                 {marginError && (
                   <div className="absolute inset-0 flex items-center justify-center z-10"
                     style={{ background: "var(--bg-surface)" }}>
