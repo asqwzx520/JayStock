@@ -1,9 +1,11 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 import logging
 
 from app.services.finmind_service import fetch_institutional
 from app.core.supabase_client import get_supabase
+from app.core.validators import validate_symbol
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -145,36 +147,39 @@ async def _chips_from_supabase(
 
 
 @router.get("/chips/{symbol}")
+@limiter.limit("30/minute")
 async def get_chips(
+    request: Request,
     symbol: str,
     days: int = Query(60, ge=5, le=240, description="Trading days"),
 ):
+    sym   = validate_symbol(symbol)
     end   = date.today()
     start = end - timedelta(days=int(days * 1.8))
 
     # 1. 嘗試從 Supabase 快取讀取（已聚合格式）
-    cached = await _chips_from_supabase(symbol, start, end)
+    cached = await _chips_from_supabase(sym, start, end)
     if cached is not None:
-        logger.debug(f"[chips] {symbol} 使用 Supabase 快取 ({len(cached)} rows)")
+        logger.debug(f"[chips] {sym} 使用 Supabase 快取 ({len(cached)} rows)")
         data = _build_response_data(cached, days)
     else:
         # 2. Cache miss → 呼叫 FinMind live API
-        logger.debug(f"[chips] {symbol} cache miss，呼叫 FinMind")
+        logger.debug(f"[chips] {sym} cache miss，呼叫 FinMind")
         try:
-            raw = await fetch_institutional(symbol, start=start, end=end)
+            raw = await fetch_institutional(sym, start=start, end=end)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
 
         if not raw:
-            raise HTTPException(status_code=404, detail=f"No chips data for {symbol}")
+            raise HTTPException(status_code=404, detail=f"No chips data for {sym}")
 
         data = _build_response_from_finmind(raw, days)
 
     if not data:
-        raise HTTPException(status_code=404, detail=f"No chips data for {symbol}")
+        raise HTTPException(status_code=404, detail=f"No chips data for {sym}")
 
     return {
-        "symbol": symbol,
+        "symbol": sym,
         "days":   days,
         "data":   data,
         "cumulative": {

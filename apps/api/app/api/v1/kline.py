@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from datetime import date, timedelta
 import logging
 
@@ -7,6 +7,8 @@ from app.services.finmind_service import (
     fetch_intraday_kline,
 )
 from app.core.supabase_client import get_supabase
+from app.core.validators import validate_symbol
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,49 +41,55 @@ async def _kline_from_supabase(
 
 
 @router.get("/kline/{symbol}")
+@limiter.limit("30/minute")
 async def get_kline(
+    request: Request,
     symbol: str,
     start: date | None = Query(None, description="Start date (YYYY-MM-DD)"),
     end: date | None = Query(None, description="End date (YYYY-MM-DD)"),
     period: str = Query("daily", description="daily / weekly / monthly"),
 ):
+    sym = validate_symbol(symbol)
     if end is None:
         end = date.today()
     if start is None:
         start = end - timedelta(days=365)
 
     # 1. 嘗試從 Supabase 快取讀取
-    rows = await _kline_from_supabase(symbol, start, end)
+    rows = await _kline_from_supabase(sym, start, end)
 
     # 2. Cache miss → 直接打 FinMind
     if rows is None:
-        logger.debug(f"[kline] {symbol} cache miss，呼叫 FinMind")
+        logger.debug(f"[kline] {sym} cache miss，呼叫 FinMind")
         try:
-            rows = await finmind_fetch_kline(symbol, start, end)
+            rows = await finmind_fetch_kline(sym, start, end)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
 
     if not rows:
-        raise HTTPException(status_code=404, detail=f"No kline data for {symbol}")
+        raise HTTPException(status_code=404, detail=f"No kline data for {sym}")
 
     if period == "weekly":
         rows = _aggregate(rows, "W")
     elif period == "monthly":
         rows = _aggregate(rows, "M")
 
-    return {"symbol": symbol, "period": period, "count": len(rows), "data": rows}
+    return {"symbol": sym, "period": period, "count": len(rows), "data": rows}
 
 
 _VALID_INTRADAY = {"1m", "5m", "15m", "30m", "60m"}
 
 
 @router.get("/kline/{symbol}/intraday")
+@limiter.limit("30/minute")
 async def get_intraday_kline(
+    request: Request,
     symbol: str,
     period: str = Query("5m", description="1m / 5m / 15m / 30m / 60m"),
     date_str: str | None = Query(None, alias="date", description="YYYY-MM-DD (預設今日)"),
 ):
     """盤中分 K：從 FinMind TaiwanStockPriceMinute 拉 1m 資料後聚合"""
+    sym = validate_symbol(symbol)
     if period not in _VALID_INTRADAY:
         raise HTTPException(status_code=400, detail=f"period 必須是 {_VALID_INTRADAY}")
 
@@ -95,14 +103,14 @@ async def get_intraday_kline(
         target_date = date.today()
 
     try:
-        rows = await fetch_intraday_kline(symbol, target_date)
+        rows = await fetch_intraday_kline(sym, target_date)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
 
     if not rows:
         raise HTTPException(
             status_code=404,
-            detail=f"No intraday data for {symbol} on {target_date} (非交易日或尚未開盤)",
+            detail=f"No intraday data for {sym} on {target_date} (非交易日或尚未開盤)",
         )
 
     minutes = int(period[:-1])   # "5m" → 5
@@ -110,7 +118,7 @@ async def get_intraday_kline(
         rows = _aggregate_intraday(rows, minutes)
 
     return {
-        "symbol": symbol,
+        "symbol": sym,
         "period": period,
         "date":   target_date.isoformat(),
         "count":  len(rows),

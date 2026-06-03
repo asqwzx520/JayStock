@@ -13,16 +13,13 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException
 
 from app.core.supabase_client import get_supabase
+from app.core.validators import require_user
 import app.core.alert_store as mem
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
-def _require_user(x_user_id: Optional[str]) -> str:
-    if not x_user_id or len(x_user_id) < 8:
-        raise HTTPException(status_code=401, detail="Missing or invalid X-User-ID header")
-    return x_user_id
+_require_user = require_user
 
 
 @router.get("/alerts")
