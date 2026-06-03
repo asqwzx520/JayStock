@@ -31,7 +31,8 @@ class _RemoveServerHeader(BaseHTTPMiddleware):
     """Strip the Uvicorn 'server' header to reduce fingerprinting surface."""
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        response.headers.pop("server", None)
+        if "server" in response.headers:
+            del response.headers["server"]
         return response
 
 
