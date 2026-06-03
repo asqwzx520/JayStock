@@ -499,6 +499,32 @@ function alertsFetcher<T>(path: string, init?: RequestInit): Promise<T> {
   });
 }
 
+// ── Fundamental Data（個股基本面）────────────────────────────────────────────
+export interface FundamentalData {
+  symbol:         string;
+  name:           string | null;
+  currency:       string;
+  market_cap:     number | null;
+  market_cap_fmt: string | null;
+  pe_trailing:    number | null;
+  pe_forward:     number | null;
+  eps_trailing:   number | null;
+  eps_forward:    number | null;
+  dividend_yield: number | null;   // 已乘以 100，例：3.5 = 3.5%
+  dividend_rate:  number | null;
+  week52_high:    number | null;
+  week52_low:     number | null;
+  beta:           number | null;
+  avg_volume:     number | null;
+  sector:         string | null;
+  industry:       string | null;
+  employees:      number | null;
+}
+
+export function getFundamental(symbol: string) {
+  return fetcher<FundamentalData>(`/api/v1/fundamental/${encodeURIComponent(symbol)}`);
+}
+
 export const alertsApi = {
   getUnread: () =>
     alertsFetcher<AlertsResponse>("/api/v1/alerts"),

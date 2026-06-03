@@ -81,6 +81,7 @@ import {
   getIntradayKline,
   getChips,
   getMargin,
+  getFundamental,
   INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
@@ -91,6 +92,7 @@ import {
   type ChipsStreakMap,
   type MarginBar,
   type MarginResponse,
+  type FundamentalData,
 } from "@/lib/api";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
@@ -144,6 +146,15 @@ function StreakBadge({
   );
 }
 
+function FundItem({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
+      <span className="font-medium" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
+    </div>
+  );
+}
+
 export default function Home() {
   const [symbol, setSymbol]       = useState(readInitSymbol);  // 支援 /stock/[symbol] 導入
   const [stockName, setStockName] = useState("台積電");
@@ -177,6 +188,9 @@ export default function Home() {
   const [viewTab, setViewTab]         = useState<ViewTab>("kline");
   // 籌碼子 tab
   const [chipsSubTab, setChipsSubTab] = useState<ChipsSubTab>("institutional");
+
+  // 基本面資料
+  const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
 
   // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
@@ -276,6 +290,12 @@ export default function Home() {
     const q = wsQuotes[symbol];
     if (q) setQuote(q);
   }, [wsQuotes, symbol]);
+
+  // 基本面：symbol 變動時重載（後端 TTL=1h，不影響效能）
+  useEffect(() => {
+    setFundamental(null);
+    getFundamental(symbol).then(setFundamental).catch(() => {});
+  }, [symbol]);
 
   function handleSelectStock(sym: string, name?: string) {
     setSymbol(sym);
@@ -415,6 +435,47 @@ export default function Home() {
 
               {viewTab === "kline" && (
                 <IndicatorSelector active={indicators} onChange={setIndicators} />
+              )}
+            </div>
+          )}
+
+          {/* ── 基本面摘要列（走勢圖 tab 才顯示）─────────── */}
+          {viewTab === "kline" && fundamental && (
+            <div
+              className="shrink-0 flex items-center gap-4 px-4 py-1 border-b overflow-x-auto"
+              style={{
+                background: "var(--bg-elevated)",
+                borderColor: "var(--border)",
+                fontSize: "11px",
+              }}
+            >
+              {fundamental.market_cap_fmt && (
+                <FundItem label="市值" value={fundamental.market_cap_fmt} />
+              )}
+              {fundamental.pe_trailing != null && (
+                <FundItem label="本益比" value={fundamental.pe_trailing.toFixed(1)} />
+              )}
+              {fundamental.eps_trailing != null && (
+                <FundItem
+                  label="EPS"
+                  value={fundamental.eps_trailing.toFixed(2)}
+                  color={fundamental.eps_trailing >= 0 ? "var(--color-up)" : "var(--color-down)"}
+                />
+              )}
+              {fundamental.dividend_yield != null && (
+                <FundItem label="殖利率" value={`${fundamental.dividend_yield.toFixed(2)}%`} color="var(--color-up)" />
+              )}
+              {fundamental.week52_high != null && fundamental.week52_low != null && (
+                <FundItem
+                  label="52W 區間"
+                  value={`${fundamental.week52_low.toFixed(0)} – ${fundamental.week52_high.toFixed(0)}`}
+                />
+              )}
+              {fundamental.beta != null && (
+                <FundItem label="Beta" value={fundamental.beta.toFixed(2)} />
+              )}
+              {fundamental.sector && (
+                <FundItem label="產業" value={fundamental.sector} />
               )}
             </div>
           )}
