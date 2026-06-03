@@ -64,3 +64,5 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
+        env:
+          DEBUG: "true"   # 允許 in-memory fallback，CI 不需要 Supabase

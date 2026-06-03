@@ -43,6 +43,8 @@ export function useStockWebSocket(symbols: string[]) {
   const mountedRef   = useRef(true);
   const symbolsRef   = useRef<string[]>(symbols);
   const symsKeyRef   = useRef(symbols.join(","));
+  // connectRef 讓 onclose 可以遞迴排程重連，避免 const TDZ lint error
+  const connectRef   = useRef<() => void>(() => {});
 
   // 始終保持 symbolsRef 最新
   useEffect(() => { symbolsRef.current = symbols; }, [symbols]);
@@ -98,13 +100,16 @@ export function useStockWebSocket(symbols: string[]) {
         if (retryCount.current < MAX_RECONNECT) {
           const delay = BASE_RECONNECT_MS * Math.min(2 ** retryCount.current, 16);
           retryCount.current++;
-          retryTimer.current = setTimeout(connect, delay);
+          retryTimer.current = setTimeout(() => connectRef.current(), delay);
         }
       };
     } catch {
       // WebSocket 不支援（SSR 等），靜默失敗
     }
   }, []);  // connect 本身不依賴外部變數（透過 ref 讀取）
+
+  // connectRef 始終指向最新的 connect（deps=[] 所以 connect 是穩定的）
+  useEffect(() => { connectRef.current = connect; }, [connect]);
 
   // 初始化
   useEffect(() => {
