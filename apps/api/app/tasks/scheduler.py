@@ -47,4 +47,5 @@ def start_scheduler():
 
 
 def stop_scheduler():
-    scheduler.shutdown(wait=False)
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
