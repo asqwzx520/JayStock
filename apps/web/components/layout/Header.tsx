@@ -27,11 +27,10 @@ function useTheme() {
 }
 
 interface HeaderProps {
-  currentSymbol: string;
   onSelectStock: (symbol: string, name: string) => void;
 }
 
-export default function Header({ currentSymbol, onSelectStock }: HeaderProps) {
+export default function Header({ onSelectStock }: HeaderProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -143,30 +142,25 @@ export default function Header({ currentSymbol, onSelectStock }: HeaderProps) {
         )}
       </div>
 
-      <div
-        className="num text-sm"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        {currentSymbol || "—"}
-      </div>
-
       {/* Google 登入/登出按鈕 */}
-      <AuthButton />
+      <div className="ml-auto flex items-center gap-2">
+        <AuthButton />
 
-      {/* Theme Toggle */}
-      <button
-        onClick={toggle}
-        title={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
-        className="flex items-center justify-center w-7 h-7 rounded transition-colors text-base shrink-0"
-        style={{
-          background: "var(--bg-elevated)",
-          color: "var(--text-secondary)",
-          border: "1px solid var(--border)",
-        }}
-        aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
-      >
-        {theme === "dark" ? "☀" : "🌙"}
-      </button>
+        {/* Theme Toggle */}
+        <button
+          onClick={toggle}
+          title={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
+          className="flex items-center justify-center w-7 h-7 rounded transition-colors text-base shrink-0"
+          style={{
+            background: "var(--bg-elevated)",
+            color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
+          }}
+          aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
+        >
+          {theme === "dark" ? "☀" : "🌙"}
+        </button>
+      </div>
     </header>
   );
 }

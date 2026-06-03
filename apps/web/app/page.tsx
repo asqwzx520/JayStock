@@ -286,10 +286,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header
-        currentSymbol={`${symbol} ${stockName}`}
-        onSelectStock={handleSelectStock}
-      />
+      <Header onSelectStock={handleSelectStock} />
 
       <div className="flex flex-1 min-h-0">
         <LeftPanel
@@ -298,125 +295,129 @@ export default function Home() {
         />
 
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* ── 工具列 ──────────────────────────────────── */}
+
+          {/* ── Row 1：主導航 Tab ──────────────────────── */}
           <div
-            className="shrink-0 flex items-center justify-between gap-3 px-4 py-2 border-b"
+            className="shrink-0 flex items-center border-b px-4"
             style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
           >
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* 代碼 + 報價 */}
-              <div className="flex items-baseline gap-2">
-                <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                  {symbol}
-                </span>
-                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {stockName}
-                </span>
-                {quote && (
-                  <span
-                    className="num text-lg font-bold"
-                    style={{
-                      color: quote.change > 0
-                        ? "var(--color-up)"
-                        : quote.change < 0
-                        ? "var(--color-down)"
-                        : "var(--color-flat)",
-                    }}
-                  >
-                    {quote.price.toFixed(2)}
-                    <span className="text-sm ml-1.5">
-                      {quote.change > 0 ? "+" : ""}
-                      {quote.change_pct.toFixed(2)}%
-                    </span>
+            {(["kline", "chips", "market", "screener", "news"] as ViewTab[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setViewTab(tab)}
+                className="px-4 py-2.5 text-sm font-medium transition-colors relative"
+                style={{
+                  color: viewTab === tab ? "var(--color-brand)" : "var(--text-secondary)",
+                  borderBottom: viewTab === tab ? "2px solid var(--color-brand)" : "2px solid transparent",
+                }}
+              >
+                {tab === "kline"    ? "走勢圖"
+                  : tab === "chips"   ? "籌碼"
+                  : tab === "market"  ? "大盤"
+                  : tab === "screener"? "選股"
+                  : "新聞"}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
+          {(viewTab === "kline" || viewTab === "chips") && (
+            <div
+              className="shrink-0 flex items-center justify-between gap-3 px-4 py-1.5 border-b"
+              style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* 代碼 + 報價 */}
+                <div className="flex items-baseline gap-2">
+                  <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    {symbol}
                   </span>
+                  <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                    {stockName}
+                  </span>
+                  {quote && (
+                    <span
+                      className="num text-base font-bold"
+                      style={{
+                        color: quote.change > 0
+                          ? "var(--color-up)"
+                          : quote.change < 0
+                          ? "var(--color-down)"
+                          : "var(--color-flat)",
+                      }}
+                    >
+                      {quote.price.toFixed(2)}
+                      <span className="text-xs ml-1.5">
+                        {quote.change > 0 ? "+" : ""}
+                        {quote.change_pct.toFixed(2)}%
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                {/* 分隔線 */}
+                <div className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} />
+
+                {/* K線：週期 + 圖形種類 */}
+                {viewTab === "kline" ? (
+                  <>
+                    <PeriodSelector active={period} onChange={setPeriod} />
+                    <ChartTypeSelector active={chartType} onChange={setChartType} />
+                  </>
+                ) : (
+                  /* 籌碼：天數 + 子 tab + streak */
+                  <>
+                    <div className="flex items-center gap-1">
+                      {CHIPS_DAYS.map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setChipsDays(d)}
+                          className="px-2.5 py-1 text-xs rounded font-medium transition-colors"
+                          style={{
+                            background: chipsDays === d ? "var(--bg-elevated)" : "transparent",
+                            color: chipsDays === d ? "var(--text-primary)" : "var(--text-secondary)",
+                          }}
+                        >
+                          {d}日
+                        </button>
+                      ))}
+                    </div>
+
+                    <div
+                      className="flex items-center gap-0.5 rounded p-0.5"
+                      style={{ background: "var(--bg-elevated)" }}
+                    >
+                      {(["institutional", "margin"] as ChipsSubTab[]).map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setChipsSubTab(st)}
+                          className="px-2.5 py-1 text-xs rounded font-medium transition-colors"
+                          style={{
+                            background: chipsSubTab === st ? "var(--bg-surface)" : "transparent",
+                            color: chipsSubTab === st ? "var(--text-primary)" : "var(--text-secondary)",
+                          }}
+                        >
+                          {st === "institutional" ? "三大法人" : "融資券"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {chipsSubTab === "institutional" && chipsStreak && (
+                      <div className="flex items-center gap-1.5">
+                        <StreakBadge label="外資" streak={chipsStreak.foreign} color="#F59E0B" />
+                        <StreakBadge label="投信" streak={chipsStreak.trust}   color="#8B5CF6" />
+                        <StreakBadge label="自營" streak={chipsStreak.dealer}  color="#06B6D4" />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* 主 Tab 切換 */}
-              <div
-                className="flex items-center gap-0.5 rounded p-0.5"
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {(["kline", "chips", "market", "screener", "news"] as ViewTab[]).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setViewTab(tab)}
-                    className="px-3 py-1 text-xs rounded font-medium transition-colors"
-                    style={{
-                      background: viewTab === tab ? "var(--color-brand)" : "transparent",
-                      color: viewTab === tab ? "#fff" : "var(--text-secondary)",
-                    }}
-                  >
-                    {tab === "kline"   ? "K線"
-                      : tab === "chips"   ? "籌碼"
-                      : tab === "market"  ? "大盤法人"
-                      : tab === "screener"? "選股"
-                      : "新聞"}
-                  </button>
-                ))}
-              </div>
-
-              {/* K線週期 or 籌碼天數 (hidden in market/screener/news tab) */}
-              {viewTab === "market" || viewTab === "screener" || viewTab === "news" ? null : viewTab === "kline" ? (
-                <>
-                  <PeriodSelector active={period} onChange={setPeriod} />
-                  <ChartTypeSelector active={chartType} onChange={setChartType} />
-                </>
-              ) : (
-                <div className="flex items-center gap-1">
-                  {CHIPS_DAYS.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setChipsDays(d)}
-                      className="px-2.5 py-1 text-xs rounded font-medium transition-colors"
-                      style={{
-                        background: chipsDays === d ? "var(--bg-elevated)" : "transparent",
-                        color: chipsDays === d ? "var(--text-primary)" : "var(--text-secondary)",
-                      }}
-                    >
-                      {d}日
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* 籌碼 sub-tab (only in chips tab) */}
-              {viewTab === "chips" && (
-                <div
-                  className="flex items-center gap-0.5 rounded p-0.5"
-                  style={{ background: "var(--bg-elevated)" }}
-                >
-                  {(["institutional", "margin"] as ChipsSubTab[]).map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setChipsSubTab(st)}
-                      className="px-2.5 py-1 text-xs rounded font-medium transition-colors"
-                      style={{
-                        background: chipsSubTab === st ? "var(--bg-surface)" : "transparent",
-                        color: chipsSubTab === st ? "var(--text-primary)" : "var(--text-secondary)",
-                      }}
-                    >
-                      {st === "institutional" ? "三大法人" : "融資券"}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* 連續買超/賣超 streak badges */}
-              {viewTab === "chips" && chipsSubTab === "institutional" && chipsStreak && (
-                <div className="flex items-center gap-1.5">
-                  <StreakBadge label="外資" streak={chipsStreak.foreign} color="#F59E0B" />
-                  <StreakBadge label="投信" streak={chipsStreak.trust}   color="#8B5CF6" />
-                  <StreakBadge label="自營" streak={chipsStreak.dealer}  color="#06B6D4" />
-                </div>
+              {viewTab === "kline" && (
+                <IndicatorSelector active={indicators} onChange={setIndicators} />
               )}
             </div>
-
-            {viewTab === "kline" && (
-              <IndicatorSelector active={indicators} onChange={setIndicators} />
-            )}
-
-          </div>
+          )}
 
           {/* ── 主圖區 ──────────────────────────────────── */}
           <div className="flex-1 min-h-0 relative">
