@@ -1,17 +1,26 @@
 """
 FinMind API 客戶端 — 台股歷史 K 線 + 三大法人
 https://finmindtrade.com/
+
+TTL 快取說明：
+  fetch_daily_kline       — 5 分鐘（日K盤後靜態）
+  fetch_intraday_kline    — 30 秒（盤中 1m K，頻繁更新）
+  fetch_institutional     — 5 分鐘（法人盤後）
+  fetch_market_chips_all  — 5 分鐘
+  fetch_margin            — 5 分鐘
 """
 import httpx
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from app.core.config import settings
+from app.core.cache import ttl_cache
 
 _TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 
 
+@ttl_cache(ttl=300)
 async def fetch_daily_kline(
     symbol: str,
     start: date | None = None,
@@ -49,6 +58,7 @@ async def fetch_daily_kline(
     ]
 
 
+@ttl_cache(ttl=30)
 async def fetch_intraday_kline(
     symbol: str,
     target_date: date | None = None,
@@ -94,6 +104,7 @@ async def fetch_intraday_kline(
     return result
 
 
+@ttl_cache(ttl=300)
 async def fetch_institutional(
     symbol: str,
     start: date | None = None,
@@ -119,6 +130,7 @@ async def fetch_institutional(
     return data.get("data", [])
 
 
+@ttl_cache(ttl=300)
 async def fetch_market_chips_all(target_date: date) -> list[dict]:
     """當日全市場三大法人買賣超 — 不指定 data_id 取全部"""
     params = {
@@ -134,6 +146,7 @@ async def fetch_market_chips_all(target_date: date) -> list[dict]:
     return data.get("data", [])
 
 
+@ttl_cache(ttl=300)
 async def fetch_margin(
     symbol: str,
     start: date | None = None,

@@ -14,6 +14,9 @@ import NextAuth from "next-auth";
 import Google   from "next-auth/providers/google";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Render / reverse-proxy 環境需要 trustHost，否則 OAuth callback URL 會出錯
+  // （NextAuth v5 預設只信任 AUTH_URL，部署在 Render 時必須明確開啟）
+  trustHost: true,
   providers: [
     Google({
       clientId:     process.env.AUTH_GOOGLE_ID,
