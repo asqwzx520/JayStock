@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Quote, WatchlistState, WatchlistGroup, WatchlistItem } from "@/lib/api";
 import { watchlistApi, getUserId } from "@/lib/api";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
+import { useSession } from "next-auth/react";
 import {
   DndContext,
   closestCenter,
@@ -93,6 +94,7 @@ interface Props {
 }
 
 export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
+  const { data: session } = useSession();
   const [panelMode, setPanelMode]   = useState<"watchlist" | "ranking">("watchlist");
   const [state, setState]           = useState<WatchlistState>(DEFAULT_STATE);
   const [activeGid, setActiveGid]   = useState<string>("default");
@@ -126,6 +128,34 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  // ── Session 綁定：Google 登入後把 user_id 換成 Google sub ─────────────
+  // getUserId() 讀 localStorage，這裡把 session.user.id 寫進去，
+  // 讓後續所有 watchlistFetcher 自動帶 Google user_id（X-User-ID header）
+  useEffect(() => {
+    const googleId = session?.user?.id;
+    if (!googleId) return;
+    const currentId = typeof window !== "undefined"
+      ? localStorage.getItem("stockpulse_user_id")
+      : null;
+    if (currentId === googleId) return;   // 已同步，不重複處理
+
+    // 切換 user_id → Google sub
+    localStorage.setItem("stockpulse_user_id", googleId);
+
+    // 用新 ID 重新拉後端資料（可能有此 Google 帳號在其他裝置存的自選股）
+    watchlistApi.get()
+      .then((remote) => {
+        setState(prev => {
+          const remoteTotal = Object.values(remote.items).flat().length;
+          const localTotal  = Object.values(prev.items).flat().length;
+          const merged = remoteTotal >= localTotal ? remote : prev;
+          lsSave(merged);
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, [session?.user?.id]);
 
   // ── Debounced backend sync ─────────────────────────────────────────────
   const scheduleSync = useCallback((next: WatchlistState) => {
@@ -591,7 +621,12 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       {/* Footer: sync status + export */}
       <div className="shrink-0 px-3 py-1.5 flex items-center justify-between text-[9px]"
         style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
-        <span>{getUserId().slice(0, 8)}… · {connected ? "即時" : "離線"}</span>
+        <span>
+          {session?.user?.name
+            ? session.user.name.split(" ")[0]   // 只顯示名字第一段
+            : `${getUserId().slice(0, 8)}…`}
+          {" · "}{connected ? "即時" : "離線"}
+        </span>
         <div className="flex items-center gap-1">
           <button
             onClick={exportCSV}
