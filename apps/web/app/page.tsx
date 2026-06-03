@@ -161,6 +161,14 @@ export default function Home() {
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
 
+  // 手機版左側 Drawer
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = leftPanelOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [leftPanelOpen]);
+
   // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
     setLoading(true); setError("");
@@ -281,20 +289,36 @@ export default function Home() {
         <LeftPanel
           currentSymbol={symbol}
           onSelectStock={(sym) => handleSelectStock(sym)}
+          drawerOpen={leftPanelOpen}
+          onDrawerClose={() => setLeftPanelOpen(false)}
         />
 
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
 
           {/* ── Row 1：主導航 Tab ──────────────────────── */}
           <div
-            className="shrink-0 flex items-center border-b px-4"
+            className="shrink-0 flex items-center border-b overflow-x-auto"
             style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
           >
+            {/* 漢堡按鈕（手機版專用） */}
+            <button
+              onClick={() => setLeftPanelOpen(true)}
+              className="lg:hidden shrink-0 flex items-center justify-center w-10 h-10 ml-1"
+              style={{ color: "var(--text-secondary)" }}
+              aria-label="開啟自選股"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect y="3" width="18" height="2" rx="1" fill="currentColor"/>
+                <rect y="8" width="18" height="2" rx="1" fill="currentColor"/>
+                <rect y="13" width="18" height="2" rx="1" fill="currentColor"/>
+              </svg>
+            </button>
+
             {(["kline", "chips", "market", "screener", "news"] as ViewTab[]).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setViewTab(tab)}
-                className="px-4 py-2.5 text-sm font-medium transition-colors relative"
+                onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
+                className="px-3 sm:px-4 py-2.5 text-sm font-medium transition-colors shrink-0"
                 style={{
                   color: viewTab === tab ? "var(--color-brand)" : "var(--text-secondary)",
                   borderBottom: viewTab === tab ? "2px solid var(--color-brand)" : "2px solid transparent",
@@ -312,10 +336,10 @@ export default function Home() {
           {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
           {(viewTab === "kline" || viewTab === "chips") && (
             <div
-              className="shrink-0 flex items-center justify-between gap-3 px-4 py-1.5 border-b"
+              className="shrink-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 border-b overflow-x-auto"
               style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
             >
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 {/* 代碼 + 報價 */}
                 <div className="flex items-baseline gap-2">
                   <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>

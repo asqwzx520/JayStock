@@ -30,7 +30,7 @@ export default function RightPanel({ quote }: RightPanelProps) {
 
   return (
     <aside
-      className="shrink-0 border-l overflow-y-auto hidden xl:block"
+      className="shrink-0 border-l overflow-y-auto hidden lg:block"
       style={{
         width: "var(--panel-right)",
         background: "var(--bg-surface)",

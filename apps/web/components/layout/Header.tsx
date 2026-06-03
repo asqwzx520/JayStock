@@ -155,7 +155,7 @@ export default function Header({ onSelectStock }: HeaderProps) {
           <span style={{ color: "var(--color-brand)" }}>StockPulse</span>
         </div>
 
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 min-w-0 max-w-md">
           <input
             ref={inputRef}
             type="text"

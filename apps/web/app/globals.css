@@ -176,3 +176,25 @@ body {
 .text-flat { color: var(--color-flat); }
 .bg-up     { background-color: var(--color-up-subtle); }
 .bg-down   { background-color: var(--color-down-subtle); }
+
+/* ============================================================
+   RESPONSIVE — 行動版覆蓋
+   ============================================================ */
+@media (max-width: 767px) {
+  :root {
+    /* 手機版 header 略縮 */
+    --header-h: 48px;
+    /* 手機版右欄不顯示，縮掉 */
+    --panel-right: 0px;
+  }
+
+  /* 防止水平溢出 */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* 自選股 Drawer 加 box-shadow */
+  .drawer-shadow {
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  }
+}

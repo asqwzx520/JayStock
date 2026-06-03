@@ -91,9 +91,12 @@ function SortableRow({
 interface Props {
   currentSymbol: string;
   onSelectStock: (symbol: string) => void;
+  /** Mobile drawer: controlled open state */
+  drawerOpen?: boolean;
+  onDrawerClose?: () => void;
 }
 
-export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
+export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = false, onDrawerClose }: Props) {
   const { data: session } = useSession();
   const [panelMode, setPanelMode]   = useState<"watchlist" | "ranking">("watchlist");
   const [state, setState]           = useState<WatchlistState>(DEFAULT_STATE);
@@ -326,12 +329,45 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
     setAlertEditing(null); setAlertAbove(""); setAlertBelow("");
   }
 
+  function handleSelectAndClose(sym: string) {
+    onSelectStock(sym);
+    onDrawerClose?.();
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────
   return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 lg:hidden"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={onDrawerClose}
+        />
+      )}
+
     <aside
-      className="shrink-0 border-r flex flex-col overflow-hidden hidden lg:flex"
+      className={[
+        "shrink-0 border-r flex flex-col overflow-hidden",
+        // Desktop: always visible in flow
+        "hidden lg:flex",
+        // Mobile: fixed drawer, shown when drawerOpen
+        drawerOpen ? "!flex fixed inset-y-0 left-0 z-50 drawer-shadow lg:relative lg:z-auto" : "",
+      ].join(" ")}
       style={{ width: "var(--panel-left)", background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
+      {/* Mobile-only close button */}
+      <div className="flex items-center justify-between px-3 py-2 border-b lg:hidden" style={{ borderColor: "var(--border)" }}>
+        <span className="text-sm font-semibold" style={{ color: "var(--color-brand)" }}>自選股 / 排行</span>
+        <button
+          onClick={onDrawerClose}
+          className="w-7 h-7 flex items-center justify-center rounded text-lg"
+          style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)" }}
+          aria-label="關閉"
+        >
+          ✕
+        </button>
+      </div>
       {/* Top mode switcher */}
       <div className="shrink-0 flex border-b" style={{ borderColor: "var(--border)" }}>
         {(["watchlist", "ranking"] as const).map((mode) => (
@@ -352,7 +388,7 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
       {/* ── 熱門排行模式 ── */}
       {panelMode === "ranking" && (
         <div className="flex-1 min-h-0">
-          <HotRanking onSelectSymbol={onSelectStock} />
+          <HotRanking onSelectSymbol={handleSelectAndClose} />
         </div>
       )}
 
@@ -500,7 +536,7 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
                           )}
 
                           {/* Stock info button */}
-                          <button onClick={() => onSelectStock(item.symbol)}
+                          <button onClick={() => handleSelectAndClose(item.symbol)}
                             className="flex items-center justify-between flex-1 px-2 py-2 text-sm transition-colors min-w-0"
                             style={{ background: isActive ? "var(--bg-elevated)" : "transparent" }}>
                             <div className="text-left min-w-0">
@@ -649,5 +685,6 @@ export default function LeftPanel({ currentSymbol, onSelectStock }: Props) {
 
       </> /* end watchlist mode */}
     </aside>
+    </> /* end drawer wrapper */
   );
 }
