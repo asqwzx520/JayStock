@@ -6,6 +6,10 @@ scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
 
 
 def start_scheduler():
+    import os
+    if os.environ.get("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
+        return   # CI / test 環境跳過排程啟動
+
     from app.tasks.daily_chip          import fetch_daily_chips
     from app.tasks.daily_kline         import fetch_daily_kline
     from app.tasks.daily_digest        import send_daily_digest
