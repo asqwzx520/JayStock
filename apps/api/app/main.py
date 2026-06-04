@@ -85,6 +85,6 @@ app.include_router(fundamental.router, prefix="/api/v1", tags=["fundamental"])
 app.include_router(ws.router,          tags=["websocket"])
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok", "version": "0.1.0"}
