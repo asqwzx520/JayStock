@@ -45,6 +45,11 @@ const StockNews = dynamic(
   () => import("@/components/market/StockNews"),
   { ssr: false, loading: () => <NewsListSkeleton /> }
 );
+
+const BacktestPanel = dynamic(
+  () => import("@/components/backtest/BacktestPanel"),
+  { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center" style={{ color: "var(--text-tertiary)" }}>載入回測引擎中...</div> }
+);
 import {
   getQuote,
   getKline,
@@ -70,7 +75,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "kline" | "chips" | "market" | "screener" | "news";
+type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest";
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -319,7 +324,7 @@ export default function Home() {
               </svg>
             </button>
 
-            {(["kline", "chips", "market", "screener", "news"] as ViewTab[]).map((tab) => (
+            {(["kline", "chips", "market", "screener", "news", "backtest"] as ViewTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
@@ -333,7 +338,8 @@ export default function Home() {
                   : tab === "chips"   ? "籌碼"
                   : tab === "market"  ? "大盤"
                   : tab === "screener"? "選股"
-                  : "新聞"}
+                  : tab === "news"    ? "新聞"
+                  : "回測"}
               </button>
             ))}
           </div>
@@ -568,6 +574,11 @@ export default function Home() {
             {/* 個股新聞 */}
             {viewTab === "news" && (
               <StockNews symbol={symbol} />
+            )}
+
+            {/* 回測 */}
+            {viewTab === "backtest" && (
+              <BacktestPanel symbol={symbol} />
             )}
 
             {/* 籌碼 — 融資融券 */}

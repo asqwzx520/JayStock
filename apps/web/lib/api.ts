@@ -525,6 +525,127 @@ export function getFundamental(symbol: string) {
   return fetcher<FundamentalData>(`/api/v1/fundamental/${encodeURIComponent(symbol)}`);
 }
 
+// ── Backtest ──────────────────────────────────────────────────────────────────
+
+export interface BacktestStrategyConfig {
+  type: string;
+  fast?:               number;
+  slow?:               number;
+  signal?:             number;
+  period?:             number;
+  oversold?:           number;
+  overbought?:         number;
+  k_period?:           number;
+  d_period?:           number;
+  buy_zone?:           number;
+  sell_zone?:          number;
+  std?:                number;
+  logic?:              "AND" | "OR";
+  entry_conditions?:   Array<{ field: string; op: string; value: string | number }>;
+  exit_conditions?:    Array<{ field: string; op: string; value: string | number }>;
+}
+
+export interface BacktestRequest {
+  symbol:           string;
+  strategy:         BacktestStrategyConfig;
+  start_date:       string;   // YYYY-MM-DD
+  end_date:         string;
+  initial_capital?: number;
+  stop_loss_pct?:   number | null;
+  take_profit_pct?: number | null;
+}
+
+export interface BacktestStats {
+  total_return:   number;
+  cagr:           number;
+  sharpe:         number;
+  sortino:        number;
+  calmar:         number;
+  max_drawdown:   number;
+  max_dd_days:    number;
+  win_rate:       number;
+  profit_factor:  number;
+  avg_hold_days:  number;
+  total_trades:   number;
+  best_trade:     number;
+  worst_trade:    number;
+  benchmark_cagr: number;
+  alpha:          number;
+  final_equity:   number;
+}
+
+export interface BacktestEquityPoint {
+  time:     string;
+  value:    number;
+  drawdown: number;
+}
+
+export interface BacktestBenchmarkPoint {
+  time:  string;
+  value: number;
+}
+
+export interface BacktestTrade {
+  entry_date:  string;
+  exit_date:   string;
+  entry_price: number;
+  exit_price:  number;
+  shares:      number;
+  pnl:         number;
+  pnl_pct:     number;
+  hold_days:   number;
+  side:        "long" | "short";
+}
+
+export interface BacktestMonthlyReturn {
+  year:       number;
+  month:      number;
+  return_pct: number;
+}
+
+export interface BacktestResult {
+  stats:           BacktestStats;
+  equity_curve:    BacktestEquityPoint[];
+  benchmark_curve: BacktestBenchmarkPoint[];
+  trades:          BacktestTrade[];
+  monthly_returns: BacktestMonthlyReturn[];
+}
+
+export interface BacktestPresetParam {
+  key:     string;
+  label:   string;
+  type:    "int" | "float";
+  default: number;
+  min:     number;
+  max:     number;
+}
+
+export interface BacktestPreset {
+  id:      string;
+  name:    string;
+  desc:    string;
+  icon:    string;
+  params:  BacktestPresetParam[];
+  default: BacktestStrategyConfig;
+}
+
+export async function runBacktest(req: BacktestRequest): Promise<BacktestResult> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/run`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err?.detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
+  return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
+}
+
 export const alertsApi = {
   getUnread: () =>
     alertsFetcher<AlertsResponse>("/api/v1/alerts"),

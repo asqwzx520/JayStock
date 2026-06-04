@@ -16,4 +16,8 @@ yfinance>=0.2.50
 sentry-sdk[fastapi]>=2.0.0
 # M6: email validation in feedback endpoint
 email-validator>=2.0.0
+# Backtest engine
+pandas>=2.0.0
+numpy>=1.26.0
+pandas_ta>=0.3.14b
 
