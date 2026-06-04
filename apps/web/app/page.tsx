@@ -507,6 +507,7 @@ export default function Home() {
                       chartType={chartType}
                       activeTool={activeTool}
                       clearKey={drawingClearKey}
+                      symbol={symbol}
                     />
                     {/* Chip-lane labels when overlay active */}
                     {indicators.includes("CHIPS") && klineChipsData.length > 0 && (

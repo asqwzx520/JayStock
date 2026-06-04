@@ -43,6 +43,21 @@ function pointToSegmentDist(px: number, py: number, x1: number, y1: number, x2: 
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+const LS_PREFIX = "stockpulse_drawings_";
+function lsLoad(symbol: string): Drawing[] {
+  if (!symbol || typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(`${LS_PREFIX}${symbol}`) ?? "[]"); } catch { return []; }
+}
+function lsSave(symbol: string, drawings: Drawing[]) {
+  if (!symbol || typeof window === "undefined") return;
+  try { localStorage.setItem(`${LS_PREFIX}${symbol}`, JSON.stringify(drawings)); } catch {}
+}
+function lsClear(symbol: string) {
+  if (!symbol || typeof window === "undefined") return;
+  try { localStorage.removeItem(`${LS_PREFIX}${symbol}`); } catch {}
+}
+
 /** 統一 bar 型別：日K 用 KlineBar（有 date），分K 用 IntradayBar（有 time number） */
 export type ChartBar = KlineBar | IntradayBar;
 
@@ -79,12 +94,13 @@ interface KLineChartProps {
   chartType?: ChartType;
   activeTool?: DrawingTool;
   clearKey?: number;
+  symbol?: string;
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
-export default function KLineChart({ data, indicators, chipsData, chartType = "candle", activeTool = "cursor", clearKey }: KLineChartProps) {
+export default function KLineChart({ data, indicators, chipsData, chartType = "candle", activeTool = "cursor", clearKey, symbol = "" }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<ISeriesApi<SeriesType>[]>([]);
@@ -93,8 +109,11 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const drawingsRef  = useRef<Drawing[]>([]);
   const pendingRef   = useRef<{ startX: number; startY: number } | null>(null);
+  const previewRef   = useRef<{ x: number; y: number } | null>(null);
   const redrawFnRef  = useRef<() => void>(() => {});
   const vpUnsubRef   = useRef<(() => void) | null>(null);
+  const symbolRef    = useRef(symbol);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
 
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -134,11 +153,31 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
         ctx.beginPath(); ctx.arc(x2, y2, 3, 0, Math.PI * 2); ctx.fill();
       }
     }
+    // Preview: trendline being drawn
+    if (pendingRef.current && previewRef.current) {
+      const { startX, startY } = pendingRef.current;
+      const { x: cx, y: cy } = previewRef.current;
+      ctx.strokeStyle = "rgba(96,165,250,0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(cx, cy); ctx.stroke();
+    }
+
     ctx.restore();
   }, []);
 
   // keep stable ref so buildChart can subscribe without stale closure
   useEffect(() => { redrawFnRef.current = redrawCanvas; }, [redrawCanvas]);
+
+  // Load saved drawings when symbol changes
+  useEffect(() => {
+    if (!symbol) return;
+    drawingsRef.current = lsLoad(symbol);
+    pendingRef.current  = null;
+    previewRef.current  = null;
+    // Redraw after chart settles
+    setTimeout(() => redrawFnRef.current(), 50);
+  }, [symbol]);
 
   const buildChart = useCallback(() => {
     const container = containerRef.current;
@@ -638,26 +677,27 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
   useEffect(() => {
     if (clearKey === undefined) return;
     drawingsRef.current = [];
+    lsClear(symbolRef.current);
     redrawFnRef.current();
   }, [clearKey]);
 
-  // ── Canvas mouse handlers ─────────────────────────────────────────────────
-  const handleCanvasDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  // ── Shared drawing action logic ───────────────────────────────────────────
+  const handleDrawDown = useCallback((x: number, y: number) => {
     const chart = chartRef.current;
     const main  = seriesRefs.current[0];
     if (!chart || !main || activeTool === "cursor") return;
-    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
 
     if (activeTool === "hline") {
       const price = main.coordinateToPrice(y);
       if (price === null) return;
-      drawingsRef.current = [...drawingsRef.current, { id: `h${Date.now()}`, type: "hline", price1: price }];
+      const next = [...drawingsRef.current, { id: `h${Date.now()}`, type: "hline" as const, price1: price }];
+      drawingsRef.current = next;
+      lsSave(symbolRef.current, next);
       redrawFnRef.current();
 
     } else if (activeTool === "trendline") {
-      pendingRef.current = { startX: x, startY: y };
+      pendingRef.current  = { startX: x, startY: y };
+      previewRef.current  = { x, y };
 
     } else if (activeTool === "erase") {
       const THR = 8;
@@ -677,35 +717,81 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
         return false;
       });
       if (idx >= 0) {
-        drawingsRef.current = drawingsRef.current.filter((_, i) => i !== idx);
+        const next = drawingsRef.current.filter((_, i) => i !== idx);
+        drawingsRef.current = next;
+        lsSave(symbolRef.current, next);
         redrawFnRef.current();
       }
     }
   }, [activeTool]);
 
-  const handleCanvasUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleDrawMove = useCallback((x: number, y: number) => {
+    if (activeTool !== "trendline" || !pendingRef.current) return;
+    previewRef.current = { x, y };
+    redrawFnRef.current();
+  }, [activeTool]);
+
+  const handleDrawUp = useCallback((x: number, y: number) => {
     if (activeTool !== "trendline" || !pendingRef.current) return;
     const chart = chartRef.current;
     const main  = seriesRefs.current[0];
     if (!chart || !main) return;
-    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    const x2 = e.clientX - rect.left;
-    const y2 = e.clientY - rect.top;
     const { startX, startY } = pendingRef.current;
     pendingRef.current = null;
-    if (Math.abs(x2 - startX) < 5 && Math.abs(y2 - startY) < 5) return;
+    previewRef.current = null;
+    if (Math.abs(x - startX) < 5 && Math.abs(y - startY) < 5) { redrawFnRef.current(); return; }
     const time1  = chart.timeScale().coordinateToTime(startX);
     const price1 = main.coordinateToPrice(startY);
-    const time2  = chart.timeScale().coordinateToTime(x2);
-    const price2 = main.coordinateToPrice(y2);
+    const time2  = chart.timeScale().coordinateToTime(x);
+    const price2 = main.coordinateToPrice(y);
     if (time1 && time2 && price1 !== null && price2 !== null) {
-      drawingsRef.current = [...drawingsRef.current, {
-        id: `t${Date.now()}`, type: "trendline",
-        price1, time1, price2, time2,
-      }];
+      const next = [...drawingsRef.current, { id: `t${Date.now()}`, type: "trendline" as const, price1, time1, price2, time2 }];
+      drawingsRef.current = next;
+      lsSave(symbolRef.current, next);
       redrawFnRef.current();
     }
   }, [activeTool]);
+
+  // ── Mouse handlers ────────────────────────────────────────────────────────
+  const handleCanvasDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawDown(e.clientX - r.left, e.clientY - r.top);
+  }, [handleDrawDown]);
+
+  const handleCanvasMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawMove(e.clientX - r.left, e.clientY - r.top);
+  }, [handleDrawMove]);
+
+  const handleCanvasUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawUp(e.clientX - r.left, e.clientY - r.top);
+  }, [handleDrawUp]);
+
+  // ── Touch handlers ────────────────────────────────────────────────────────
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.touches[0] ?? e.changedTouches[0];
+    if (!t) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawDown(t.clientX - r.left, t.clientY - r.top);
+  }, [handleDrawDown]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    if (!t) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawMove(t.clientX - r.left, t.clientY - r.top);
+  }, [handleDrawMove]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    handleDrawUp(t.clientX - r.left, t.clientY - r.top);
+  }, [handleDrawUp]);
 
   const isDrawing = activeTool !== "cursor";
 
@@ -722,7 +808,11 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
                 : "default",
         }}
         onMouseDown={handleCanvasDown}
+        onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
     </div>
   );
