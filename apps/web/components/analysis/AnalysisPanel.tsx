@@ -1066,7 +1066,7 @@ function FinancialSection({ data }: { data: FinancialsData }) {
   return (
     <div className="space-y-4">
       {/* Bar Charts */}
-      <Section title="📈 財務報表趨勢（5 年）">
+      <Section title="📈 財務報表趨勢（最多 10 年）">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           {BAR_CONFIGS.map(c => (
             <BarChart key={c.key} data={data.annual} config={c} divisor={data.divisor} unit={data.unit} />

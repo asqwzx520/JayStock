@@ -61,7 +61,7 @@ def _fetch_financials_sync(symbol: str) -> dict[str, Any]:
 
         annual: list[dict] = []
         if income is not None and not income.empty:
-            for col in income.columns[:5]:    # 最近 5 年
+            for col in income.columns[:10]:   # 最近 10 年
                 year = col.year if hasattr(col, "year") else int(str(col)[:4])
                 row: dict[str, Any] = {"year": year}
 
