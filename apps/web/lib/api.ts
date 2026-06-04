@@ -729,6 +729,34 @@ export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
   return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
 }
 
+// ── Valuation Band（PE / PB 歷史估值帶）────────────────────────────────────
+export interface ValuationBandPoint {
+  time:  string;   // YYYY-MM-DD (weekly)
+  value: number;
+}
+
+export interface ValuationBandStats {
+  current:         number;
+  mean:            number;
+  std:             number;
+  band_1std_low:   number;
+  band_1std_high:  number;
+  band_2std_low:   number;
+  band_2std_high:  number;
+  percentile:      number;   // 0–100: where current sits in 5-year range
+  history:         ValuationBandPoint[];
+}
+
+export interface ValuationBandResponse {
+  symbol: string;
+  pe:     ValuationBandStats | null;
+  pb:     ValuationBandStats | null;
+}
+
+export function getValuationBand(symbol: string) {
+  return fetcher<ValuationBandResponse>(`/api/v1/valuation-band/${encodeURIComponent(symbol)}`);
+}
+
 // ── Monthly Revenue（月營收）────────────────────────────────────────────────
 export interface MonthlyRevenueItem {
   year:                   number;

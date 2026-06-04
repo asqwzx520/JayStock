@@ -8,8 +8,10 @@ import type {
   AnnualFinancial,
   MonthlyRevenueItem,
   MonthlyRevenueResponse,
+  ValuationBandStats,
+  ValuationBandResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -332,6 +334,217 @@ function FundSection({ data }: { data: FundamentalData }) {
           </div>
         )}
       </Section>
+    </div>
+  );
+}
+
+// ── Valuation Band Section ────────────────────────────────────────────────────
+
+/** 單一指標（PE 或 PB）帶狀歷史圖 */
+function ValuationBandChart({
+  stats,
+  color,
+  ariaLabel,
+}: {
+  stats:     ValuationBandStats;
+  color:     string;
+  ariaLabel: string;
+}) {
+  const W = 560, H = 170;
+  const PAD = { t: 20, r: 68, b: 32, l: 44 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+
+  const hist = stats.history;
+  if (!hist.length) return null;
+
+  const allVals = [
+    ...hist.map(d => d.value),
+    stats.band_2std_low,
+    stats.band_2std_high,
+  ].filter(v => v > 0);
+  const rawMin = Math.min(...allVals);
+  const rawMax = Math.max(...allVals);
+  const margin = (rawMax - rawMin) * 0.08 || 1;
+  const minY = Math.max(0, rawMin - margin);
+  const maxY = rawMax + margin;
+  const range = maxY - minY || 1;
+
+  const toX = (i: number) => PAD.l + (i / Math.max(hist.length - 1, 1)) * iW;
+  const toY = (v: number) => PAD.t + (1 - (Math.min(maxY, Math.max(minY, v)) - minY) / range) * iH;
+
+  const y2hi  = toY(Math.min(maxY, stats.band_2std_high));
+  const y2lo  = toY(Math.max(minY, stats.band_2std_low));
+  const y1hi  = toY(Math.min(maxY, stats.band_1std_high));
+  const y1lo  = toY(Math.max(minY, stats.band_1std_low));
+  const yMean = toY(stats.mean);
+  const yCurr = toY(stats.current);
+
+  const linePts = hist.map((d, i) => `${toX(i)},${toY(d.value)}`).join(" ");
+
+  const xLabels: { x: number; label: string }[] = [];
+  let lastYear = 0;
+  hist.forEach((d, i) => {
+    const yr = parseInt(d.time.slice(0, 4));
+    if (yr !== lastYear) { xLabels.push({ x: toX(i), label: String(yr) }); lastYear = yr; }
+  });
+
+  const clampY = (y: number) => Math.min(PAD.t + iH - 2, Math.max(PAD.t + 2, y));
+
+  const refLines = [
+    { y: y2hi,  v: stats.band_2std_high, tag: "+2σ", op: 0.45, dash: true  },
+    { y: y1hi,  v: stats.band_1std_high, tag: "+1σ", op: 0.65, dash: false },
+    { y: yMean, v: stats.mean,            tag: "均",  op: 0.85, dash: true  },
+    { y: y1lo,  v: stats.band_1std_low,   tag: "-1σ", op: 0.65, dash: false },
+    { y: y2lo,  v: stats.band_2std_low,   tag: "-2σ", op: 0.45, dash: true  },
+  ];
+
+  const currColor =
+    stats.current > stats.band_1std_high ? "var(--color-down)" :
+    stats.current < stats.band_1std_low  ? "var(--color-up)"   :
+    color;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} aria-label={ariaLabel}>
+      {/* ±2σ band */}
+      <rect x={PAD.l} y={y2hi} width={iW} height={Math.max(0, y2lo - y2hi)} fill={color} opacity={0.07} />
+      {/* ±1σ band */}
+      <rect x={PAD.l} y={y1hi} width={iW} height={Math.max(0, y1lo - y1hi)} fill={color} opacity={0.15} />
+
+      {/* Reference lines + right labels */}
+      {refLines.map(({ y, v, tag, op, dash }) => (
+        <g key={tag}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={y} y2={y}
+            stroke={color} strokeWidth={0.8}
+            strokeDasharray={dash ? "3 3" : undefined}
+            opacity={op} />
+          <text x={W - PAD.r + 3} y={clampY(y) + 3} fontSize={8} fill={color} opacity={Math.min(1, op + 0.15)}>
+            {v.toFixed(1)}
+          </text>
+          <text x={W - PAD.r + 34} y={clampY(y) + 3} fontSize={7} fill="var(--text-tertiary)">{tag}</text>
+        </g>
+      ))}
+
+      {/* Current guide line */}
+      <line x1={PAD.l} x2={W - PAD.r} y1={yCurr} y2={yCurr}
+        stroke={currColor} strokeWidth={1.2} strokeDasharray="6 3" opacity={0.9} />
+
+      {/* Historical line */}
+      <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.6}
+        strokeLinejoin="round" opacity={0.85} />
+
+      {/* Latest dot */}
+      <circle cx={toX(hist.length - 1)} cy={yCurr} r={3.5} fill={currColor} />
+
+      {/* X labels */}
+      {xLabels.map(({ x, label }) => (
+        <text key={label} x={x} y={H - 4} textAnchor="middle" fontSize={8} fill="var(--text-tertiary)">{label}</text>
+      ))}
+      <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={PAD.t + iH} stroke="var(--border)" strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+/** 分位數半圓弧 */
+function PercentileArc({ pct, color }: { pct: number; color: string }) {
+  const r = 26, cx = 34, cy = 34;
+  const clampPct = Math.min(99.9, Math.max(0.1, pct));
+  const angle = (clampPct / 100) * Math.PI;
+  const ex = cx - r * Math.cos(angle);
+  const ey = cy - r * Math.sin(angle);
+  const largArc = clampPct > 50 ? 1 : 0;
+  const bgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  const fgPath = `M ${cx - r} ${cy} A ${r} ${r} 0 ${largArc} 1 ${ex} ${ey}`;
+  return (
+    <svg viewBox="0 0 68 42" style={{ width: 68, height: 42, flexShrink: 0 }}>
+      <path d={bgPath} fill="none" stroke="var(--bg-elevated)" strokeWidth={5} />
+      <path d={fgPath} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round" />
+      <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>
+        {pct.toFixed(0)}%
+      </text>
+    </svg>
+  );
+}
+
+function ValuationBandSection({
+  data,
+  loading,
+  error,
+}: {
+  data:    ValuationBandResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="計算歷史估值帶中（約 5-10 秒）..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data)   return null;
+
+  const hasPE = !!(data.pe && data.pe.history.length >= 52);
+  const hasPB = !!(data.pb && data.pb.history.length >= 52);
+
+  if (!hasPE && !hasPB) {
+    return (
+      <Section title="📐 PE / PB 歷史估值帶">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          歷史季度財務數據不足，無法計算估值帶（需至少 4 季 EPS / 淨值資料）。
+        </p>
+      </Section>
+    );
+  }
+
+  function ValuationCard({ stats, label, color }: { stats: ValuationBandStats; label: string; color: string }) {
+    const zone =
+      stats.current > stats.band_1std_high ? { text: "偏高估",   clr: "var(--color-down)" } :
+      stats.current < stats.band_1std_low  ? { text: "偏低估",   clr: "var(--color-up)"   } :
+      stats.current > stats.mean           ? { text: "中性偏高", clr: "#f59e0b"           } :
+                                             { text: "中性偏低", clr: "#3b82f6"           };
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-4">
+          <PercentileArc pct={stats.percentile} color={color} />
+          <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
+            <div>
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>當前 {label}</div>
+              <div className="text-lg num font-bold" style={{ color }}>{stats.current.toFixed(1)}x</div>
+            </div>
+            <div>
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>估值評估</div>
+              <div className="text-sm font-semibold" style={{ color: zone.clr }}>{zone.text}</div>
+            </div>
+            <div>
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>5 年均值</div>
+              <div className="text-xs num">{stats.mean.toFixed(1)}x</div>
+            </div>
+            <div>
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>±1σ 正常區間</div>
+              <div className="text-xs num">{stats.band_1std_low.toFixed(1)} – {stats.band_1std_high.toFixed(1)}</div>
+            </div>
+          </div>
+        </div>
+        <ValuationBandChart stats={stats} color={color} ariaLabel={`${label} 歷史估值帶`} />
+        <div className="flex items-center gap-4 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          <span><span style={{ color }}>─</span> 歷史 {label}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <span style={{ display: "inline-block", width: 12, height: 8, background: color, opacity: 0.15, borderRadius: 1 }} />±1σ 帶
+          </span>
+          <span>分位弧 = 當前在 5 年中的位置</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {hasPE && (
+        <Section title="📐 本益比（P/E）歷史估值帶">
+          <ValuationCard stats={data.pe!} label="PE" color="#8b5cf6" />
+        </Section>
+      )}
+      {hasPB && (
+        <Section title="📐 股價淨值比（P/B）歷史估值帶">
+          <ValuationCard stats={data.pb!} label="PB" color="#06b6d4" />
+        </Section>
+      )}
     </div>
   );
 }
@@ -746,21 +959,24 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [fundData,  setFundData]  = useState<FundamentalData  | null>(null);
   const [finData,   setFinData]   = useState<FinancialsData   | null>(null);
   const [revData,   setRevData]   = useState<MonthlyRevenueResponse | null>(null);
+  const [bandData,  setBandData]  = useState<ValuationBandResponse  | null>(null);
 
   const [techLoad, setTechLoad]   = useState(false);
   const [fundLoad, setFundLoad]   = useState(false);
   const [finLoad,  setFinLoad]    = useState(false);
   const [revLoad,  setRevLoad]    = useState(false);
+  const [bandLoad, setBandLoad]   = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
   const [finErr,  setFinErr]      = useState<string | null>(null);
   const [revErr,  setRevErr]      = useState<string | null>(null);
+  const [bandErr, setBandErr]     = useState<string | null>(null);
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);
 
     setTechLoad(true);
     getTechnical(symbol).then(setTechData).catch(e => setTechErr(e.message)).finally(() => setTechLoad(false));
@@ -773,6 +989,9 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setRevLoad(true);
     getMonthlyRevenue(symbol).then(setRevData).catch(e => setRevErr(e.message)).finally(() => setRevLoad(false));
+
+    setBandLoad(true);
+    getValuationBand(symbol).then(setBandData).catch(e => setBandErr(e.message)).finally(() => setBandLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -818,7 +1037,8 @@ export default function AnalysisPanel({ symbol }: Props) {
           fundData ? (
             <div className="space-y-4">
               <FundSection data={fundData} />
-              <MonthlyRevenueSection data={revData} loading={revLoad} error={revErr} />
+              <ValuationBandSection  data={bandData} loading={bandLoad} error={bandErr} />
+              <MonthlyRevenueSection data={revData}  loading={revLoad}  error={revErr}  />
             </div>
           ) :
           <Loading msg="載入中..." />
