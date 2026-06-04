@@ -729,6 +729,39 @@ export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
   return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
 }
 
+// ── Peer Comparison（同業比較表）────────────────────────────────────────────
+export interface PeerRow {
+  symbol:          string;
+  yf_symbol:       string;
+  name:            string;
+  price:           number | null;
+  change_1y_pct:   number | null;
+  market_cap:      number | null;
+  market_cap_fmt:  string | null;
+  pe_trailing:     number | null;
+  pb_ratio:        number | null;
+  roe:             number | null;
+  gross_margin:    number | null;
+  profit_margin:   number | null;
+  revenue_growth:  number | null;
+  dividend_yield:  number | null;
+  sector:          string | null;
+  industry:        string | null;
+  error?:          string;
+}
+
+export interface PeerComparisonResponse {
+  symbol:    string;
+  target_yf: string;
+  custom:    boolean;
+  rows:      PeerRow[];
+}
+
+export function getPeerComparison(symbol: string, peers?: string) {
+  const qs = peers ? `?peers=${encodeURIComponent(peers)}` : "";
+  return fetcher<PeerComparisonResponse>(`/api/v1/peer-comparison/${encodeURIComponent(symbol)}${qs}`);
+}
+
 // ── Valuation Band（PE / PB 歷史估值帶）────────────────────────────────────
 export interface ValuationBandPoint {
   time:  string;   // YYYY-MM-DD (weekly)

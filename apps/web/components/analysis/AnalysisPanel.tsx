@@ -10,8 +10,10 @@ import type {
   MonthlyRevenueResponse,
   ValuationBandStats,
   ValuationBandResponse,
+  PeerRow,
+  PeerComparisonResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -823,6 +825,190 @@ function MonthlyRevenueSection({
   );
 }
 
+// ── Peer Comparison Section ───────────────────────────────────────────────────
+
+const PEER_COLS: {
+  key:      keyof PeerRow;
+  label:    string;
+  fmt:      (v: number | null) => string;
+  higher?:  boolean;   // true = green when higher; false = green when lower; undefined = neutral
+}[] = [
+  { key: "market_cap_fmt", label: "市值",    fmt: v => v != null ? String(v) : "—",            higher: undefined },
+  { key: "pe_trailing",    label: "P/E",     fmt: v => v != null ? v.toFixed(1) : "—",          higher: false },
+  { key: "pb_ratio",       label: "P/B",     fmt: v => v != null ? v.toFixed(2) : "—",          higher: false },
+  { key: "roe",            label: "ROE",     fmt: v => v != null ? `${(v*100).toFixed(1)}%` : "—", higher: true },
+  { key: "gross_margin",   label: "毛利率",  fmt: v => v != null ? `${(v*100).toFixed(1)}%` : "—", higher: true },
+  { key: "profit_margin",  label: "淨利率",  fmt: v => v != null ? `${(v*100).toFixed(1)}%` : "—", higher: true },
+  { key: "dividend_yield", label: "殖利率",  fmt: v => v != null ? `${(v*100).toFixed(2)}%` : "—", higher: true },
+  { key: "change_1y_pct",  label: "1Y漲跌", fmt: v => v != null ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` : "—", higher: true },
+];
+
+function peerCellColor(
+  val: number | null,
+  median: number | null,
+  higher: boolean | undefined,
+): string {
+  if (val == null || median == null || higher === undefined) return "var(--text-primary)";
+  const better = higher ? val > median * 1.02 : val < median * 0.98;
+  const worse  = higher ? val < median * 0.98 : val > median * 1.02;
+  if (better) return "var(--color-up)";
+  if (worse)  return "var(--color-down)";
+  return "var(--text-primary)";
+}
+
+function PeerComparisonSection({
+  data,
+  loading,
+  error,
+  targetSymbol,
+  onCustomPeers,
+}: {
+  data:          PeerComparisonResponse | null;
+  loading:       boolean;
+  error:         string | null;
+  targetSymbol:  string;
+  onCustomPeers: (peers: string) => void;
+}) {
+  const [editMode,  setEditMode]  = useState(false);
+  const [inputVal,  setInputVal]  = useState("");
+
+  if (loading) return <Loading msg="載入同業資料中（約 10-15 秒）..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data || !data.rows.length) return null;
+
+  const validRows = data.rows.filter(r => !r.error);
+
+  // Compute per-column medians (for color coding)
+  const medians: Partial<Record<keyof PeerRow, number | null>> = {};
+  for (const col of PEER_COLS) {
+    if (col.higher === undefined) continue;
+    const vals = validRows.map(r => r[col.key] as number | null).filter(v => v != null) as number[];
+    if (!vals.length) { medians[col.key] = null; continue; }
+    const sorted = [...vals].sort((a, b) => a - b);
+    medians[col.key] = sorted[Math.floor(sorted.length / 2)];
+  }
+
+  const handleCustom = () => {
+    const cleaned = inputVal.trim().replace(/\s+/g, ",");
+    onCustomPeers(cleaned);
+    setEditMode(false);
+  };
+
+  return (
+    <Section title="🏢 同業比較">
+      {/* Header row: industry info + 自訂按鈕 */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          {validRows[0]?.industry ?? validRows[0]?.sector ?? ""}
+          {data.custom && <span className="ml-2 px-1.5 py-0.5 rounded text-[9px]" style={{ background: "var(--bg-elevated)", color: "var(--color-brand)" }}>自訂</span>}
+        </div>
+        <button
+          className="text-[10px] px-2 py-1 rounded"
+          style={{ background: "var(--bg-elevated)", color: "var(--color-brand)", border: "1px solid var(--border)" }}
+          onClick={() => { setEditMode(e => !e); setInputVal(""); }}
+        >
+          {editMode ? "取消" : "✏️ 自訂對比"}
+        </button>
+      </div>
+
+      {/* Custom input */}
+      {editMode && (
+        <div className="flex gap-2 mb-3">
+          <input
+            className="flex-1 rounded px-2 py-1 text-xs"
+            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+            placeholder="輸入股票代號，用逗號分隔（最多 6 支）"
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCustom()}
+          />
+          <button
+            className="px-3 py-1 rounded text-xs font-medium"
+            style={{ background: "var(--color-brand)", color: "#fff" }}
+            onClick={handleCustom}
+          >
+            比較
+          </button>
+        </div>
+      )}
+
+      {/* Comparison table */}
+      <div className="overflow-x-auto -mx-4 px-4">
+        <table className="w-full text-xs" style={{ minWidth: 560 }}>
+          <thead>
+            <tr>
+              <th className="text-left px-2 py-2 sticky left-0 z-10" style={{ color: "var(--text-tertiary)", background: "var(--bg-surface)", borderBottom: "1px solid var(--border)", minWidth: 100 }}>
+                公司
+              </th>
+              {PEER_COLS.map(c => (
+                <th key={String(c.key)} className="text-right px-2 py-2" style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" }}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((row, idx) => {
+              const isTarget = row.yf_symbol === data.target_yf;
+              const rowBg = isTarget
+                ? "rgba(var(--color-brand-rgb, 59,130,246), 0.08)"
+                : idx % 2 ? "var(--bg-elevated)" : "transparent";
+              return (
+                <tr
+                  key={row.yf_symbol}
+                  style={{
+                    background: rowBg,
+                    borderBottom: "1px solid var(--border)",
+                    fontWeight: isTarget ? 600 : undefined,
+                  }}
+                >
+                  {/* Company name */}
+                  <td className="px-2 py-2 sticky left-0 z-10" style={{ background: rowBg }}>
+                    <div className="flex items-center gap-1.5">
+                      {isTarget && (
+                        <span className="shrink-0 text-[8px] px-1 py-0.5 rounded" style={{ background: "var(--color-brand)", color: "#fff" }}>目標</span>
+                      )}
+                      <div>
+                        <div className="num" style={{ color: "var(--text-primary)" }}>{row.symbol}</div>
+                        <div className="text-[10px] truncate max-w-[80px]" style={{ color: "var(--text-tertiary)" }} title={row.name}>
+                          {row.name?.replace(/\s*\(.*?\)/, "").substring(0, 12)}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Metric columns */}
+                  {PEER_COLS.map(col => {
+                    const raw = row[col.key];
+                    const numVal = typeof raw === "number" ? raw : null;
+                    const displayVal = col.key === "market_cap_fmt"
+                      ? (row.market_cap_fmt ?? "—")
+                      : col.fmt(numVal);
+                    const color = col.higher !== undefined
+                      ? peerCellColor(numVal, medians[col.key] as number | null, col.higher)
+                      : (col.key === "change_1y_pct" && numVal != null)
+                        ? updown(numVal)
+                        : "var(--text-primary)";
+                    return (
+                      <td key={String(col.key)} className="px-2 py-2 text-right num" style={{ color }}>
+                        {displayVal}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        色碼：<span style={{ color: "var(--color-up)" }}>■</span> 優於同業中位 &nbsp;
+        <span style={{ color: "var(--color-down)" }}>■</span> 遜於同業中位（P/E、P/B 越低越優）
+      </div>
+    </Section>
+  );
+}
+
 // ── Financial Charts (Simple SVG Bars) ───────────────────────────────────────
 
 type BarKey = "revenue" | "net_income" | "operating_cf" | "free_cf";
@@ -960,23 +1146,34 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [finData,   setFinData]   = useState<FinancialsData   | null>(null);
   const [revData,   setRevData]   = useState<MonthlyRevenueResponse | null>(null);
   const [bandData,  setBandData]  = useState<ValuationBandResponse  | null>(null);
+  const [peerData,  setPeerData]  = useState<PeerComparisonResponse | null>(null);
+  const [customPeers, setCustomPeers] = useState("");
 
   const [techLoad, setTechLoad]   = useState(false);
   const [fundLoad, setFundLoad]   = useState(false);
   const [finLoad,  setFinLoad]    = useState(false);
   const [revLoad,  setRevLoad]    = useState(false);
   const [bandLoad, setBandLoad]   = useState(false);
+  const [peerLoad, setPeerLoad]   = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
   const [finErr,  setFinErr]      = useState<string | null>(null);
   const [revErr,  setRevErr]      = useState<string | null>(null);
   const [bandErr, setBandErr]     = useState<string | null>(null);
+  const [peerErr, setPeerErr]     = useState<string | null>(null);
+
+  const loadPeers = (sym: string, peers = "") => {
+    setPeerLoad(true); setPeerErr(null);
+    getPeerComparison(sym, peers || undefined)
+      .then(setPeerData).catch(e => setPeerErr(e.message)).finally(() => setPeerLoad(false));
+  };
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);
+    setCustomPeers("");
 
     setTechLoad(true);
     getTechnical(symbol).then(setTechData).catch(e => setTechErr(e.message)).finally(() => setTechLoad(false));
@@ -992,6 +1189,8 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setBandLoad(true);
     getValuationBand(symbol).then(setBandData).catch(e => setBandErr(e.message)).finally(() => setBandLoad(false));
+
+    loadPeers(symbol);
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -1039,6 +1238,11 @@ export default function AnalysisPanel({ symbol }: Props) {
               <FundSection data={fundData} />
               <ValuationBandSection  data={bandData} loading={bandLoad} error={bandErr} />
               <MonthlyRevenueSection data={revData}  loading={revLoad}  error={revErr}  />
+              <PeerComparisonSection
+                data={peerData}  loading={peerLoad} error={peerErr}
+                targetSymbol={symbol}
+                onCustomPeers={(peers) => { setCustomPeers(peers); loadPeers(symbol, peers); }}
+              />
             </div>
           ) :
           <Loading msg="載入中..." />
