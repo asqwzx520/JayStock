@@ -6,8 +6,10 @@ import type {
   FundamentalData,
   FinancialsData,
   AnnualFinancial,
+  MonthlyRevenueItem,
+  MonthlyRevenueResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,10 +20,6 @@ function pct(v: number | null | undefined, digits = 1) {
 function fmt(v: number | null | undefined, digits = 2) {
   if (v == null) return "—";
   return v.toFixed(digits);
-}
-function signed(v: number | null | undefined, digits = 2) {
-  if (v == null) return "—";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(digits)}`;
 }
 
 function updown(v: number | null | undefined): string {
@@ -338,6 +336,280 @@ function FundSection({ data }: { data: FundamentalData }) {
   );
 }
 
+// ── Monthly Revenue Section ───────────────────────────────────────────────────
+
+/** 月營收走勢折線圖（SVG） */
+function RevenueTrendChart({ items }: { items: MonthlyRevenueItem[] }) {
+  const W = 560, H = 130;
+  const PAD = { t: 16, r: 12, b: 28, l: 52 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+
+  // 千元 → 億 (1億 = 100,000千元)
+  const vals = items.map(d => (d.revenue ?? 0) / 1e5);
+  const maxV = Math.max(...vals, 0.1);
+  const minV = Math.min(...vals.filter(v => v > 0), 0);
+  const range = maxV - minV || 1;
+
+  const toX = (i: number) =>
+    items.length <= 1 ? PAD.l + iW / 2 : PAD.l + (i / (items.length - 1)) * iW;
+  const toY = (v: number) => PAD.t + (1 - (v - minV) / range) * iH;
+
+  const pts = vals.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+  // area fill
+  const area = `M${toX(0)},${toY(vals[0])} ` +
+    vals.map((v, i) => `L${toX(i)},${toY(v)}`).join(" ") +
+    ` L${toX(vals.length - 1)},${PAD.t + iH} L${toX(0)},${PAD.t + iH} Z`;
+
+  // X labels: every 6 months
+  const xLabels = items
+    .map((d, i) => ({ i, label: d.month === 1 || d.month === 7 ? `${d.year % 100}/${String(d.month).padStart(2, "0")}` : "" }))
+    .filter(l => l.label);
+
+  // Y axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(r => ({
+    y: PAD.t + (1 - r) * iH,
+    label: ((minV + r * range) >= 100 ? `${Math.round((minV + r * range) / 100)}K` : (minV + r * range).toFixed(0)),
+  }));
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} aria-label="月營收走勢圖">
+      <defs>
+        <linearGradient id="rev-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {/* Grid */}
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={t.y} y2={t.y} stroke="var(--border)" strokeWidth={0.5} />
+          <text x={PAD.l - 4} y={t.y + 3} textAnchor="end" fontSize={8} fill="var(--text-tertiary)">{t.label}</text>
+        </g>
+      ))}
+      {/* Area fill */}
+      <path d={area} fill="url(#rev-grad)" />
+      {/* Line */}
+      <polyline points={pts} fill="none" stroke="#3b82f6" strokeWidth={1.5} strokeLinejoin="round" />
+      {/* Last year comparison (dashed) */}
+      {items.some(d => d.last_year_revenue != null) && (
+        <polyline
+          points={items.map((d, i) => `${toX(i)},${toY((d.last_year_revenue ?? 0) / 1e5)}`).join(" ")}
+          fill="none"
+          stroke="#6b7280"
+          strokeWidth={1}
+          strokeDasharray="3 3"
+          opacity={0.6}
+        />
+      )}
+      {/* X labels */}
+      {xLabels.map(({ i, label }) => (
+        <text key={i} x={toX(i)} y={H - 4} textAnchor="middle" fontSize={8} fill="var(--text-tertiary)">{label}</text>
+      ))}
+      {/* Latest dot */}
+      {vals.length > 0 && (
+        <circle cx={toX(vals.length - 1)} cy={toY(vals[vals.length - 1])} r={3} fill="#3b82f6" />
+      )}
+    </svg>
+  );
+}
+
+/** YoY 成長率柱狀圖（SVG） */
+function YoYBarChart({ items }: { items: MonthlyRevenueItem[] }) {
+  const display = items.filter(d => d.yoy_pct != null).slice(-24);
+  if (!display.length) return null;
+
+  const vals = display.map(d => d.yoy_pct ?? 0);
+  const maxAbs = Math.max(...vals.map(Math.abs), 1);
+  const H = 90, barW = Math.max(4, Math.floor(560 / display.length) - 2);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg
+        viewBox={`0 0 ${Math.max(display.length * (barW + 2), 200)} ${H + 24}`}
+        style={{ width: "100%", height: H + 24, minWidth: 200 }}
+        aria-label="月營收 YoY 成長率"
+        preserveAspectRatio="none"
+      >
+        {/* Zero line */}
+        <line x1={0} x2={display.length * (barW + 2)} y1={H / 2} y2={H / 2} stroke="var(--border)" strokeWidth={0.5} />
+        {display.map((d, i) => {
+          const v = d.yoy_pct ?? 0;
+          const barH = Math.max(2, (Math.abs(v) / maxAbs) * (H / 2 - 4));
+          const isPos = v >= 0;
+          const x = i * (barW + 2);
+          const y = isPos ? H / 2 - barH : H / 2;
+          const label = d.month === 1 || d.month === 7
+            ? `${String(d.year % 100).padStart(2, "0")}/${String(d.month).padStart(2, "0")}`
+            : "";
+          return (
+            <g key={`${d.year}-${d.month}`}>
+              <rect
+                x={x} y={y} width={barW} height={barH}
+                fill={isPos ? "var(--color-up)" : "var(--color-down)"}
+                opacity={0.85}
+                rx={1}
+              >
+                <title>{`${d.year}/${d.month}: ${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}</title>
+              </rect>
+              {label && (
+                <text x={x + barW / 2} y={H + 14} textAnchor="middle" fontSize={7} fill="var(--text-tertiary)">{label}</text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="flex items-center gap-3 mt-1 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        <span style={{ color: "var(--color-up)" }}>■</span> YoY 成長
+        <span style={{ color: "var(--color-down)" }}>■</span> YoY 衰退
+        <span className="ml-auto">灰虛線 = 去年同月</span>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyRevenueSection({
+  data,
+  loading,
+  error,
+}: {
+  data:    MonthlyRevenueResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="從 MOPS 載入月營收中..." />;
+  if (error)   return <Err msg={error} />;
+
+  if (!data) return null;
+
+  // 非台股說明
+  if (!data.is_tw) {
+    return (
+      <Section title="📆 月營收">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          月營收為台灣上市公司特有揭露指標（每月 10 日公告），美股不適用。
+        </p>
+      </Section>
+    );
+  }
+
+  if (!data.data.length) {
+    return (
+      <Section title="📆 月營收">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          {data.message ?? "暫無月營收資料（MOPS 尚未公告或非上市公司）"}
+        </p>
+      </Section>
+    );
+  }
+
+  const items = data.data;
+  const latest = items[items.length - 1];
+  const prevMonth = items.length >= 2 ? items[items.length - 2] : null;
+
+  // MoM change
+  const mom = (latest.revenue != null && prevMonth?.revenue != null && prevMonth.revenue > 0)
+    ? ((latest.revenue - prevMonth.revenue) / prevMonth.revenue) * 100
+    : null;
+
+  // 億 conversion (1億 = 100,000 千元)
+  const toHundredMillion = (v: number | null) => v != null ? (v / 1e5).toFixed(2) : "—";
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <Section title="📆 月營收摘要">
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {/* Latest revenue */}
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>
+              最新 {latest.year}/{latest.month}
+            </div>
+            <div className="text-sm num font-bold">{toHundredMillion(latest.revenue)}</div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>億元</div>
+          </div>
+          {/* YoY */}
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>單月 YoY</div>
+            <div className="text-sm num font-bold" style={{ color: latest.yoy_pct != null ? (latest.yoy_pct >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-primary)" }}>
+              {latest.yoy_pct != null ? `${latest.yoy_pct >= 0 ? "+" : ""}${latest.yoy_pct.toFixed(1)}%` : "—"}
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>vs 去年同月</div>
+          </div>
+          {/* Cumulative YoY */}
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>累計 YoY</div>
+            <div className="text-sm num font-bold" style={{ color: latest.cumulative_yoy_pct != null ? (latest.cumulative_yoy_pct >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-primary)" }}>
+              {latest.cumulative_yoy_pct != null ? `${latest.cumulative_yoy_pct >= 0 ? "+" : ""}${latest.cumulative_yoy_pct.toFixed(1)}%` : "—"}
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>今年累計 vs 去年</div>
+          </div>
+        </div>
+        {/* MoM row */}
+        <div className="flex items-center justify-between text-xs pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+          <span style={{ color: "var(--text-secondary)" }}>環比（月增率）</span>
+          <span className="num font-medium" style={{ color: mom != null ? (mom >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-secondary)" }}>
+            {mom != null ? `${mom >= 0 ? "+" : ""}${mom.toFixed(1)}%` : "—"}
+          </span>
+        </div>
+        {latest.cumulative != null && (
+          <div className="flex items-center justify-between text-xs pt-1.5 border-t" style={{ borderColor: "var(--border)" }}>
+            <span style={{ color: "var(--text-secondary)" }}>今年累計營收</span>
+            <span className="num font-medium">{toHundredMillion(latest.cumulative)} 億元</span>
+          </div>
+        )}
+      </Section>
+
+      {/* Trend chart */}
+      <Section title="📊 月營收走勢（近 24 個月，億元）">
+        <RevenueTrendChart items={items} />
+        <div className="flex items-center gap-4 mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          <span><span style={{ color: "#3b82f6" }}>─</span> 當月營收</span>
+          <span><span style={{ color: "#6b7280" }}>- -</span> 去年同月</span>
+        </div>
+      </Section>
+
+      {/* YoY bar chart */}
+      <Section title="📈 單月 YoY 成長率（%）">
+        <YoYBarChart items={items} />
+      </Section>
+
+      {/* Detail table */}
+      <Section title="📋 月營收明細（近 12 個月）">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" style={{ minWidth: 420 }}>
+            <thead>
+              <tr>
+                {["年月", "當月營收（億）", "去年同月（億）", "單月 YoY", "累計 YoY"].map(h => (
+                  <th key={h} className="px-2 py-1.5 text-left" style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...items].reverse().slice(0, 12).map((d, i) => (
+                <tr key={`${d.year}-${d.month}`} style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "var(--bg-elevated)" : "transparent" }}>
+                  <td className="px-2 py-1.5 num font-medium">{d.year}/{String(d.month).padStart(2, "0")}</td>
+                  <td className="px-2 py-1.5 num">{toHundredMillion(d.revenue)}</td>
+                  <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>{toHundredMillion(d.last_year_revenue)}</td>
+                  <td className="px-2 py-1.5 num" style={{ color: d.yoy_pct != null ? (d.yoy_pct >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-secondary)" }}>
+                    {d.yoy_pct != null ? `${d.yoy_pct >= 0 ? "+" : ""}${d.yoy_pct.toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 num" style={{ color: d.cumulative_yoy_pct != null ? (d.cumulative_yoy_pct >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-secondary)" }}>
+                    {d.cumulative_yoy_pct != null ? `${d.cumulative_yoy_pct >= 0 ? "+" : ""}${d.cumulative_yoy_pct.toFixed(1)}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          資料來源：公開資訊觀測站（MOPS），每月 10 日公告。金額單位：億元（10,000萬）。
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 // ── Financial Charts (Simple SVG Bars) ───────────────────────────────────────
 
 type BarKey = "revenue" | "net_income" | "operating_cf" | "free_cf";
@@ -473,19 +745,22 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [techData,  setTechData]  = useState<TechnicalSummary | null>(null);
   const [fundData,  setFundData]  = useState<FundamentalData  | null>(null);
   const [finData,   setFinData]   = useState<FinancialsData   | null>(null);
+  const [revData,   setRevData]   = useState<MonthlyRevenueResponse | null>(null);
 
   const [techLoad, setTechLoad]   = useState(false);
   const [fundLoad, setFundLoad]   = useState(false);
   const [finLoad,  setFinLoad]    = useState(false);
+  const [revLoad,  setRevLoad]    = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
   const [finErr,  setFinErr]      = useState<string | null>(null);
+  const [revErr,  setRevErr]      = useState<string | null>(null);
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);
 
     setTechLoad(true);
     getTechnical(symbol).then(setTechData).catch(e => setTechErr(e.message)).finally(() => setTechLoad(false));
@@ -495,6 +770,9 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setFinLoad(true);
     getFinancials(symbol).then(setFinData).catch(e => setFinErr(e.message)).finally(() => setFinLoad(false));
+
+    setRevLoad(true);
+    getMonthlyRevenue(symbol).then(setRevData).catch(e => setRevErr(e.message)).finally(() => setRevLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -533,11 +811,16 @@ export default function AnalysisPanel({ symbol }: Props) {
           <Loading msg="載入中..." />
         )}
 
-        {/* Fundamental */}
+        {/* Fundamental — FundSection + MonthlyRevenueSection */}
         {tab === "fundamental" && (
           fundLoad ? <Loading msg="載入基本面資料中..." /> :
           fundErr  ? <Err msg={fundErr} /> :
-          fundData ? <FundSection data={fundData} /> :
+          fundData ? (
+            <div className="space-y-4">
+              <FundSection data={fundData} />
+              <MonthlyRevenueSection data={revData} loading={revLoad} error={revErr} />
+            </div>
+          ) :
           <Loading msg="載入中..." />
         )}
 

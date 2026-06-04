@@ -729,6 +729,30 @@ export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
   return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
 }
 
+// ── Monthly Revenue（月營收）────────────────────────────────────────────────
+export interface MonthlyRevenueItem {
+  year:                   number;
+  month:                  number;
+  revenue:                number | null;   // 千元
+  last_year_revenue:      number | null;
+  yoy_pct:                number | null;   // % (e.g., 8.5 means +8.5%)
+  cumulative:             number | null;
+  last_year_cumulative:   number | null;
+  cumulative_yoy_pct:     number | null;
+}
+
+export interface MonthlyRevenueResponse {
+  symbol:   string;
+  is_tw:    boolean;
+  data:     MonthlyRevenueItem[];
+  unit:     string;
+  message?: string;
+}
+
+export function getMonthlyRevenue(symbol: string) {
+  return fetcher<MonthlyRevenueResponse>(`/api/v1/monthly-revenue/${encodeURIComponent(symbol)}`);
+}
+
 export const alertsApi = {
   getUnread: () =>
     alertsFetcher<AlertsResponse>("/api/v1/alerts"),

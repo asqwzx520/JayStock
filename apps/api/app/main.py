@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, digest, fundamental, backtest, technical, financials
+from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, digest, fundamental, backtest, technical, financials, monthly_revenue
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,9 @@ app.include_router(digest.router,      prefix="/api/v1", tags=["digest"])
 app.include_router(fundamental.router, prefix="/api/v1", tags=["fundamental"])
 app.include_router(backtest.router,   prefix="/api/v1", tags=["backtest"])
 app.include_router(technical.router,  prefix="/api/v1", tags=["technical"])
-app.include_router(financials.router, prefix="/api/v1", tags=["financials"])
-app.include_router(ws.router,          tags=["websocket"])
+app.include_router(financials.router,       prefix="/api/v1", tags=["financials"])
+app.include_router(monthly_revenue.router, prefix="/api/v1", tags=["monthly-revenue"])
+app.include_router(ws.router,              tags=["websocket"])
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
