@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { StockItem, IndexQuote } from "@/lib/api";
-import { searchStocks, getMarketIndices } from "@/lib/api";
+import type { StockItem, IndexQuote, AlertNotification } from "@/lib/api";
+import { searchStocks, getMarketIndices, alertsApi } from "@/lib/api";
 
 const AuthButton = dynamic(() => import("@/components/auth/AuthButton"), { ssr: false });
 
@@ -24,6 +24,187 @@ function useTheme() {
   }
 
   return { theme, toggle };
+}
+
+// ── Notification Bell ─────────────────────────────────────────────────────────
+function NotificationBell() {
+  const [notifications, setNotifications] = useState<AlertNotification[]>([]);
+  const [open, setOpen]                   = useState(false);
+  const panelRef                          = useRef<HTMLDivElement>(null);
+
+  // Poll unread alerts every 60s
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await alertsApi.getUnread();
+        if (!cancelled) setNotifications(res.notifications);
+      } catch {}
+    }
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Click-outside to close
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  async function handleMarkAll() {
+    try {
+      await alertsApi.markAllRead();
+      setNotifications([]);
+    } catch {}
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await alertsApi.delete(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch {}
+  }
+
+  async function handleMarkOne(id: string) {
+    try {
+      await alertsApi.markRead(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch {}
+  }
+
+  const unread = notifications.length;
+
+  return (
+    <div className="relative" ref={panelRef}>
+      {/* Bell button */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        title={unread > 0 ? `${unread} 則未讀警報` : "到價提醒"}
+        className="relative flex items-center justify-center w-7 h-7 rounded transition-colors shrink-0"
+        style={{
+          background: open ? "var(--bg-elevated)" : "transparent",
+          color:      "var(--text-secondary)",
+          border:     "1px solid var(--border)",
+        }}
+        aria-label="到價提醒通知"
+      >
+        🔔
+        {unread > 0 && (
+          <span
+            className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 flex items-center justify-center rounded-full text-[9px] font-bold"
+            style={{ background: "var(--color-down)", color: "#fff" }}
+          >
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1.5 w-72 rounded-lg shadow-xl z-50 overflow-hidden"
+          style={{
+            background: "var(--bg-surface)",
+            border:     "1px solid var(--border)",
+          }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-3 py-2 border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+              到價提醒 {unread > 0 && <span style={{ color: "var(--color-down)" }}>({unread})</span>}
+            </span>
+            {unread > 0 && (
+              <button
+                onClick={handleMarkAll}
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={{ color: "var(--color-brand)", background: "var(--bg-elevated)" }}
+              >
+                全部已讀
+              </button>
+            )}
+          </div>
+
+          {/* Notification list */}
+          <div className="max-h-72 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs" style={{ color: "var(--text-tertiary)" }}>
+                暫無未讀提醒
+              </div>
+            ) : (
+              notifications.map((n) => {
+                const isAbove  = n.alert_type === "above";
+                const color    = isAbove ? "var(--color-up)" : "var(--color-down)";
+                const arrow    = isAbove ? "▲" : "▼";
+                const label    = isAbove ? "突破" : "跌破";
+                const dateStr  = new Date(n.created_at).toLocaleString("zh-TW", {
+                  month: "2-digit", day: "2-digit",
+                  hour:  "2-digit", minute: "2-digit",
+                });
+                return (
+                  <div
+                    key={n.id}
+                    className="flex items-start gap-2 px-3 py-2.5 border-b"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {/* Icon */}
+                    <span className="text-base shrink-0 mt-0.5" style={{ color }}>
+                      {arrow}
+                    </span>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs" style={{ color: "var(--text-primary)" }}>
+                        <span className="num font-semibold">{n.symbol}</span>
+                        {" "}
+                        <span style={{ color }}>{label} {n.threshold}</span>
+                      </div>
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                        觸發價 <span className="num">{n.price}</span>
+                        {" · "}{dateStr}
+                      </div>
+                    </div>
+                    {/* Actions */}
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <button
+                        onClick={() => handleMarkOne(n.id)}
+                        className="text-[9px] px-1.5 py-0.5 rounded leading-none"
+                        style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}
+                        title="標記已讀"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => handleDelete(n.id)}
+                        className="text-[9px] px-1.5 py-0.5 rounded leading-none"
+                        style={{ background: "var(--bg-elevated)", color: "var(--color-down)" }}
+                        title="刪除"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer hint */}
+          <div className="px-3 py-1.5 text-[9px]" style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}>
+            盤中每 5 分鐘檢查 · 觸發後自動清除設定
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Market Indices Bar ────────────────────────────────────────────────────────
@@ -205,6 +386,9 @@ export default function Header({ onSelectStock }: HeaderProps) {
         {/* Google 登入/登出按鈕 */}
         <div className="ml-auto flex items-center gap-2">
           <AuthButton />
+
+          {/* Price Alert Notifications */}
+          <NotificationBell />
 
           {/* Theme Toggle */}
           <button
