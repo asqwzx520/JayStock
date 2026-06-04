@@ -7,11 +7,12 @@ import LeftPanel from "@/components/layout/LeftPanel";
 import RightPanel from "@/components/layout/RightPanel";
 import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 // Type-only imports (erased at runtime — safe to keep static)
-import type { IndicatorType, ChartType } from "@/components/chart/KLineChart";
+import type { IndicatorType, ChartType, DrawingTool } from "@/components/chart/KLineChart";
 import type { Period }                   from "@/components/chart/PeriodSelector";
 import IndicatorSelector  from "@/components/chart/IndicatorSelector";
 import PeriodSelector     from "@/components/chart/PeriodSelector";
 import ChartTypeSelector  from "@/components/chart/ChartTypeSelector";
+import DrawingToolbar     from "@/components/chart/DrawingToolbar";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
@@ -160,6 +161,10 @@ export default function Home() {
 
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
+
+  // 繪圖工具
+  const [activeTool, setActiveTool]   = useState<DrawingTool>("cursor");
+  const [drawingClearKey, setDrawingClearKey] = useState(0);
 
   // 手機版左側 Drawer
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
@@ -427,7 +432,14 @@ export default function Home() {
               </div>
 
               {viewTab === "kline" && (
-                <IndicatorSelector active={indicators} onChange={setIndicators} />
+                <div className="flex items-center gap-2">
+                  <DrawingToolbar
+                    active={activeTool}
+                    onChange={setActiveTool}
+                    onClearAll={() => setDrawingClearKey((k) => k + 1)}
+                  />
+                  <IndicatorSelector active={indicators} onChange={setIndicators} />
+                </div>
               )}
             </div>
           )}
@@ -493,6 +505,8 @@ export default function Home() {
                       indicators={indicators}
                       chipsData={klineChipsData}
                       chartType={chartType}
+                      activeTool={activeTool}
+                      clearKey={drawingClearKey}
                     />
                     {/* Chip-lane labels when overlay active */}
                     {indicators.includes("CHIPS") && klineChipsData.length > 0 && (

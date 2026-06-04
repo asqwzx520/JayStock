@@ -23,6 +23,26 @@ import type { KlineBar, IntradayBar, ChipsBar } from "@/lib/api";
 /** K線圖類型 */
 export type ChartType = "candle" | "hollow" | "heikin_ashi" | "line" | "area";
 
+/** 繪圖工具 */
+export type DrawingTool = "cursor" | "hline" | "trendline" | "erase";
+
+interface Drawing {
+  id: string;
+  type: "hline" | "trendline";
+  price1: number;
+  time1?: Time;
+  price2?: number;
+  time2?: Time;
+}
+
+function pointToSegmentDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1; const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
 /** 統一 bar 型別：日K 用 KlineBar（有 date），分K 用 IntradayBar（有 time number） */
 export type ChartBar = KlineBar | IntradayBar;
 
@@ -57,15 +77,68 @@ interface KLineChartProps {
   indicators: IndicatorType[];
   chipsData?: ChipsBar[];
   chartType?: ChartType;
+  activeTool?: DrawingTool;
+  clearKey?: number;
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
-export default function KLineChart({ data, indicators, chipsData, chartType = "candle" }: KLineChartProps) {
+export default function KLineChart({ data, indicators, chipsData, chartType = "candle", activeTool = "cursor", clearKey }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<ISeriesApi<SeriesType>[]>([]);
+
+  // ── Drawing canvas ────────────────────────────────────────────────────────
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const drawingsRef  = useRef<Drawing[]>([]);
+  const pendingRef   = useRef<{ startX: number; startY: number } | null>(null);
+  const redrawFnRef  = useRef<() => void>(() => {});
+  const vpUnsubRef   = useRef<(() => void) | null>(null);
+
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const chart  = chartRef.current;
+    const main   = seriesRefs.current[0];
+    if (!canvas || !chart || !main) return;
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    const w = canvas.width / dpr;
+    for (const d of drawingsRef.current) {
+      const y1 = main.priceToCoordinate(d.price1);
+      if (y1 === null) continue;
+      ctx.lineWidth = 1.5;
+      if (d.type === "hline") {
+        ctx.strokeStyle = "#F59E0B";
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath(); ctx.moveTo(0, y1); ctx.lineTo(w, y1); ctx.stroke();
+        // price label
+        ctx.fillStyle = "#F59E0B";
+        ctx.font = "10px JetBrains Mono, monospace";
+        ctx.fillText(d.price1.toFixed(2), w - 52, y1 - 3);
+      } else if (d.time1 !== undefined && d.time2 !== undefined && d.price2 !== undefined) {
+        const x1 = chart.timeScale().timeToCoordinate(d.time1);
+        const x2 = chart.timeScale().timeToCoordinate(d.time2);
+        const y2 = main.priceToCoordinate(d.price2);
+        if (x1 === null || x2 === null || y2 === null) continue;
+        ctx.strokeStyle = "#60A5FA";
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        // endpoint dots
+        ctx.fillStyle = "#60A5FA";
+        ctx.beginPath(); ctx.arc(x1, y1, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x2, y2, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }, []);
+
+  // keep stable ref so buildChart can subscribe without stale closure
+  useEffect(() => { redrawFnRef.current = redrawCanvas; }, [redrawCanvas]);
 
   const buildChart = useCallback(() => {
     const container = containerRef.current;
@@ -504,7 +577,25 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
       }
     }
 
+    // ── Canvas: size to container ─────────────────────────────────────────
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = container.clientWidth  * dpr;
+      canvas.height = container.clientHeight * dpr;
+      canvas.style.width  = `${container.clientWidth}px`;
+      canvas.style.height = `${container.clientHeight}px`;
+    }
+
+    // ── Subscribe viewport changes → redraw drawings ──────────────────────
+    vpUnsubRef.current?.();
+    const vp = () => redrawFnRef.current();
+    chart.timeScale().subscribeVisibleLogicalRangeChange(vp);
+    vpUnsubRef.current = () => chart.timeScale().unsubscribeVisibleLogicalRangeChange(vp);
+
     chart.timeScale().fitContent();
+    // Draw after fit (viewport changes may not fire synchronously)
+    setTimeout(() => redrawFnRef.current(), 0);
   }, [data, indicators, chipsData, chartType]);
 
   useEffect(() => {
@@ -522,10 +613,117 @@ export default function KLineChart({ data, indicators, chipsData, chartType = "c
           height: container.clientHeight,
         });
       }
+      const cv = canvasRef.current;
+      if (cv) {
+        const dpr = window.devicePixelRatio || 1;
+        cv.width  = container.clientWidth  * dpr;
+        cv.height = container.clientHeight * dpr;
+        cv.style.width  = `${container.clientWidth}px`;
+        cv.style.height = `${container.clientHeight}px`;
+        redrawFnRef.current();
+      }
     });
     ro.observe(container);
     return () => ro.disconnect();
   }, []);
 
-  return <div ref={containerRef} className="w-full h-full min-h-0" />;
+  // Disable chart pan/zoom while a drawing tool is active
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const drawing = activeTool !== "cursor";
+    chartRef.current.applyOptions({ handleScroll: !drawing, handleScale: !drawing });
+  }, [activeTool]);
+
+  // Clear all drawings when clearKey changes
+  useEffect(() => {
+    if (clearKey === undefined) return;
+    drawingsRef.current = [];
+    redrawFnRef.current();
+  }, [clearKey]);
+
+  // ── Canvas mouse handlers ─────────────────────────────────────────────────
+  const handleCanvasDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const chart = chartRef.current;
+    const main  = seriesRefs.current[0];
+    if (!chart || !main || activeTool === "cursor") return;
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (activeTool === "hline") {
+      const price = main.coordinateToPrice(y);
+      if (price === null) return;
+      drawingsRef.current = [...drawingsRef.current, { id: `h${Date.now()}`, type: "hline", price1: price }];
+      redrawFnRef.current();
+
+    } else if (activeTool === "trendline") {
+      pendingRef.current = { startX: x, startY: y };
+
+    } else if (activeTool === "erase") {
+      const THR = 8;
+      const idx = drawingsRef.current.findIndex((d) => {
+        if (d.type === "hline") {
+          const py = main.priceToCoordinate(d.price1);
+          return py !== null && Math.abs(py - y) <= THR;
+        }
+        if (d.type === "trendline" && d.time1 && d.time2 && d.price2 !== undefined) {
+          const x1 = chart.timeScale().timeToCoordinate(d.time1);
+          const x2 = chart.timeScale().timeToCoordinate(d.time2);
+          const y1 = main.priceToCoordinate(d.price1);
+          const y2 = main.priceToCoordinate(d.price2);
+          if (x1 === null || x2 === null || y1 === null || y2 === null) return false;
+          return pointToSegmentDist(x, y, x1, y1, x2, y2) <= THR;
+        }
+        return false;
+      });
+      if (idx >= 0) {
+        drawingsRef.current = drawingsRef.current.filter((_, i) => i !== idx);
+        redrawFnRef.current();
+      }
+    }
+  }, [activeTool]);
+
+  const handleCanvasUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== "trendline" || !pendingRef.current) return;
+    const chart = chartRef.current;
+    const main  = seriesRefs.current[0];
+    if (!chart || !main) return;
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+    const x2 = e.clientX - rect.left;
+    const y2 = e.clientY - rect.top;
+    const { startX, startY } = pendingRef.current;
+    pendingRef.current = null;
+    if (Math.abs(x2 - startX) < 5 && Math.abs(y2 - startY) < 5) return;
+    const time1  = chart.timeScale().coordinateToTime(startX);
+    const price1 = main.coordinateToPrice(startY);
+    const time2  = chart.timeScale().coordinateToTime(x2);
+    const price2 = main.coordinateToPrice(y2);
+    if (time1 && time2 && price1 !== null && price2 !== null) {
+      drawingsRef.current = [...drawingsRef.current, {
+        id: `t${Date.now()}`, type: "trendline",
+        price1, time1, price2, time2,
+      }];
+      redrawFnRef.current();
+    }
+  }, [activeTool]);
+
+  const isDrawing = activeTool !== "cursor";
+
+  return (
+    <div ref={containerRef} className="w-full h-full min-h-0 relative">
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 z-10"
+        style={{
+          pointerEvents: isDrawing ? "all" : "none",
+          cursor: activeTool === "hline"     ? "crosshair"
+                : activeTool === "trendline" ? "crosshair"
+                : activeTool === "erase"     ? "cell"
+                : "default",
+        }}
+        onMouseDown={handleCanvasDown}
+        onMouseUp={handleCanvasUp}
+      />
+    </div>
+  );
 }
