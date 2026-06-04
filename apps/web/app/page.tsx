@@ -50,6 +50,11 @@ const BacktestPanel = dynamic(
   () => import("@/components/backtest/BacktestPanel"),
   { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center" style={{ color: "var(--text-tertiary)" }}>載入回測引擎中...</div> }
 );
+
+const AnalysisPanel = dynamic(
+  () => import("@/components/analysis/AnalysisPanel"),
+  { ssr: false, loading: () => <DashboardSkeleton /> }
+);
 import {
   getQuote,
   getKline,
@@ -75,7 +80,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest";
+type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis";
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -324,7 +329,7 @@ export default function Home() {
               </svg>
             </button>
 
-            {(["kline", "chips", "market", "screener", "news", "backtest"] as ViewTab[]).map((tab) => (
+            {(["kline", "chips", "market", "screener", "news", "backtest", "analysis"] as ViewTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
@@ -338,8 +343,9 @@ export default function Home() {
                   : tab === "chips"   ? "籌碼"
                   : tab === "market"  ? "大盤"
                   : tab === "screener"? "選股"
-                  : tab === "news"    ? "新聞"
-                  : "回測"}
+                  : tab === "news"     ? "新聞"
+                  : tab === "backtest" ? "回測"
+                  : "分析"}
               </button>
             ))}
           </div>
@@ -579,6 +585,11 @@ export default function Home() {
             {/* 回測 */}
             {viewTab === "backtest" && (
               <BacktestPanel symbol={symbol} />
+            )}
+
+            {/* 分析 */}
+            {viewTab === "analysis" && (
+              <AnalysisPanel symbol={symbol} />
             )}
 
             {/* 籌碼 — 融資融券 */}

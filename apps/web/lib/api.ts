@@ -506,23 +506,106 @@ export interface FundamentalData {
   currency:       string;
   market_cap:     number | null;
   market_cap_fmt: string | null;
+  // 估值
   pe_trailing:    number | null;
   pe_forward:     number | null;
+  pb_ratio:       number | null;
+  ps_ratio:       number | null;
+  peg_ratio:      number | null;
+  ev_ebitda:      number | null;
+  // EPS
   eps_trailing:   number | null;
   eps_forward:    number | null;
-  dividend_yield: number | null;   // 已乘以 100，例：3.5 = 3.5%
+  // 股利
+  dividend_yield: number | null;
   dividend_rate:  number | null;
+  payout_ratio:   number | null;
+  // 盈利能力
+  roe:            number | null;
+  roa:            number | null;
+  gross_margin:   number | null;
+  operating_margin: number | null;
+  profit_margin:  number | null;
+  // 財務健康
+  debt_to_equity: number | null;
+  current_ratio:  number | null;
+  quick_ratio:    number | null;
+  // 成長
+  revenue_growth:  number | null;
+  earnings_growth: number | null;
+  // 分析師
+  analyst_target:          number | null;
+  analyst_target_upside:   number | null;
+  analyst_recommendation:  string | null;
+  analyst_count:           number | null;
+  // 其他
   week52_high:    number | null;
   week52_low:     number | null;
   beta:           number | null;
   avg_volume:     number | null;
+  shares_outstanding: number | null;
   sector:         string | null;
   industry:       string | null;
   employees:      number | null;
+  website:        string | null;
 }
 
 export function getFundamental(symbol: string) {
   return fetcher<FundamentalData>(`/api/v1/fundamental/${encodeURIComponent(symbol)}`);
+}
+
+// ── Technical Summary ─────────────────────────────────────────────────────────
+export interface TechnicalSummary {
+  price: number;
+  rsi:   { value: number | null; signal: string | null };
+  macd:  { macd: number | null; signal_line: number | null; histogram: number | null; signal: string | null };
+  kd:    { k: number | null; d: number | null; signal: string | null };
+  ma:    { ma5: number | null; ma10: number | null; ma20: number | null; ma60: number | null; ma120: number | null; ma240: number | null; alignment: string; above_count: number; below_count: number };
+  bollinger: { upper: number | null; lower: number | null; mid: number | null; pct_b: number | null };
+  volume: { today: number; avg20: number; ratio: number; signal: string };
+  week52: { high: number; low: number; position: number };
+  performance: { "1w": number | null; "1m": number | null; "3m": number | null; "6m": number | null; "1y": number | null };
+  support_resistance: { support: number; resistance: number; support_levels: number[]; resistance_levels: number[] };
+}
+
+export function getTechnical(symbol: string) {
+  return fetcher<TechnicalSummary>(`/api/v1/technical/${encodeURIComponent(symbol)}`);
+}
+
+// ── Financials ────────────────────────────────────────────────────────────────
+export interface AnnualFinancial {
+  year:              number;
+  revenue:           number | null;
+  net_income:        number | null;
+  gross_profit:      number | null;
+  operating_income:  number | null;
+  eps:               number | null;
+  gross_margin:      number | null;
+  net_margin:        number | null;
+  operating_margin:  number | null;
+  operating_cf:      number | null;
+  capex:             number | null;
+  free_cf:           number | null;
+}
+
+export interface QuarterlyEps {
+  year:       number;
+  month:      number;
+  eps:        number | null;
+  net_income: number | null;
+}
+
+export interface FinancialsData {
+  symbol:        string;
+  currency:      string;
+  unit:          string;
+  divisor:       number;
+  annual:        AnnualFinancial[];
+  quarterly_eps: QuarterlyEps[];
+}
+
+export function getFinancials(symbol: string) {
+  return fetcher<FinancialsData>(`/api/v1/financials/${encodeURIComponent(symbol)}`);
 }
 
 // ── Backtest ──────────────────────────────────────────────────────────────────

@@ -69,25 +69,62 @@ def _fetch_fundamental_sync(symbol: str) -> dict:
         div_yield = info.get("dividendYield")
         div_yield_pct = _safe_float(div_yield * 100, 2) if div_yield else None
 
+        # 分析師目標價與評級
+        analyst_target = _safe_float(info.get("targetMeanPrice"))
+        current_price  = _safe_float(info.get("currentPrice") or info.get("regularMarketPrice"))
+        target_upside  = None
+        if analyst_target and current_price and current_price > 0:
+            target_upside = round((analyst_target - current_price) / current_price * 100, 1)
+
         return {
             "symbol":          symbol,
             "name":            info.get("shortName") or info.get("longName"),
             "currency":        currency,
             "market_cap":      market_cap_raw,
             "market_cap_fmt":  _fmt_market_cap(market_cap_raw),
+            # 估值
             "pe_trailing":     _safe_float(info.get("trailingPE")),
             "pe_forward":      _safe_float(info.get("forwardPE")),
+            "pb_ratio":        _safe_float(info.get("priceToBook")),
+            "ps_ratio":        _safe_float(info.get("priceToSalesTrailing12Months")),
+            "peg_ratio":       _safe_float(info.get("pegRatio")),
+            "ev_ebitda":       _safe_float(info.get("enterpriseToEbitda")),
+            # EPS
             "eps_trailing":    _safe_float(info.get("trailingEps")),
             "eps_forward":     _safe_float(info.get("forwardEps")),
+            # 股利
             "dividend_yield":  div_yield_pct,
             "dividend_rate":   _safe_float(info.get("dividendRate")),
+            "payout_ratio":    _safe_float(info.get("payoutRatio")),
+            # 盈利能力
+            "roe":             _safe_float(info.get("returnOnEquity"), 4),
+            "roa":             _safe_float(info.get("returnOnAssets"), 4),
+            "gross_margin":    _safe_float(info.get("grossMargins"), 4),
+            "operating_margin":_safe_float(info.get("operatingMargins"), 4),
+            "profit_margin":   _safe_float(info.get("profitMargins"), 4),
+            # 財務健康
+            "debt_to_equity":  _safe_float(info.get("debtToEquity")),
+            "current_ratio":   _safe_float(info.get("currentRatio")),
+            "quick_ratio":     _safe_float(info.get("quickRatio")),
+            # 成長
+            "revenue_growth":  _safe_float(info.get("revenueGrowth"), 4),
+            "earnings_growth": _safe_float(info.get("earningsGrowth"), 4),
+            # 分析師
+            "analyst_target":     analyst_target,
+            "analyst_target_upside": target_upside,
+            "analyst_recommendation": info.get("recommendationKey"),
+            "analyst_count":      info.get("numberOfAnalystOpinions"),
+            # 其他
             "week52_high":     _safe_float(info.get("fiftyTwoWeekHigh")),
             "week52_low":      _safe_float(info.get("fiftyTwoWeekLow")),
             "beta":            _safe_float(info.get("beta")),
             "avg_volume":      info.get("averageVolume"),
+            "shares_outstanding": info.get("sharesOutstanding"),
+            "float_shares":    info.get("floatShares"),
             "sector":          info.get("sector"),
             "industry":        info.get("industry"),
             "employees":       info.get("fullTimeEmployees"),
+            "website":         info.get("website"),
         }
 
     except Exception as exc:
