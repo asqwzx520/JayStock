@@ -729,6 +729,30 @@ export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
   return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
 }
 
+// ── Foreign Holding（外資持股比例）──────────────────────────────────────────
+export interface ForeignHoldingItem {
+  year:        number;
+  month:       number;
+  date:        string;   // YYYY-MM
+  holding_pct: number;   // 0–100 (%)
+  price:       number | null;
+}
+
+export interface ForeignHoldingResponse {
+  symbol:      string;
+  is_tw:       boolean;
+  data:        ForeignHoldingItem[];
+  latest_pct:  number | null;
+  change_1y:   number | null;   // percentage-point change vs 12M ago
+  max_pct:     number | null;
+  min_pct:     number | null;
+  message:     string | null;
+}
+
+export function getForeignHolding(symbol: string) {
+  return fetcher<ForeignHoldingResponse>(`/api/v1/foreign-holding/${encodeURIComponent(symbol)}`);
+}
+
 // ── Peer Comparison（同業比較表）────────────────────────────────────────────
 export interface PeerRow {
   symbol:          string;

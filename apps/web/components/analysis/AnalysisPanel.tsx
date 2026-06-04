@@ -12,8 +12,10 @@ import type {
   ValuationBandResponse,
   PeerRow,
   PeerComparisonResponse,
+  ForeignHoldingItem,
+  ForeignHoldingResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -337,6 +339,250 @@ function FundSection({ data }: { data: FundamentalData }) {
         )}
       </Section>
     </div>
+  );
+}
+
+// ── Foreign Holding Section ───────────────────────────────────────────────────
+
+function ForeignHoldingChart({ items }: { items: ForeignHoldingItem[] }) {
+  if (items.length < 2) return null;
+
+  const W = 560, H = 170;
+  const PAD = { t: 20, r: 52, b: 32, l: 44 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+
+  // Left scale: holding %
+  const pcts   = items.map(d => d.holding_pct);
+  const pctMin = Math.max(0,   Math.min(...pcts) - 3);
+  const pctMax = Math.min(100, Math.max(...pcts) + 3);
+  const pctRng = pctMax - pctMin || 1;
+
+  // Right scale: price (normalized to same visual space)
+  const priceVals = items.map(d => d.price).filter((v): v is number => v != null);
+  const hasPrice  = priceVals.length >= 2;
+  const priceMin  = hasPrice ? Math.min(...priceVals) : 0;
+  const priceMax  = hasPrice ? Math.max(...priceVals) : 1;
+  const priceRng  = priceMax - priceMin || 1;
+
+  const toX = (i: number) => PAD.l + (i / (items.length - 1)) * iW;
+  const toPctY = (v: number) => PAD.t + (1 - (v - pctMin) / pctRng) * iH;
+  const toPriceY = (v: number) =>
+    PAD.t + (1 - (v - priceMin) / priceRng) * iH;
+
+  // Area path for holding %
+  const areaD =
+    `M${toX(0)},${toPctY(pcts[0])} ` +
+    pcts.map((v, i) => `L${toX(i)},${toPctY(v)}`).join(" ") +
+    ` L${toX(pcts.length - 1)},${PAD.t + iH} L${toX(0)},${PAD.t + iH} Z`;
+
+  const linePts = pcts.map((v, i) => `${toX(i)},${toPctY(v)}`).join(" ");
+
+  const pricePts = hasPrice
+    ? items
+        .filter(d => d.price != null)
+        .map((d, _i) => {
+          const idx = items.indexOf(d);
+          return `${toX(idx)},${toPriceY(d.price!)}`;
+        })
+        .join(" ")
+    : "";
+
+  // X labels (every 2-3 months)
+  const xLabels = items
+    .map((d, i) => ({ i, label: d.month === 1 || d.month === 7 ? `${d.year % 100}/${String(d.month).padStart(2, "0")}` : "" }))
+    .filter(l => l.label);
+
+  // Y ticks (left: %)
+  const yTicks = [0, 0.33, 0.67, 1].map(r => ({
+    y:     PAD.t + (1 - r) * iH,
+    label: (pctMin + r * pctRng).toFixed(1),
+  }));
+
+  const trend = pcts.length >= 2 ? pcts[pcts.length - 1] - pcts[0] : 0;
+  const lineColor = trend >= 0 ? "#22c55e" : "#ef4444";
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} aria-label="外資持股比例走勢">
+      <defs>
+        <linearGradient id="fh-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.03" />
+        </linearGradient>
+      </defs>
+
+      {/* Grid + Y ticks */}
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={t.y} y2={t.y}
+            stroke="var(--border)" strokeWidth={0.5} />
+          <text x={PAD.l - 4} y={t.y + 3}
+            textAnchor="end" fontSize={8} fill="var(--text-tertiary)">{t.label}%</text>
+        </g>
+      ))}
+
+      {/* Area + line: holding % */}
+      <path d={areaD} fill="url(#fh-grad)" />
+      <polyline points={linePts} fill="none"
+        stroke="#3b82f6" strokeWidth={2} strokeLinejoin="round" />
+
+      {/* Price overlay */}
+      {hasPrice && (
+        <>
+          <polyline points={pricePts} fill="none"
+            stroke="#9ca3af" strokeWidth={1.2}
+            strokeDasharray="4 3" opacity={0.8} />
+          {/* Right Y label (price) */}
+          <text x={W - PAD.r + 4} y={PAD.t + 10}
+            fontSize={8} fill="#9ca3af" opacity={0.8}>↑ 股價</text>
+        </>
+      )}
+
+      {/* Latest dot */}
+      <circle cx={toX(items.length - 1)} cy={toPctY(pcts[pcts.length - 1])}
+        r={3.5} fill="#3b82f6" />
+
+      {/* X labels */}
+      {xLabels.map(({ i, label }) => (
+        <text key={label} x={toX(i)} y={H - 4}
+          textAnchor="middle" fontSize={8} fill="var(--text-tertiary)">{label}</text>
+      ))}
+
+      {/* Y axis */}
+      <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={PAD.t + iH}
+        stroke="var(--border)" strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+function ForeignHoldingSection({
+  data,
+  loading,
+  error,
+}: {
+  data:    ForeignHoldingResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="從 TWSE 載入外資持股資料中..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data)   return null;
+
+  if (!data.is_tw) {
+    return (
+      <Section title="🌏 外資持股比例">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          外資持股比例為台灣上市公司特有指標（TWSE每月公告），美股不適用。
+        </p>
+      </Section>
+    );
+  }
+
+  if (!data.data.length) {
+    return (
+      <Section title="🌏 外資持股比例">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          {data.message ?? "TWSE 暫無資料"}
+        </p>
+      </Section>
+    );
+  }
+
+  const latest   = data.latest_pct;
+  const change1y = data.change_1y;
+
+  // Trend direction
+  const trendColor =
+    change1y == null ? "var(--text-secondary)" :
+    change1y > 0 ? "var(--color-up)" :
+    change1y < 0 ? "var(--color-down)" :
+    "var(--text-secondary)";
+
+  const trendLabel =
+    change1y == null ? "—" :
+    change1y > 1   ? "持續增持 📈" :
+    change1y > 0   ? "小幅增持"  :
+    change1y < -1  ? "持續減持 📉" :
+    change1y < 0   ? "小幅減持"  :
+    "持平";
+
+  return (
+    <Section title="🌏 外資持股比例走勢（近 12 個月）">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+          <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>最新持股比例</div>
+          <div className="text-lg num font-bold" style={{ color: "#3b82f6" }}>
+            {latest != null ? `${latest.toFixed(2)}%` : "—"}
+          </div>
+        </div>
+        <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+          <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>近 12 月變化</div>
+          <div className="text-sm num font-bold" style={{ color: trendColor }}>
+            {change1y != null ? `${change1y >= 0 ? "+" : ""}${change1y.toFixed(2)}pp` : "—"}
+          </div>
+          <div className="text-[10px]" style={{ color: trendColor }}>{trendLabel}</div>
+        </div>
+        <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+          <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>近 12 月區間</div>
+          <div className="text-xs num">
+            {data.min_pct != null && data.max_pct != null
+              ? `${data.min_pct}% – ${data.max_pct}%`
+              : "—"}
+          </div>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <ForeignHoldingChart items={data.data} />
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        <span><span style={{ color: "#3b82f6" }}>■</span> 外資持股比例（%）</span>
+        <span><span style={{ color: "#9ca3af" }}>─ ─</span> 月收盤股價</span>
+        <span className="ml-auto">資料來源：TWSE MI_QIANW</span>
+      </div>
+
+      {/* Detail table */}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 320 }}>
+          <thead>
+            <tr>
+              {["年月", "持股比例", "月變化(pp)", "股價"].map(h => (
+                <th key={h} className="px-2 py-1.5 text-left"
+                  style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...data.data].reverse().slice(0, 12).map((d, i, arr) => {
+              const prev = arr[i + 1];
+              const delta = (prev?.holding_pct != null && d.holding_pct != null)
+                ? d.holding_pct - prev.holding_pct
+                : null;
+              return (
+                <tr key={d.date}
+                  style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "var(--bg-elevated)" : "transparent" }}>
+                  <td className="px-2 py-1.5 num">{d.year}/{String(d.month).padStart(2, "0")}</td>
+                  <td className="px-2 py-1.5 num font-medium" style={{ color: "#3b82f6" }}>
+                    {d.holding_pct.toFixed(2)}%
+                  </td>
+                  <td className="px-2 py-1.5 num"
+                    style={{ color: delta != null ? (delta >= 0 ? "var(--color-up)" : "var(--color-down)") : "var(--text-tertiary)" }}>
+                    {delta != null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>
+                    {d.price != null ? d.price.toLocaleString() : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 
@@ -1147,6 +1393,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [revData,   setRevData]   = useState<MonthlyRevenueResponse | null>(null);
   const [bandData,  setBandData]  = useState<ValuationBandResponse  | null>(null);
   const [peerData,  setPeerData]  = useState<PeerComparisonResponse | null>(null);
+  const [fhData,    setFhData]    = useState<ForeignHoldingResponse  | null>(null);
   const [customPeers, setCustomPeers] = useState("");
 
   const [techLoad, setTechLoad]   = useState(false);
@@ -1155,6 +1402,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [revLoad,  setRevLoad]    = useState(false);
   const [bandLoad, setBandLoad]   = useState(false);
   const [peerLoad, setPeerLoad]   = useState(false);
+  const [fhLoad,   setFhLoad]     = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
@@ -1162,6 +1410,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [revErr,  setRevErr]      = useState<string | null>(null);
   const [bandErr, setBandErr]     = useState<string | null>(null);
   const [peerErr, setPeerErr]     = useState<string | null>(null);
+  const [fhErr,   setFhErr]       = useState<string | null>(null);
 
   const loadPeers = (sym: string, peers = "") => {
     setPeerLoad(true); setPeerErr(null);
@@ -1171,8 +1420,8 @@ export default function AnalysisPanel({ symbol }: Props) {
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);
     setCustomPeers("");
 
     setTechLoad(true);
@@ -1191,6 +1440,9 @@ export default function AnalysisPanel({ symbol }: Props) {
     getValuationBand(symbol).then(setBandData).catch(e => setBandErr(e.message)).finally(() => setBandLoad(false));
 
     loadPeers(symbol);
+
+    setFhLoad(true);
+    getForeignHolding(symbol).then(setFhData).catch(e => setFhErr(e.message)).finally(() => setFhLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -1225,7 +1477,12 @@ export default function AnalysisPanel({ symbol }: Props) {
         {tab === "technical" && (
           techLoad ? <Loading msg="計算技術指標中..." /> :
           techErr  ? <Err msg={techErr} /> :
-          techData ? <TechSection data={techData} /> :
+          techData ? (
+            <div className="space-y-4">
+              <TechSection data={techData} />
+              <ForeignHoldingSection data={fhData} loading={fhLoad} error={fhErr} />
+            </div>
+          ) :
           <Loading msg="載入中..." />
         )}
 
