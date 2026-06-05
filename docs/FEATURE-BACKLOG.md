@@ -151,6 +151,41 @@
   - 毛利率連降 3 年、營業現金流連 2 年為負
 - 前端：財務報表 tab 頂部警示卡（danger/warning 分級，綠色通過/橘紅警示）
 
+---
+
+## 🔵 P3 — 未來路線圖（已預留架構空間）
+
+### [ ] 15. AI 每日自選股摘要（首頁 ⑤ 區塊）
+- **目標**：每日盤後 / 盤前對用戶自選股生成 Gemini 中文摘要，整合進首頁 Tab
+- **內容構想**：
+  - 自選股中昨日最強 / 最弱
+  - 有法人異動、財報警示、或接近重要日期的股票重點提示
+  - 用戶自訂關注重點（例如：只看外資動向）
+- **技術方向**：
+  - 後端：`GET /api/v1/dashboard/ai-summary`，Gemini 1.5 Flash，TTL 30 分鐘
+  - 前端：HomeDashboard.tsx Block ⑤，懶加載，點「生成 AI 摘要」按鈕觸發
+- **依賴**：現有 `ai_analysis.py`（Gemini 整合）+ `dashboard.py`（自選股信號）
+- **難度**：中
+- **優先度：P3 — 首頁其他區塊穩定後疊上去**
+
+### [ ] 16. Pine Script 風格自訂公式條件
+- **目標**：讓進階用戶用類程式語言撰寫警示條件，對標 TradingView Strategy/Alert
+- **構想語法範例**（C 型自訂條件）：
+  ```
+  rsi(14) < 30 and volume > sma(volume, 20) * 2
+  close > ema(close, 20) and macd() > 0
+  ```
+- **技術方向**：
+  - 後端：自定義 Mini DSL Parser（Python），支援：指標函數（rsi/ma/ema/macd/vol）、算術運算、邏輯運算（and/or/not）、比較運算
+  - 語法樹 AST 求值，安全沙箱（禁止 eval/exec）
+  - 前端：CodeMirror 輕量編輯器 + 語法高亮 + 自動補全
+  - Supabase 儲存 formula 字串，後端每次 dashboard 請求時即時求值
+- **安全考量**：嚴格白名單函數，禁止任意 Python 執行
+- **難度**：高（需設計 DSL、Parser、安全求值器）
+- **優先度：P3 — 長期路線圖，待用戶需求驗證後再啟動**
+
+---
+
 ### [ ] 13. Web Push 通知（價格警報推送）⏸️ 暫緩
 - 到價警報目前只在開網頁時有效，需要 Service Worker + VAPID
 - 讓用戶手機直接收推播
