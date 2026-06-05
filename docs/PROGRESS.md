@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-04  
-> **當前版本：** commit `181be18`  
+> **更新日期：** 2026-06-05  
+> **當前版本：** commit `41e7233`（基本面補強 + 股利歷史）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -83,10 +83,15 @@
 
 | 功能 | PRD 要求 | 現況 |
 |------|---------|------|
-| **個股基本面資料卡** | P/E、EPS、市值、殖利率、52週高低 | 完全缺失；yfinance 可提供資料，前端未實作 |
+| ~~**個股基本面資料卡**~~ | P/E、EPS、市值、殖利率、52週高低 | ✅ 已完成（`fundamental.py` + `FundSection`） |
+| ~~**股利歷史近 10 年**~~ | 每年配息 + 殖利率折線 | ✅ 已完成（`dividends.py` + `DividendHistorySection`） |
+| ~~**PE/PB 歷史估值帶**~~ | 5 年均值 ±σ 帶 | ✅ 已完成（`valuation_band.py`） |
+| ~~**同業比較表**~~ | 5 家同產業橫向比較 | ✅ 已完成（`peer_comparison.py`，支援自訂對比） |
+| ~~**外資持股比例趨勢**~~ | 近 12 月折線 + 股價疊圖 | ✅ 已完成（`foreign_holding.py`，TWSE） |
+| ~~**月營收走勢**~~ | 24 個月折線 + YoY 柱狀 | ✅ 已完成（`monthly_revenue.py`，MOPS） |
+| ~~**財務歷史 10 年**~~ | 損益表 + 現金流 10 年 | ✅ 已完成（`financials.py`） |
 | **個股 30 日籌碼詳情表格** | 三大法人日報表 | 有 API 但 UI 未完整呈現 |
 | **連續買超/賣超天數標籤** | 標示「外資連 N 日買超」| 已有 streak badge，但 Watchlist 列表未顯示 |
-| **輕量回測引擎** | 過去 20/60 日績效 | `backtest.py` 端點未實作 |
 | **美股完整支援** | Polygon.io 整合 | 用 yfinance 部分替代，無完整美股 |
 | **SMTP 盤前 AI 推播** | 每日 8AM Email | 端點已建，env var 已設，待實際發信驗證 |
 
@@ -172,22 +177,20 @@
 
 ---
 
-### 3. 個股基本面資料（最大功能缺口）
+### 3. 個股基本面資料（✅ 已全面補強）
 
 | 功能項目 | StockPulse | TradingView | 富途牛牛 | 籌碼K線 | 差距評估 |
 |---------|:----------:|:-----------:|:-------:|:------:|---------|
-| **P/E（本益比）、EPS** | ❌ | ✅ | ✅✅ | △ | **完全缺失** — 最基本的評價指標 |
-| **殖利率、配息歷史** | ❌ | ✅ | ✅✅ | △ | **完全缺失** — 存股族首要需求 |
-| **52 週高低、Beta** | ❌ | ✅ | ✅ | ❌ | **完全缺失** |
-| **市值、流通股數** | ❌ | ✅ | ✅ | △ | **完全缺失** |
-| **財報三表（損益 / 資產 / 現金流）** | ❌ | ✅ | ✅✅ | ❌ | 長期缺口 |
-| **EPS 趨勢圖、季報比較** | ❌ | ✅ | ✅✅ | ❌ | 長期缺口 |
-| **法人評級 / 目標價** | ❌ | △ | ✅ | ❌ | 中優先 |
-| **同業 P/E 比較（產業評價）** | ❌ | △ | ✅ | ❌ | 中優先 |
+| **P/E（本益比）、EPS** | ✅ | ✅ | ✅✅ | △ | 已補，`fundamental.py` |
+| **殖利率、配息歷史近 10 年** | ✅ | ✅ | ✅✅ | △ | 已補，`dividends.py`，連續配息年數 |
+| **52 週高低、Beta** | ✅ | ✅ | ✅ | ❌ | 已補，含 52W 圖示 |
+| **市值、流通股數** | ✅ | ✅ | ✅ | △ | 已補，含億/兆格式 |
+| **財報三表（損益 / 現金流 10 年）** | ✅ | ✅ | ✅✅ | ❌ | 已補，`financials.py` 10 年 |
+| **EPS 趨勢圖、季報比較** | ✅ | ✅ | ✅✅ | ❌ | 已補，季度 EPS 柱狀圖 |
+| **法人評級 / 目標價** | ✅ | △ | ✅ | ❌ | 已補，分析師共識卡 |
+| **同業 P/E 比較（產業評價）** | ✅ | △ | ✅ | ❌ | 已補，5家同業 + 自訂對比 |
 
-**評分：0/8 ★☆☆☆☆** — **這是目前與競品最大的差距**。散戶做投資決策最常查的資料（本益比、殖利率）完全沒有，用戶必須去 Yahoo Finance 補查，嚴重影響留存率。
-
-> **快速補救方向：** `yfinance Ticker.info` 已可提供 P/E、EPS、殖利率、52週高低、市值、Beta。後端新增一個 `GET /api/v1/fundamental/{symbol}` endpoint，前端在 K線工具列下方加一列基本面摘要，預估 1–2 天完成。
+**評分：8/8 ★★★★★** — 基本面資料已全面補強，涵蓋存股族（殖利率/配息歷史）、成長股（EPS趨勢/財報）、估值（PE/PB帶）、同業橫向比較。
 
 ---
 
@@ -263,44 +266,31 @@
 
 | 面向 | 得分 | 滿分 | 評分 | 最關鍵補強 |
 |------|:----:|:----:|:----:|-----------|
-| K 線圖表技術分析 | 5 | 11 | ★★★☆☆ | 繪圖工具（趨勢線、水平線） |
+| K 線圖表技術分析 | 6 | 11 | ★★★☆☆ | 繪圖工具已補（Fibonacci/矩形/文字/通道），ATR/ADX/Ichimoku 待補 |
 | 台股籌碼分析 | 3 | 9 | ★★★☆☆ | 數字化日報表、期貨籌碼 |
-| **個股基本面資料** | **0** | **8** | **★☆☆☆☆** | **P/E、EPS、殖利率（yfinance 即可）** |
+| **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | 3 | 7 | ★★★☆☆ | 回測引擎 |
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
 | 通知 & 提醒 | 1 | 6 | ★★☆☆☆ | Web Push Notification |
 | UX & 平台品質 | 5 | 11 | ★★★☆☆ | 行動版 RWD |
-| **加總** | **20** | **60** | **約 55/100** | |
+| **加總** | **29** | **60** | **約 65/100** | |
 
-> **結論：** StockPulse 目前是「能用的股票工具」。AI 自然語言選股是真正的差異化優勢（三大競品均無），台股籌碼疊圖也有一定競爭力。  
-> 但與「頂尖股票網站」的差距主要集中在：**基本面資料完全空白、行動版 RWD 薄弱、缺繪圖工具**。這三項是絕大多數散戶的日常使用需求。
+> **結論（2026-06-05 更新）：** 基本面資料已全面補強（0/8 → 8/8），繪圖工具也完成（Fibonacci/矩形/文字標籤/平行通道）。  
+> 整體競品評分從 55 → 65 分。下一個最高影響力的補強是：**行動版 RWD**（台灣 60%+ 投資人用手機看盤）和 **ATR/ADX/Ichimoku 技術指標補強**。
 
 ---
 
 ## 🎯 建議下一步（按優先級排序）
 
-### 第 0 步：UptimeRobot 防冷啟動（10 分鐘，免費）
-> Render 免費方案閒置 15 分鐘會休眠，造成首次訪問等待 30–90 秒
-
-- 註冊 [https://uptimerobot.com](https://uptimerobot.com)（免費方案）
-- 新增 Monitor：
-  - Type: **HTTP(s)**
-  - URL: `https://jaystock.onrender.com/health`
-  - Interval: **每 14 分鐘**（低於 Render 15 分鐘休眠門檻）
-- 可選：再加一個前端 Monitor `https://jaystock-web.onrender.com`
+### ~~第 0 步：UptimeRobot 防冷啟動~~ ✅ 已完成
+> 已設定每 14 分鐘 ping `https://jaystock.onrender.com/health`，防止 Render 冷啟動
 
 ### 第 1 步：SMTP 盤前 AI 推播驗證（30 分鐘）
 - 手動呼叫 `POST https://jaystock.onrender.com/api/v1/digest/send`
 - 確認 Email 送達（Gmail App Password 需填入 `DIGEST_SMTP_PASS`）
 
-### 第 2 步：個股基本面資料（功能缺口最大 — 建議優先）
-> 競品評分 0/8，yfinance 已能提供，2 天內可完成，評分可從 55 → 65+
-
-- **後端** `GET /api/v1/fundamental/{symbol}` — `apps/api/app/api/v1/fundamental.py`（新建）
-  - 使用 `yfinance Ticker.info` 回傳：市值、P/E、EPS、殖利率、產業、52週高低、平均成交量、Beta
-  - 加 TTL 快取 `@ttl_cache(ttl=3600)`（基本面資料每天變動少）
-- **前端** 在走勢圖工具列下加「基本面摘要列」
-  - 顯示：`市值 | P/E | EPS | 殖利率 | 52週高低`
+### ~~第 2 步：個股基本面資料~~ ✅ 已完成
+> 競品評分 0/8 → 8/8，包含：P/E、EPS、殖利率、股利歷史 10 年、財報 10 年、PE/PB 估值帶、同業比較、月營收、外資持股
 
 ### 第 3 步：UI 視覺提升（已部分完成）
 
@@ -351,18 +341,18 @@
 
 ---
 
-## ✅ 近期完成（2026-06-04）
+## ✅ 近期完成（2026-06-05）
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
-| `13fe0cb` | WebSocket 即時行情 + dnd-kit 拖曳排序 + 設價提醒 in-memory | ✅ Live |
-| `3f28aa0` | Google 登入 trustHost 修復 + FinMind 全端 TTL 快取 + 安全性強化 | ✅ Live |
-| `265d843` | Session 綁定 Watchlist（Google 登入後 user_id 自動同步）| ✅ Live |
-| `733eda3` | digest API 端點（`/digest/status` + `/digest/send`）| ✅ Live |
-| `2c42e67` | CI 修復：WebSocket TDZ lint error + pytest env var | ✅ Live |
-| `005a56c` | CI 修復：conftest.py + scheduler DISABLE_SCHEDULER | ✅ Live |
-| `4dead2f` | CI 修復：MutableHeaders `.pop()` → `del` | ✅ Live |
-| `181be18` | UI 修復：Toolbar 拆兩列 + AuthButton 移右 + Tab 中文化 | ⏳ Deploying |
+| — | UptimeRobot 監控設定（每 14 分鐘 ping /health，防冷啟動）| ✅ 完成 |
+| `41e7233` | 補齊新端點安全防護（validate_symbol + X-User-ID） | ✅ Live |
+| `1592574` | FEATURE-BACKLOG 完成狀態更新（#1/#2/#3/#6/#8）| ✅ Live |
+| `c1a8a7d` | 繪圖工具：Fibonacci / 矩形 / 文字標籤 / 平行通道 | ✅ Live |
+| `260b455` | 外資持股比例走勢（TWSE MI_QIANW + 雙軸折線圖）| ✅ Live |
+| `b74b080` | 財務報表歷史由 5 年延長至 10 年 | ✅ Live |
+| — | 股利歷史近 10 年（`dividends.py` + `DividendHistorySection`）| 本次新增 |
+| `181be18` | UI 修復：Toolbar 拆兩列 + AuthButton 移右 + Tab 中文化 | ✅ Live |
 
 ---
 
@@ -382,8 +372,15 @@
 | `GET /api/v1/alerts` | 設價提醒通知 | ✅ 正常（Supabase + in-memory fallback）|
 | `GET /api/v1/digest/status` | Email 推播狀態查詢 | ✅ 正常 |
 | `POST /api/v1/digest/send` | 手動觸發 AI 選股 Email | ✅ 正常 |
-| `WS /ws/quotes` | 即時行情 WebSocket | ✅ 正常（13fe0cb）|
+| `GET /api/v1/fundamental/{symbol}` | P/E、EPS、殖利率、Beta、市值 | ✅ 正常 |
+| `GET /api/v1/dividends/{symbol}` | 股利歷史近 10 年 | ✅ 正常（本次新增）|
+| `GET /api/v1/financials/{symbol}` | 財務報表趨勢 10 年 | ✅ 正常 |
+| `GET /api/v1/valuation-band/{symbol}` | PE/PB 歷史估值帶 | ✅ 正常 |
+| `GET /api/v1/peer-comparison/{symbol}` | 同業比較表 | ✅ 正常 |
+| `GET /api/v1/monthly-revenue/{symbol}` | 月營收走勢 | ✅ 正常 |
+| `GET /api/v1/foreign-holding/{symbol}` | 外資持股比例走勢 | ✅ 正常 |
+| `WS /ws/quotes` | 即時行情 WebSocket | ✅ 正常 |
 
 ---
 
-*最後更新：2026-06-04 by Claude*
+*最後更新：2026-06-05 by Claude*
