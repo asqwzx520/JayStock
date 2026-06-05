@@ -269,14 +269,14 @@
 | K 線圖表技術分析 | 7 | 11 | ★★★★☆ | 繪圖工具已補，ATR/ADX/StochRSI/Ichimoku 已補強 |
 | 台股籌碼分析 | 5 | 9 | ★★★★☆ | 6 區塊垂直滾動、7 項評分、券商分點已補；期貨籌碼尚缺 |
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
-| AI 選股 & 策略 | 3 | 7 | ★★★☆☆ | 回測引擎 |
+| AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
 | 通知 & 提醒 | 1 | 6 | ★★☆☆☆ | Web Push Notification |
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **34** | **60** | **約 72/100** | |
+| **加總** | **37** | **60** | **約 75/100** | |
 
-> **結論（2026-06-06 更新）：** 籌碼 Tab 全面翻新完成（6 區塊垂直滾動、7 項加權評分、券商分點外資/投信/隔日沖分類）；首頁 280px 自選股多群組側欄上線。整體競品評分從 70 → 72 分。  
-> 下一個最高影響力補強：**回測引擎**（計畫已備妥，填補 AI 選股說服力缺口）與 **Web Push 通知**（留存率）。
+> **結論（2026-06-06 更新）：** 回測引擎（`19eb219`）確認已上線，AI 選股 & 策略面向從 3/7 → 6/7；籌碼翻新 3/9 → 5/9。整體競品評分 72 → 75 分。  
+> 下一個最高影響力補強：**Web Push 通知**（設價提醒背景推播，留存率關鍵）。
 
 ---
 
@@ -317,17 +317,14 @@
 ### ~~第 5 步：繪圖工具（技術分析必備）~~ ✅ 已完成（`c1a8a7d`）
 > Fibonacci / 矩形 / 文字標籤 / 平行通道均已實作（Canvas 疊圖 + localStorage 持久化）。
 
-### 第 6 步：Web Push Notification
-- Service Worker + Push API
-- 設價提醒觸發時，即使瀏覽器關閉也能推播
-- 後端 `/api/v1/push/subscribe` 儲存訂閱端點
+### ~~第 6 步：回測引擎（頂尖版）~~ ✅ 已完成（`19eb219`，2026-06-05）
+> 6 種策略 + 11 項指標 + 4 分頁結果面板（績效摘要/資金曲線/交易明細/月份熱力圖），全免費部署。
 
-### 第 7 步：回測引擎（頂尖版）⬅️ 下一個目標
-- 6 種策略：MA 黃金交叉 / RSI 均值回歸 / MACD / KD / 布林 / 自訂條件
-- 11 項績效指標：總報酬 / CAGR / Sharpe / Sortino / Calmar / Max DD / 勝率 / 盈虧比等
-- 資金曲線 + benchmark 疊圖（lightweight-charts AreaSeries）
-- 交易明細表 + 月份報酬熱力圖
-- 引擎：pandas + pandas_ta（免費，無 numba 依賴）；資料：yfinance 24h TTL
+### 第 7 步：Web Push Notification ⬅️ 下一個目標
+- Service Worker (`/sw.js`) + VAPID 金鑰 + Push API
+- 設價提醒觸發時，即使瀏覽器關閉也能收到系統推播
+- 後端：`push_service.py`（pywebpush 發送）+ `/api/v1/push/subscribe` Supabase 持久化
+- 前端：`usePushNotification` hook + 設定頁訂閱按鈕
 
 ### 第 8 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
@@ -341,6 +338,7 @@
 | Commit | 說明 | 狀態 |
 |--------|------|------|
 | `234cf4f` | **籌碼 Tab 全面翻新**：6 區塊垂直滾動（評分環形圖 / 法人流量 / 累積持倉 / 外資持股% / 券商分點 / 融資融券）；7 項加權評分（滿分 100）；券商分點分 foreign/trust/daytrade 三類 + 隔日沖偵測（已知名單 + 算法）；`/chips/{symbol}/brokers?days=5/10/20` 新端點；TTL 300s 快取 | ✅ Live |
+| `19eb219` | **回測引擎（頂尖版）**：6 種策略（MA黃金交叉/RSI均值回歸/MACD/KD/布林/自訂）；11 項績效指標（CAGR/Sharpe/Sortino/Calmar/MaxDD/勝率/盈虧比等）；台股交易成本（買0.1425%，賣0.1425%+0.3%稅）；benchmark自動選0050.TW/SPY；yfinance最多20年日K，24h TTL；4 分頁結果（績效摘要/資金曲線+交易標記/交易明細可排序/月份報酬熱力圖）| ✅ Live |
 | `234cf4f` | **首頁 Tab 280px 自選股側欄**：LeftPanel WatchlistSidebar 內嵌首頁，支援多群組；TickerTape 純大盤指數（移除自選股）；HomeDashboard 移除重複 WatchlistBlock | ✅ Live |
 | `e4381ef` | **佈局架構重構**：移除 LeftPanel/RightPanel 固定側欄；K 線圖從 `flex-1` 改 `h-full` 修正高度；新增「排行」主 Tab；WorkspaceModal 拖曳排序；自選股改為首頁 Tab 左側欄 | ✅ Live |
 | `3021203` | **Theme B 視覺改造**：藍黑 Terminal 背景（#0a0e17）、跑馬燈行情列（大盤指數 + 用戶自選股，兩步驟同步 Supabase）、Tab 列加右側分隔線與選中深藍底色、Logo 改等寬大寫 + 狀態燈、圓角縮小 | ✅ Live |
