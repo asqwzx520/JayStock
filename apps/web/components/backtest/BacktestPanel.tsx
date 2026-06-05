@@ -327,6 +327,26 @@ function StatsPanel({ stats, symbol }: { stats: BacktestStats; symbol: string })
 
 // ── Trade List ────────────────────────────────────────────────────────────────
 
+function TradeTableHeader({
+  label, k, sortKey, sortAsc, onSort,
+}: {
+  label:   string;
+  k:       keyof BacktestTrade;
+  sortKey: keyof BacktestTrade;
+  sortAsc: boolean;
+  onSort:  (k: keyof BacktestTrade) => void;
+}) {
+  return (
+    <th
+      className="px-2 py-1.5 text-left text-[10px] cursor-pointer select-none"
+      style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}
+      onClick={() => onSort(k)}
+    >
+      {label} {sortKey === k ? (sortAsc ? "↑" : "↓") : ""}
+    </th>
+  );
+}
+
 function TradeList({ trades }: { trades: BacktestTrade[] }) {
   const [sortKey, setSortKey] = useState<keyof BacktestTrade>("entry_date");
   const [sortAsc, setSortAsc] = useState(true);
@@ -347,16 +367,6 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
   const losses = trades.length - wins;
   const avgPnl = trades.length ? trades.reduce((s, t) => s + t.pnl_pct, 0) / trades.length : 0;
 
-  const TH = ({ label, k }: { label: string; k: keyof BacktestTrade }) => (
-    <th
-      className="px-2 py-1.5 text-left text-[10px] cursor-pointer select-none"
-      style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}
-      onClick={() => toggleSort(k)}
-    >
-      {label} {sortKey === k ? (sortAsc ? "↑" : "↓") : ""}
-    </th>
-  );
-
   return (
     <div>
       {/* Summary bar */}
@@ -371,13 +381,13 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
         <table className="w-full text-xs" style={{ minWidth: 560 }}>
           <thead style={{ background: "var(--bg-elevated)", position: "sticky", top: 0, zIndex: 1 }}>
             <tr>
-              <TH label="進場日"    k="entry_date"  />
-              <TH label="出場日"    k="exit_date"   />
-              <TH label="進場價"    k="entry_price" />
-              <TH label="出場價"    k="exit_price"  />
-              <TH label="損益"      k="pnl"         />
-              <TH label="損益%"     k="pnl_pct"     />
-              <TH label="持倉天"    k="hold_days"   />
+              <TradeTableHeader label="進場日"  k="entry_date"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="出場日"  k="exit_date"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="進場價"  k="entry_price" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="出場價"  k="exit_price"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="損益"    k="pnl"         sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="損益%"   k="pnl_pct"     sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="持倉天"  k="hold_days"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>

@@ -768,21 +768,17 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [rules, setRules]         = useState<AlertRule[]>([]);
-  const [rulesLoading, setRulesLoading] = useState(false);
 
   const userId = typeof window !== "undefined" ? getUserId() : "";
 
   // ── 載入自訂規則 ───────────────────────────────────────────────────────────
   const loadRules = useCallback(async () => {
     if (!userId) return;
-    setRulesLoading(true);
     try {
       const resp = await alertRulesApi.list();
       setRules(resp.rules);
     } catch {
       // silent fail — rules not critical
-    } finally {
-      setRulesLoading(false);
     }
   }, [userId]);
 
@@ -797,7 +793,7 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
     try {
       const resp = await getDashboardSummary(syms, userId);
       setSummary(resp);
-    } catch (e) {
+    } catch {
       setError("無法載入儀錶板資料，請稍後再試");
     } finally {
       setLoading(false);

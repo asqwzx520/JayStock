@@ -226,6 +226,8 @@ export default function KLineChart({
 
   // Channel drawing state machine (0=idle, 1=drawing baseline, 2=set offset)
   const channelPhaseRef = useRef<0 | 1 | 2>(0);
+  // Mirrors channelPhaseRef for render (refs cannot be read during JSX render)
+  const [channelPhase2, setChannelPhase2] = useState(false);
   const channelDraftRef = useRef<{ time1: Time; price1: number; time2: Time; price2: number } | null>(null);
 
   // Text-label overlay (HTML input)
@@ -498,7 +500,7 @@ export default function KLineChart({
   // Reset channel / pending when tool changes
   useEffect(() => {
     if (activeTool !== "channel") {
-      channelPhaseRef.current = 0;
+      channelPhaseRef.current = 0; setChannelPhase2(false);
       channelDraftRef.current = null;
     }
     if (!["trendline", "fibonacci", "rectangle", "channel"].includes(activeTool)) {
@@ -513,7 +515,7 @@ export default function KLineChart({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (channelPhaseRef.current > 0) {
-        channelPhaseRef.current = 0;
+        channelPhaseRef.current = 0; setChannelPhase2(false);
         channelDraftRef.current = null;
         pendingRef.current      = null;
         previewRef.current      = null;
@@ -878,7 +880,7 @@ export default function KLineChart({
   useEffect(() => {
     if (clearKey === undefined) return;
     drawingsRef.current    = [];
-    channelPhaseRef.current = 0;
+    channelPhaseRef.current = 0; setChannelPhase2(false);
     channelDraftRef.current = null;
     pendingRef.current      = null;
     previewRef.current      = null;
@@ -920,14 +922,14 @@ export default function KLineChart({
 
       } else if (channelPhaseRef.current === 2) {
         const draft = channelDraftRef.current;
-        if (!draft) { channelPhaseRef.current = 0; return; }
+        if (!draft) { channelPhaseRef.current = 0; setChannelPhase2(false); return; }
 
         const bx1 = chart.timeScale().timeToCoordinate(draft.time1);
         const bx2 = chart.timeScale().timeToCoordinate(draft.time2);
         const by1 = main.priceToCoordinate(draft.price1);
         const by2 = main.priceToCoordinate(draft.price2);
         if (bx1 === null || bx2 === null || by1 === null || by2 === null) {
-          channelPhaseRef.current = 0; channelDraftRef.current = null; return;
+          channelPhaseRef.current = 0; setChannelPhase2(false); channelDraftRef.current = null; return;
         }
 
         const baseYAtX = Math.abs(bx2 - bx1) > 0.001
@@ -945,7 +947,7 @@ export default function KLineChart({
         drawingsRef.current     = next;
         lsSave(symbolRef.current, next);
         channelDraftRef.current = null;
-        channelPhaseRef.current = 0;
+        channelPhaseRef.current = 0; setChannelPhase2(false);
         previewRef.current      = null;
         redrawFnRef.current();
       }
@@ -1000,11 +1002,11 @@ export default function KLineChart({
     else if (activeTool === "fibonacci")  saveDrag("fibonacci",  "f");
     else if (activeTool === "rectangle") saveDrag("rectangle", "r");
     else if (activeTool === "channel" && channelPhaseRef.current === 1 && pendingRef.current) {
-      if (!chart || !main) { pendingRef.current = null; channelPhaseRef.current = 0; return; }
+      if (!chart || !main) { pendingRef.current = null; channelPhaseRef.current = 0; setChannelPhase2(false); return; }
       const { startX, startY } = pendingRef.current;
       pendingRef.current = null;
       if (Math.abs(x - startX) < 5 && Math.abs(y - startY) < 5) {
-        channelPhaseRef.current = 0; previewRef.current = null; redrawFnRef.current(); return;
+        channelPhaseRef.current = 0; setChannelPhase2(false); previewRef.current = null; redrawFnRef.current(); return;
       }
       const time1  = chart.timeScale().coordinateToTime(startX);
       const price1 = main.coordinateToPrice(startY);
@@ -1012,10 +1014,10 @@ export default function KLineChart({
       const price2 = main.coordinateToPrice(y);
       if (time1 && time2 && price1 !== null && price2 !== null) {
         channelDraftRef.current = { time1, price1, time2, price2 };
-        channelPhaseRef.current = 2;
+        channelPhaseRef.current = 2; setChannelPhase2(true);
         previewRef.current      = { x, y };
       } else {
-        channelPhaseRef.current = 0;
+        channelPhaseRef.current = 0; setChannelPhase2(false);
         previewRef.current      = null;
       }
       redrawFnRef.current();
@@ -1088,7 +1090,7 @@ export default function KLineChart({
       )}
 
       {/* Channel phase-2 hint */}
-      {activeTool === "channel" && channelPhaseRef.current === 2 && (
+      {activeTool === "channel" && channelPhase2 && (
         <div
           className="absolute z-20 text-xs pointer-events-none"
           style={{
