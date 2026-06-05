@@ -16,8 +16,8 @@ import type {
   ForeignHoldingResponse,
   DividendHistoryResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory, getAiAnalysis, getEarnings } from "@/lib/api";
-import type { AiAnalysisResponse, EarningsResponse } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory, getAiAnalysis, getEarnings, getVolumeProfile, getFinancialAlerts } from "@/lib/api";
+import type { AiAnalysisResponse, EarningsResponse, VolumeProfileResponse, FinancialAlertsResponse, FinancialAlert } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -312,6 +312,264 @@ function EarningsSurpriseSection({
       </div>
       <div className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
         資料來源：Yahoo Finance earnings_dates｜Surprise = (實際 - 預估) / |預估|
+      </div>
+    </Section>
+  );
+}
+
+// ── Volume Profile Section ────────────────────────────────────────────────────
+
+const VP_PERIODS = [
+  { id: "1m", label: "1M" },
+  { id: "3m", label: "3M" },
+  { id: "6m", label: "6M" },
+  { id: "1y", label: "1Y" },
+  { id: "2y", label: "2Y" },
+];
+
+function VolumeProfileSection({ symbol }: { symbol: string }) {
+  const [vpPeriod, setVpPeriod] = useState("3m");
+  const [data,     setData]     = useState<VolumeProfileResponse | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  const load = (sym: string, per: string) => {
+    setLoading(true); setError(null);
+    getVolumeProfile(sym, per)
+      .then(setData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { setData(null); setError(null); load(symbol, vpPeriod); }, [symbol]);
+  useEffect(() => { if (data !== null || loading) load(symbol, vpPeriod); }, [vpPeriod]);
+
+  const W_BAR_MAX = 200;   // max SVG bar width in px
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      {/* Header */}
+      <div className="px-4 py-2.5 border-b flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+        <span className="text-xs font-bold tracking-wide uppercase" style={{ color: "var(--text-tertiary)" }}>
+          📊 Volume Profile（價位成交量分佈）
+        </span>
+        {/* Period selector */}
+        <div className="flex items-center gap-0.5 rounded p-0.5" style={{ background: "var(--bg-surface)" }}>
+          {VP_PERIODS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setVpPeriod(p.id)}
+              className="px-2 py-0.5 rounded text-[10px] font-medium"
+              style={{
+                background: vpPeriod === p.id ? "var(--color-brand)" : "transparent",
+                color:      vpPeriod === p.id ? "#fff" : "var(--text-secondary)",
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4">
+        {loading && (
+          <div className="space-y-1">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="animate-pulse rounded h-2.5 shrink-0" style={{ width: 40, background: "var(--bg-elevated)" }} />
+                <div className="animate-pulse rounded h-2.5" style={{ width: `${30 + Math.sin(i) * 20}%`, background: "var(--bg-elevated)", animationDelay: `${i * 40}ms` }} />
+              </div>
+            ))}
+          </div>
+        )}
+        {error && <p className="text-xs" style={{ color: "var(--color-down)" }}>載入失敗：{error}</p>}
+        {data && !loading && (() => {
+          // Only render top 30 bins sorted by price descending (high → low)
+          const sortedBins = [...data.bins].sort((a, b) => b.price - a.price);
+          const visibleBins = sortedBins.length > 40
+            ? sortedBins.filter((_, i) => i % Math.ceil(sortedBins.length / 40) === 0)
+            : sortedBins;
+
+          const priceColor = (bin: typeof data.bins[0]) => {
+            if (bin.is_poc) return "#f59e0b";
+            if (bin.in_va)  return "rgba(59,130,246,0.75)";
+            return "rgba(107,114,128,0.5)";
+          };
+
+          const currentInBin = (bin: typeof data.bins[0]) =>
+            data.current_price >= bin.price_low && data.current_price < bin.price_high;
+
+          return (
+            <div className="space-y-4">
+              {/* Key levels */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "VAH 價值區上緣", value: data.vah, color: "#22c55e" },
+                  { label: "POC 最大量價位", value: data.poc, color: "#f59e0b" },
+                  { label: "VAL 價值區下緣", value: data.val, color: "#ef4444" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="rounded-lg p-2.5 text-center" style={{ background: "var(--bg-elevated)" }}>
+                    <div className="text-[9px] mb-1" style={{ color: "var(--text-tertiary)" }}>{label}</div>
+                    <div className="text-sm num font-bold" style={{ color }}>{value.toLocaleString()}</div>
+                    {data.current_price > 0 && (
+                      <div className="text-[9px] num mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                        {((value - data.current_price) / data.current_price * 100) >= 0 ? "+" : ""}
+                        {((value - data.current_price) / data.current_price * 100).toFixed(1)}%
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Horizontal bar chart */}
+              <div className="space-y-0.5">
+                {visibleBins.map((bin) => {
+                  const isCurrent = currentInBin(bin);
+                  const barW = Math.round(bin.volume_pct * W_BAR_MAX);
+                  return (
+                    <div
+                      key={bin.price}
+                      className="flex items-center gap-1.5"
+                      style={{ background: isCurrent ? "rgba(255,255,255,0.04)" : undefined, borderRadius: 2 }}
+                    >
+                      {/* Price label */}
+                      <div
+                        className="text-[9px] num shrink-0 text-right"
+                        style={{ width: 46, color: bin.is_poc ? "#f59e0b" : isCurrent ? "var(--color-brand)" : "var(--text-tertiary)" }}
+                      >
+                        {bin.price.toLocaleString()}
+                      </div>
+
+                      {/* Bar */}
+                      <div style={{ width: W_BAR_MAX, position: "relative", height: 8 }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            width: barW,
+                            background: priceColor(bin),
+                            borderRadius: 1,
+                            transition: "width 0.2s",
+                          }}
+                        />
+                      </div>
+
+                      {/* Current price marker + special labels */}
+                      <div className="text-[8px] shrink-0" style={{ color: "var(--text-tertiary)", minWidth: 32 }}>
+                        {bin.is_poc && <span style={{ color: "#f59e0b" }}>◄POC</span>}
+                        {isCurrent && !bin.is_poc && <span style={{ color: "var(--color-brand)" }}>◄現價</span>}
+                        {data.current_price === data.vah && bin.price === data.vah && !bin.is_poc && <span style={{ color: "#22c55e" }}>◄VAH</span>}
+                        {data.current_price === data.val && bin.price === data.val && !bin.is_poc && <span style={{ color: "#ef4444" }}>◄VAL</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap items-center gap-3 text-[10px] pt-2 border-t" style={{ borderColor: "var(--border)", color: "var(--text-tertiary)" }}>
+                <span><span style={{ color: "#f59e0b" }}>■</span> POC（最大量）</span>
+                <span><span style={{ color: "rgba(59,130,246,0.9)" }}>■</span> 價值區（70% 成交量）</span>
+                <span><span style={{ color: "rgba(107,114,128,0.9)" }}>■</span> 非價值區</span>
+                <span className="ml-auto">共 {data.n_bars} 根 K 棒 · {data.period.toUpperCase()} 區間</span>
+              </div>
+
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                POC 為主力成本密集區，常作支撐/壓力參考。VAH/VAL 為價值區上下緣，突破視為強勢。
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+// ── Financial Alerts Section ──────────────────────────────────────────────────
+
+function FinancialAlertsSection({
+  data,
+  loading,
+  error,
+}: {
+  data:    FinancialAlertsResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="分析財報異常中..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data)   return null;
+
+  if (!data.alerts.length) {
+    return (
+      <Section title="🔍 財報異常警示">
+        <div className="flex items-center gap-2 py-2">
+          <span className="text-sm">✅</span>
+          <p className="text-xs" style={{ color: "var(--color-up)" }}>
+            未發現明顯財報異常（應收/存貨比率正常、無連續獲利衰退）
+          </p>
+        </div>
+      </Section>
+    );
+  }
+
+  const severityConfig = {
+    danger:  { border: "var(--color-down)", bg: "rgba(239,68,68,0.08)",  icon: "🔴" },
+    warning: { border: "#f59e0b",           bg: "rgba(245,158,11,0.08)", icon: "⚠️" },
+  };
+
+  function AlertCard({ alert }: { alert: FinancialAlert }) {
+    const cfg = severityConfig[alert.severity];
+    return (
+      <div
+        className="rounded-lg p-3 space-y-2"
+        style={{ border: `1px solid ${cfg.border}`, background: cfg.bg }}
+      >
+        <div className="text-xs font-semibold" style={{ color: alert.severity === "danger" ? "var(--color-down)" : "#f59e0b" }}>
+          {alert.title}
+        </div>
+        <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+          {alert.detail}
+        </p>
+        {alert.data.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-1">
+            {alert.data.map((d) => (
+              <span
+                key={d.year}
+                className="text-[9px] num px-1.5 py-0.5 rounded"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
+              >
+                {d.year}：{
+                  "value" in d && d.value != null ? `${d.value}${alert.unit !== "原幣" && alert.unit !== "億" ? alert.unit : ""}` :
+                  "fcf_ratio" in d && d.fcf_ratio != null ? `FCF/NI ${d.fcf_ratio}%` :
+                  "—"
+                }
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const dangers  = data.alerts.filter(a => a.severity === "danger");
+  const warnings = data.alerts.filter(a => a.severity === "warning");
+
+  return (
+    <Section title={`🔍 財報異常警示（${data.alert_count} 項）`}>
+      <div className="space-y-3">
+        {dangers.length > 0 && (
+          <div className="space-y-2">
+            {dangers.map(a => <AlertCard key={a.id} alert={a} />)}
+          </div>
+        )}
+        {warnings.length > 0 && (
+          <div className="space-y-2">
+            {warnings.map(a => <AlertCard key={a.id} alert={a} />)}
+          </div>
+        )}
+        <p className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          {data.note}。財報異常僅供參考，需結合產業背景綜合判斷。
+        </p>
       </div>
     </Section>
   );
@@ -1812,7 +2070,8 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [peerData,  setPeerData]  = useState<PeerComparisonResponse | null>(null);
   const [fhData,    setFhData]    = useState<ForeignHoldingResponse  | null>(null);
   const [divData,   setDivData]   = useState<DividendHistoryResponse | null>(null);
-  const [earnData,  setEarnData]  = useState<EarningsResponse | null>(null);
+  const [earnData,   setEarnData]   = useState<EarningsResponse | null>(null);
+  const [faData,     setFaData]     = useState<FinancialAlertsResponse | null>(null);
   const [customPeers, setCustomPeers] = useState("");
 
   const [techLoad, setTechLoad]   = useState(false);
@@ -1824,6 +2083,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [fhLoad,   setFhLoad]     = useState(false);
   const [divLoad,  setDivLoad]    = useState(false);
   const [earnLoad, setEarnLoad]   = useState(false);
+  const [faLoad,   setFaLoad]     = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
@@ -1834,6 +2094,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [fhErr,   setFhErr]       = useState<string | null>(null);
   const [divErr,  setDivErr]      = useState<string | null>(null);
   const [earnErr, setEarnErr]     = useState<string | null>(null);
+  const [faErr,   setFaErr]       = useState<string | null>(null);
 
   const loadPeers = (sym: string, peers = "") => {
     setPeerLoad(true); setPeerErr(null);
@@ -1843,8 +2104,8 @@ export default function AnalysisPanel({ symbol }: Props) {
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);  setEarnData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);   setEarnErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);  setEarnData(null);  setFaData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);   setEarnErr(null);   setFaErr(null);
     setCustomPeers("");
 
     setTechLoad(true);
@@ -1872,6 +2133,9 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setEarnLoad(true);
     getEarnings(symbol).then(setEarnData).catch(e => setEarnErr(e.message)).finally(() => setEarnLoad(false));
+
+    setFaLoad(true);
+    getFinancialAlerts(symbol).then(setFaData).catch(e => setFaErr(e.message)).finally(() => setFaLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -1910,6 +2174,7 @@ export default function AnalysisPanel({ symbol }: Props) {
             <div className="space-y-4">
               <AiAnalysisSection symbol={symbol} />
               <TechSection data={techData} />
+              <VolumeProfileSection symbol={symbol} />
               <ForeignHoldingSection data={fhData} loading={fhLoad} error={fhErr} />
             </div>
           ) :
@@ -1942,6 +2207,7 @@ export default function AnalysisPanel({ symbol }: Props) {
           finErr  ? <Err msg={finErr} /> :
           finData ? (
             <div className="space-y-4">
+              <FinancialAlertsSection data={faData} loading={faLoad} error={faErr} />
               <EarningsSurpriseSection data={earnData} loading={earnLoad} error={earnErr} />
               <FinancialSection data={finData} />
             </div>

@@ -138,15 +138,18 @@
 - 後端：`GET /api/v1/earnings/{symbol}`，快取 24 小時
 - 前端：財務報表 tab 頂部 EPS 柱狀圖 + 詳細表格（含台股無預估值說明）
 
-### [ ] 11. Volume Profile（成交量分佈圖）
+### [x] 11. Volume Profile（成交量分佈圖）
 - 價位 vs 成交量橫向分佈，找主力成本區、關鍵支撐
-- TradingView 招牌功能
-- 難度：高（需要 SVG 橫向 histogram）
+- 後端：`GET /api/v1/volume-profile/{symbol}?period=3m`，50 桶分配算法，快取 15 分
+- 前端：分析 tab 技術面「📊 Volume Profile」卡片，SVG 橫向 histogram
+  - 標示 POC（最大量價位）、Value Area（70% 成交量上下緣）、當前價位
 
-### [ ] 12. 財報異常警示
-- 應收帳款/存貨佔營收比例異常時自動標記 ⚠️
-- 連續 3 季獲利衰退自動標記
-- 難度：中
+### [x] 12. 財報異常警示
+- 後端：`GET /api/v1/financial-alerts/{symbol}`，偵測 6 大異常，快取 24 小時
+  - 應收帳款/營收比連升 3 年、存貨/營收比連升 3 年
+  - 連續 3 季淨利衰退、FCF < 淨利 50% 連 2 年（盈餘品質）
+  - 毛利率連降 3 年、營業現金流連 2 年為負
+- 前端：財務報表 tab 頂部警示卡（danger/warning 分級，綠色通過/橘紅警示）
 
 ### [ ] 13. Web Push 通知（價格警報推送）
 - 到價警報目前只在開網頁時有效，需要 Service Worker + VAPID

@@ -862,6 +862,70 @@ export function getDividendHistory(symbol: string) {
   return fetcher<DividendHistoryResponse>(`/api/v1/dividends/${encodeURIComponent(symbol)}`);
 }
 
+// ── Volume Profile（價位成交量分佈）────────────────────────────────────────────
+export interface VolumeProfileBin {
+  price:      number;
+  price_low:  number;
+  price_high: number;
+  volume:     number;
+  volume_pct: number;   // 0–1 relative to max bin
+  is_poc:     boolean;
+  in_va:      boolean;  // in Value Area (70%)
+}
+
+export interface VolumeProfileResponse {
+  symbol:        string;
+  period:        string;
+  current_price: number;
+  poc:           number;   // Point of Control price
+  vah:           number;   // Value Area High
+  val:           number;   // Value Area Low
+  total_volume:  number;
+  n_bars:        number;
+  price_min:     number;
+  price_max:     number;
+  bins:          VolumeProfileBin[];
+}
+
+export function getVolumeProfile(symbol: string, period = "3m") {
+  return fetcher<VolumeProfileResponse>(
+    `/api/v1/volume-profile/${encodeURIComponent(symbol)}?period=${period}`
+  );
+}
+
+// ── Financial Alerts（財報異常警示）─────────────────────────────────────────
+export interface FinancialAlertDataPoint {
+  year:  number;
+  value?: number | null;
+  [key: string]: unknown;
+}
+
+export interface FinancialAlert {
+  id:       string;
+  severity: "warning" | "danger";
+  title:    string;
+  detail:   string;
+  data:     FinancialAlertDataPoint[];
+  unit:     string;
+  label:    string;
+}
+
+export interface FinancialAlertsResponse {
+  symbol:       string;
+  alerts:       FinancialAlert[];
+  alert_count:  number;
+  has_danger:   boolean;
+  has_warning:  boolean;
+  data_summary: Record<string, unknown>;
+  note:         string;
+}
+
+export function getFinancialAlerts(symbol: string) {
+  return fetcher<FinancialAlertsResponse>(
+    `/api/v1/financial-alerts/${encodeURIComponent(symbol)}`
+  );
+}
+
 // ── AI Analysis（AI 技術分析解讀）────────────────────────────────────────────
 export interface AiAnalysisMeta {
   price:      number;
