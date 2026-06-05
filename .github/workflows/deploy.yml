@@ -1,0 +1,29 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-web:
+    name: Deploy Frontend (JayStock-Web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Web Deploy
+        run: |
+          curl -s -X POST "${{ secrets.RENDER_WEB_DEPLOY_HOOK }}" \
+            -H "Content-Type: application/json" \
+            --fail
+          echo "Web deploy triggered successfully"
+
+  deploy-api:
+    name: Deploy Backend (JayStock API)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render API Deploy
+        run: |
+          curl -s -X POST "${{ secrets.RENDER_API_DEPLOY_HOOK }}" \
+            -H "Content-Type: application/json" \
+            --fail
+          echo "API deploy triggered successfully"
