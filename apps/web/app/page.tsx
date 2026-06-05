@@ -315,10 +315,10 @@ export default function Home() {
             className="shrink-0 flex items-center border-b overflow-x-auto"
             style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
           >
-            {/* 漢堡按鈕（手機版專用） */}
+            {/* 漢堡按鈕（手機版專用，< 768px） */}
             <button
               onClick={() => setLeftPanelOpen(true)}
-              className="lg:hidden shrink-0 flex items-center justify-center w-10 h-10 ml-1"
+              className="md:hidden shrink-0 flex items-center justify-center w-10 h-10 ml-1"
               style={{ color: "var(--text-secondary)" }}
               aria-label="開啟自選股"
             >
@@ -608,10 +608,81 @@ export default function Home() {
               </>
             )}
           </div>
+
+          {/* 底部 Tab Bar 佔位（手機版推高內容，避免被 fixed bar 遮住） */}
+          <div className="md:hidden shrink-0 h-14" />
         </main>
 
         <RightPanel quote={quote} />
       </div>
+
+      {/* ── 底部 Tab Bar（手機版 < 768px 專用）── */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 flex border-t"
+        style={{
+          background: "var(--bg-surface)",
+          borderColor: "var(--border)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
+        {/* 自選股 */}
+        <button
+          onClick={() => setLeftPanelOpen((v) => !v)}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
+          style={{ color: leftPanelOpen ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="自選股"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="2" y="4" width="16" height="2" rx="1" fill="currentColor"/>
+            <rect x="2" y="9" width="16" height="2" rx="1" fill="currentColor"/>
+            <rect x="2" y="14" width="16" height="2" rx="1" fill="currentColor"/>
+          </svg>
+          <span className="text-[10px] font-medium">自選</span>
+        </button>
+
+        {/* 走勢圖 */}
+        <button
+          onClick={() => { setViewTab("kline"); setLeftPanelOpen(false); }}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
+          style={{ color: !leftPanelOpen && viewTab === "kline" ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="走勢圖"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <polyline points="2,15 6,9 10,12 14,5 18,8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className="text-[10px] font-medium">圖表</span>
+        </button>
+
+        {/* 大盤 */}
+        <button
+          onClick={() => { setViewTab("market"); setLeftPanelOpen(false); }}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
+          style={{ color: !leftPanelOpen && viewTab === "market" ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="大盤"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="2" y="12" width="3" height="6" rx="0.5" fill="currentColor"/>
+            <rect x="7" y="8"  width="3" height="10" rx="0.5" fill="currentColor"/>
+            <rect x="12" y="4" width="3" height="14" rx="0.5" fill="currentColor"/>
+            <rect x="17" y="9" width="1" height="1"  fill="currentColor"/>
+          </svg>
+          <span className="text-[10px] font-medium">大盤</span>
+        </button>
+
+        {/* 選股 */}
+        <button
+          onClick={() => { setViewTab("screener"); setLeftPanelOpen(false); }}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
+          style={{ color: !leftPanelOpen && viewTab === "screener" ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="選股"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M13.5 13.5 L17.5 17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="text-[10px] font-medium">選股</span>
+        </button>
+      </nav>
     </div>
   );
 }

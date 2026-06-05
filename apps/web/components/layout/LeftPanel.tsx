@@ -340,7 +340,7 @@ export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = f
       {/* Mobile overlay backdrop */}
       {drawerOpen && (
         <div
-          className="fixed inset-0 z-40 lg:hidden"
+          className="fixed inset-0 z-40 md:hidden"
           style={{ background: "rgba(0,0,0,0.5)" }}
           onClick={onDrawerClose}
         />
@@ -349,15 +349,15 @@ export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = f
     <aside
       className={[
         "shrink-0 border-r flex flex-col overflow-hidden",
-        // Desktop: always visible in flow
-        "hidden lg:flex",
+        // Tablet+: always visible in flow
+        "hidden md:flex",
         // Mobile: fixed drawer, shown when drawerOpen
-        drawerOpen ? "!flex fixed inset-y-0 left-0 z-50 drawer-shadow lg:relative lg:z-auto" : "",
+        drawerOpen ? "!flex fixed inset-y-0 left-0 z-50 drawer-shadow md:relative md:z-auto" : "",
       ].join(" ")}
       style={{ width: "var(--panel-left)", background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
       {/* Mobile-only close button */}
-      <div className="flex items-center justify-between px-3 py-2 border-b lg:hidden" style={{ borderColor: "var(--border)" }}>
+      <div className="flex items-center justify-between px-3 py-2 border-b md:hidden" style={{ borderColor: "var(--border)" }}>
         <span className="text-sm font-semibold" style={{ color: "var(--color-brand)" }}>自選股 / 排行</span>
         <button
           onClick={onDrawerClose}
