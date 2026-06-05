@@ -56,6 +56,11 @@ const CompareChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
+const HomeDashboard = dynamic(
+  () => import("@/components/dashboard/HomeDashboard"),
+  { ssr: false, loading: () => <DashboardSkeleton /> }
+);
+
 const AnalysisPanel = dynamic(
   () => import("@/components/analysis/AnalysisPanel"),
   { ssr: false, loading: () => <DashboardSkeleton /> }
@@ -85,7 +90,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis" | "compare";
+type ViewTab   = "home" | "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis" | "compare";
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -334,7 +339,7 @@ export default function Home() {
               </svg>
             </button>
 
-            {(["kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => (
+            {(["home", "kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
@@ -344,7 +349,8 @@ export default function Home() {
                   borderBottom: viewTab === tab ? "2px solid var(--color-brand)" : "2px solid transparent",
                 }}
               >
-                {tab === "kline"    ? "走勢圖"
+                {tab === "home"     ? "首頁"
+                  : tab === "kline"   ? "走勢圖"
                   : tab === "chips"   ? "籌碼"
                   : tab === "market"  ? "大盤"
                   : tab === "screener"? "選股"
@@ -505,6 +511,16 @@ export default function Home() {
 
           {/* ── 主圖區 ──────────────────────────────────── */}
           <div className="flex-1 min-h-0 relative">
+
+            {/* 首頁儀錶板 */}
+            {viewTab === "home" && (
+              <HomeDashboard
+                onSelectStock={(sym) => {
+                  handleSelectStock(sym, "");
+                  setViewTab("kline");
+                }}
+              />
+            )}
 
             {/* K 線 */}
             {viewTab === "kline" && (

@@ -1005,3 +1005,126 @@ export const alertsApi = {
   delete: (id: string) =>
     alertsFetcher<void>(`/api/v1/alerts/${id}`, { method: "DELETE" }),
 };
+
+// ── Dashboard Summary（個人化首頁摘要）────────────────────────────────────────
+
+export type SignalSeverity = "positive" | "warning" | "info" | "custom";
+export type SignalGroup    = "chips" | "technical" | "calendar" | "custom";
+
+export interface DashboardSignal {
+  id:       string;
+  label:    string;
+  severity: SignalSeverity;
+  group:    SignalGroup;
+  date?:    string;
+}
+
+export interface DashboardUpcomingDate {
+  type:       "exdiv" | "earnings";
+  label:      string;
+  date:       string;   // YYYY-MM-DD
+  days_until: number;
+  value?:     number;   // dividend amount (exdiv only)
+}
+
+export interface DashboardQuote {
+  price:      number;
+  change_pct: number;
+  vol_ratio:  number;
+  rsi14:      number;
+  name:       string;
+}
+
+export interface DashboardSymbolData {
+  symbol:         string;
+  quote:          DashboardQuote;
+  signals:        DashboardSignal[];
+  signal_count:   number;
+  upcoming_dates: DashboardUpcomingDate[];
+  has_alert:      boolean;
+}
+
+export interface DashboardSummaryResponse {
+  symbols:    string[];
+  data:       Record<string, DashboardSymbolData>;
+  updated_at: number;
+}
+
+export function getDashboardSummary(
+  symbols: string[],
+  userId?: string | null
+): Promise<DashboardSummaryResponse> {
+  const s = symbols.map(encodeURIComponent).join(",");
+  const uid = userId ?? getUserId();
+  return fetch(`${API_BASE}/api/v1/dashboard/summary?symbols=${s}`, {
+    headers: { "X-User-ID": uid },
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json() as Promise<DashboardSummaryResponse>;
+  });
+}
+
+// ── Alert Rules（用戶自訂警示規則）──────────────────────────────────────────────
+
+export type AlertRuleOperator = ">" | "<" | ">=" | "<=" | "=";
+export type AlertRuleLogic    = "AND" | "OR";
+
+export interface AlertRuleCondition {
+  field:    string;
+  operator: AlertRuleOperator;
+  value:    number;
+}
+
+export interface AlertRule {
+  id:         string;
+  name:       string;
+  conditions: AlertRuleCondition[];
+  logic:      AlertRuleLogic;
+  is_active:  boolean;
+  created_at?: string;
+}
+
+export interface AlertRulesResponse {
+  rules: AlertRule[];
+  count: number;
+}
+
+export interface CreateAlertRulePayload {
+  name:       string;
+  conditions: AlertRuleCondition[];
+  logic:      AlertRuleLogic;
+  is_active?: boolean;
+}
+
+export const ALERT_RULE_FIELDS: { value: string; label: string; unit: string }[] = [
+  { value: "rsi14",               label: "RSI",         unit: "" },
+  { value: "vol_ratio",           label: "量比",        unit: "x" },
+  { value: "change_pct",          label: "漲跌幅",      unit: "%" },
+  { value: "foreign_streak_days", label: "外資連買天數", unit: "日" },
+  { value: "trust_streak_days",   label: "投信連買天數", unit: "日" },
+  { value: "ma20_breakout",       label: "MA20突破",    unit: "" },
+  { value: "above_ma20",          label: "站上MA20",    unit: "" },
+];
+
+export const alertRulesApi = {
+  list: () =>
+    alertsFetcher<AlertRulesResponse>("/api/v1/alert-rules"),
+
+  create: (payload: CreateAlertRulePayload) =>
+    alertsFetcher<AlertRule>("/api/v1/alert-rules", {
+      method:  "POST",
+      body:    JSON.stringify(payload),
+    }),
+
+  update: (id: string, payload: Partial<CreateAlertRulePayload & { is_active: boolean }>) =>
+    alertsFetcher<AlertRule>(`/api/v1/alert-rules/${id}`, {
+      method:  "PUT",
+      body:    JSON.stringify(payload),
+    }),
+
+  delete: (id: string) =>
+    alertsFetcher<void>(`/api/v1/alert-rules/${id}`, { method: "DELETE" }),
+
+  toggle: (id: string) =>
+    alertsFetcher<AlertRule>(`/api/v1/alert-rules/${id}/toggle`, { method: "PATCH" }),
+};
