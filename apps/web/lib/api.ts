@@ -838,6 +838,96 @@ export function getMonthlyRevenue(symbol: string) {
   return fetcher<MonthlyRevenueResponse>(`/api/v1/monthly-revenue/${encodeURIComponent(symbol)}`);
 }
 
+// ── Dividend History（股利歷史）──────────────────────────────────────────────
+export interface DividendAnnual {
+  year:           number;
+  total_dividend: number | null;
+  yield_pct:      number | null;
+  payments:       number;
+  dates:          string[];
+}
+
+export interface DividendHistoryResponse {
+  symbol:            string;
+  is_tw:             boolean;
+  currency:          string;
+  annual:            DividendAnnual[];
+  consecutive_years: number;
+  latest_yield:      number | null;
+  next_ex_date:      string | null;
+  next_dividend:     number | null;
+}
+
+export function getDividendHistory(symbol: string) {
+  return fetcher<DividendHistoryResponse>(`/api/v1/dividends/${encodeURIComponent(symbol)}`);
+}
+
+// ── AI Analysis（AI 技術分析解讀）────────────────────────────────────────────
+export interface AiAnalysisMeta {
+  price:      number;
+  change_pct: number;
+  rsi14:      number | null;
+  macd:       string;
+  ma_above:   string[];
+  vol_ratio:  number;
+  chips:      string;
+}
+
+export interface AiAnalysisResponse {
+  symbol:   string;
+  analysis: string;
+  meta:     AiAnalysisMeta;
+}
+
+export function getAiAnalysis(symbol: string) {
+  return fetcher<AiAnalysisResponse>(`/api/v1/ai-analysis/${encodeURIComponent(symbol)}`);
+}
+
+// ── Compare（多股比較走勢）───────────────────────────────────────────────────
+export interface ComparePoint {
+  time:  string;   // YYYY-MM-DD
+  value: number;   // normalized to 100
+}
+
+export interface CompareResponse {
+  symbols: string[];
+  names:   Record<string, string>;
+  period:  string;
+  series:  Record<string, ComparePoint[]>;
+}
+
+export function getCompare(symbols: string[], period = "1y") {
+  const s = symbols.map(encodeURIComponent).join(",");
+  return fetcher<CompareResponse>(`/api/v1/compare?symbols=${s}&period=${period}`);
+}
+
+// ── Earnings Surprise（盈餘驚喜）────────────────────────────────────────────
+export interface EarningsSurpriseItem {
+  date:         string;
+  eps_estimate: number | null;
+  eps_actual:   number | null;
+  surprise_pct: number | null;
+}
+
+export interface EarningsAnnual {
+  year:       number;
+  revenue:    number | null;
+  net_income: number | null;
+}
+
+export interface EarningsResponse {
+  symbol:             string;
+  currency:           string;
+  quarterly_surprise: EarningsSurpriseItem[];
+  annual_earnings:    EarningsAnnual[];
+  has_estimates:      boolean;
+  message:            string | null;
+}
+
+export function getEarnings(symbol: string) {
+  return fetcher<EarningsResponse>(`/api/v1/earnings/${encodeURIComponent(symbol)}`);
+}
+
 export const alertsApi = {
   getUnread: () =>
     alertsFetcher<AlertsResponse>("/api/v1/alerts"),

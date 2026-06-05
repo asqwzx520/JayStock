@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, digest, fundamental, backtest, technical, financials, monthly_revenue, valuation_band, peer_comparison, foreign_holding
+from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, digest, fundamental, backtest, technical, financials, monthly_revenue, valuation_band, peer_comparison, foreign_holding, dividends, ai_analysis, compare, earnings
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,10 @@ app.include_router(monthly_revenue.router,  prefix="/api/v1", tags=["monthly-rev
 app.include_router(valuation_band.router,  prefix="/api/v1", tags=["valuation-band"])
 app.include_router(peer_comparison.router,  prefix="/api/v1", tags=["peer-comparison"])
 app.include_router(foreign_holding.router, prefix="/api/v1", tags=["foreign-holding"])
+app.include_router(dividends.router,       prefix="/api/v1", tags=["dividends"])
+app.include_router(ai_analysis.router,     prefix="/api/v1", tags=["ai-analysis"])
+app.include_router(compare.router,         prefix="/api/v1", tags=["compare"])
+app.include_router(earnings.router,        prefix="/api/v1", tags=["earnings"])
 app.include_router(ws.router,              tags=["websocket"])
 
 

@@ -1,6 +1,6 @@
 # StockPulse — 功能待辦清單（競品差距補強）
 
-> 最後更新：2026-06-05（UI 視覺提升：Header 指數列 + Skeleton + RightPanel 修復）
+> 最後更新：2026-06-05（P2 #9 AI技術分析解讀 + #14 多股比較 + #10 Earnings Surprise）
 > 依據：與 TradingView、Yahoo Finance、富途牛牛、鉅亨網、台灣股市資訊網的競品差距分析
 
 ---
@@ -128,15 +128,15 @@
 
 ## 🟡 P2 — 加分項（拉開差距）
 
-### [ ] 9. AI 技術分析解讀（結合現有 Gemini）
+### [x] 9. AI 技術分析解讀（結合現有 Gemini）
 - 點擊「AI 解讀」→ Gemini 結合 RSI/MACD/MA 位置/法人買賣 自動生成中文分析段落
-- 後端 Gemini 已整合（digest_service.py），幾乎零新成本
-- 範例輸出：「2330 日線：RSI 42 進入超賣區，MA20 支撐在 870，外資連買 3 日，MACD 即將黃金交叉，短線偏多但量能不足。」
+- 後端：`GET /api/v1/ai-analysis/{symbol}`，快取 15 分鐘，Gemini 失敗有規則式回退
+- 前端：分析 tab 技術面頂部「🤖 AI 技術分析解讀」卡片，點擊按鈕觸發
 
-### [ ] 10. Earnings Surprise 追蹤
+### [x] 10. Earnings Surprise 追蹤
 - 實際 EPS vs 分析師預估差距（正/負驚喜）
-- Yahoo Finance 有，台股較少見 → 差異化機會
-- 資料來源：yfinance `ticker.earnings_dates`
+- 後端：`GET /api/v1/earnings/{symbol}`，快取 24 小時
+- 前端：財務報表 tab 頂部 EPS 柱狀圖 + 詳細表格（含台股無預估值說明）
 
 ### [ ] 11. Volume Profile（成交量分佈圖）
 - 價位 vs 成交量橫向分佈，找主力成本區、關鍵支撐
@@ -153,9 +153,10 @@
 - 讓用戶手機直接收推播
 - 難度：高
 
-### [ ] 14. 多股比較走勢圖
-- 同時顯示 2~4 支股票的正規化報酬走勢，做相對強弱比較
-- 難度：中
+### [x] 14. 多股比較走勢圖
+- 同時顯示 2~4 支股票的正規化報酬走勢（起始日 = 100），做相對強弱比較
+- 後端：`GET /api/v1/compare?symbols=2330,2317&period=1y`，快取 5 分鐘
+- 前端：新增「比較」主 tab，lightweight-charts 多線疊加，支援 1M/3M/6M/1Y/3Y/5Y
 
 ---
 

@@ -16,7 +16,8 @@ import type {
   ForeignHoldingResponse,
   DividendHistoryResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory, getAiAnalysis, getEarnings } from "@/lib/api";
+import type { AiAnalysisResponse, EarningsResponse } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,231 @@ function SignalBadge({ signal }: { signal: string | null | undefined }) {
     <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ color: s.color, background: s.bg }}>
       {s.label}
     </span>
+  );
+}
+
+// ── AI Analysis Section ───────────────────────────────────────────────────────
+
+function AiAnalysisSection({ symbol }: { symbol: string }) {
+  const [data,    setData]    = useState<AiAnalysisResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [shown,   setShown]   = useState(false);
+
+  const load = () => {
+    if (loading) return;
+    setShown(true);
+    setLoading(true);
+    setError(null);
+    getAiAnalysis(symbol)
+      .then(setData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  // Reset when symbol changes
+  useEffect(() => { setData(null); setError(null); setShown(false); }, [symbol]);
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}
+    >
+      <div
+        className="px-4 py-2.5 border-b flex items-center justify-between"
+        style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
+      >
+        <span className="text-xs font-bold tracking-wide uppercase" style={{ color: "var(--text-tertiary)" }}>
+          🤖 AI 技術分析解讀
+        </span>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="px-3 py-1 rounded text-xs font-semibold transition-colors"
+          style={{
+            background: loading ? "var(--bg-elevated)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+            color:      loading ? "var(--text-tertiary)" : "#fff",
+            border:     "1px solid transparent",
+            cursor:     loading ? "not-allowed" : "pointer",
+          }}
+        >
+          {loading ? "生成中..." : data ? "重新生成" : "✨ 生成 AI 解讀"}
+        </button>
+      </div>
+
+      <div className="p-4">
+        {!shown && !data && (
+          <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+            點擊「生成 AI 解讀」，Gemini 將結合 RSI / MACD / MA / 法人籌碼，
+            自動生成這檔股票的繁體中文技術分析段落。
+          </p>
+        )}
+        {loading && (
+          <div className="space-y-2">
+            {[80, 100, 65, 90, 75].map((w, i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded h-3"
+                style={{ width: `${w}%`, background: "var(--bg-elevated)", animationDelay: `${i * 60}ms` }}
+              />
+            ))}
+          </div>
+        )}
+        {error && (
+          <p className="text-xs" style={{ color: "var(--color-down)" }}>
+            生成失敗：{error}（請稍後再試）
+          </p>
+        )}
+        {data && !loading && (
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text-primary)" }}>
+              {data.analysis}
+            </p>
+            <div className="pt-2 border-t flex flex-wrap gap-3 text-[10px]" style={{ borderColor: "var(--border)", color: "var(--text-tertiary)" }}>
+              {data.meta.rsi14 != null && (
+                <span>RSI: <span className="num" style={{ color: "var(--text-secondary)" }}>{data.meta.rsi14}</span></span>
+              )}
+              <span>量比: <span className="num" style={{ color: "var(--text-secondary)" }}>{data.meta.vol_ratio}x</span></span>
+              {data.meta.ma_above.length > 0 && (
+                <span>站上: <span style={{ color: "var(--color-up)" }}>{data.meta.ma_above.join(" / ")}</span></span>
+              )}
+              <span className="ml-auto">由 Gemini 1.5 Flash 生成・僅供參考</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Earnings Surprise Section ─────────────────────────────────────────────────
+
+function EarningsSurpriseSection({
+  data,
+  loading,
+  error,
+}: {
+  data:    EarningsResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="從 Yahoo Finance 載入盈餘數據中..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data)   return null;
+
+  const surps = data.quarterly_surprise.filter(s => s.eps_actual != null);
+  if (!surps.length) {
+    return (
+      <Section title="📣 Earnings Surprise">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          {data.message ?? "暫無季度盈餘數據（可能為非上市公司或 yfinance 資料不足）"}
+        </p>
+      </Section>
+    );
+  }
+
+  const maxAbs = Math.max(...surps.map(s => Math.abs(s.eps_actual ?? 0)), 0.01);
+
+  return (
+    <Section title="📣 Earnings Surprise（EPS 預估 vs 實際）">
+      {data.message && (
+        <p className="text-[10px] mb-3 rounded px-2 py-1.5" style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
+          ℹ️ {data.message}
+        </p>
+      )}
+
+      {/* Bar chart for EPS actual */}
+      <div className="mb-4">
+        <div className="text-[10px] mb-2" style={{ color: "var(--text-tertiary)" }}>
+          實際 EPS（{data.currency}）
+        </div>
+        <div className="flex items-end gap-1.5" style={{ height: 80 }}>
+          {surps.slice(-8).map((s) => {
+            const v  = s.eps_actual ?? 0;
+            const h  = Math.max(2, (Math.abs(v) / maxAbs) * 64);
+            const up = v >= 0;
+            const surpColor =
+              s.surprise_pct != null
+                ? s.surprise_pct > 5   ? "var(--color-up)"
+                : s.surprise_pct < -5  ? "var(--color-down)"
+                : "var(--text-secondary)"
+                : "var(--text-secondary)";
+            return (
+              <div key={s.date} className="flex flex-col items-center flex-1 gap-0.5 min-w-0">
+                {s.surprise_pct != null && (
+                  <div className="text-[8px] num font-bold" style={{ color: surpColor }}>
+                    {s.surprise_pct > 0 ? "+" : ""}{s.surprise_pct.toFixed(0)}%
+                  </div>
+                )}
+                <div
+                  className="w-full rounded-t"
+                  style={{ height: h, background: up ? "var(--color-up)" : "var(--color-down)", opacity: 0.82, minHeight: 2 }}
+                  title={`EPS: ${v.toFixed(3)}\n預估: ${s.eps_estimate ?? "—"}\nSurprise: ${s.surprise_pct != null ? s.surprise_pct.toFixed(1) + "%" : "—"}`}
+                />
+                <div className="text-[8px] num" style={{ color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                  {s.date.slice(0, 7)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          <span><span style={{ color: "var(--color-up)" }}>■</span> 正 EPS</span>
+          <span><span style={{ color: "var(--color-down)" }}>■</span> 負 EPS</span>
+          {data.has_estimates && (
+            <span>柱頂數字 = Surprise %（+超預期 / -低於預期）</span>
+          )}
+        </div>
+      </div>
+
+      {/* Detail table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 360 }}>
+          <thead>
+            <tr>
+              {["日期", "實際 EPS", data.has_estimates ? "分析師預估" : null, data.has_estimates ? "驚喜幅度" : null]
+                .filter(Boolean)
+                .map(h => (
+                  <th key={h!} className="px-2 py-1.5 text-left" style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}>
+                    {h}
+                  </th>
+                ))}
+            </tr>
+          </thead>
+          <tbody>
+            {surps.slice(0, 8).map((s, i) => {
+              const surpColor =
+                s.surprise_pct != null
+                  ? s.surprise_pct > 5   ? "var(--color-up)"
+                  : s.surprise_pct < -5  ? "var(--color-down)"
+                  : "var(--text-secondary)"
+                  : "var(--text-secondary)";
+              return (
+                <tr key={s.date} style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "var(--bg-elevated)" : "transparent" }}>
+                  <td className="px-2 py-1.5 num text-[11px]" style={{ color: "var(--text-tertiary)" }}>{s.date}</td>
+                  <td className="px-2 py-1.5 num font-medium" style={{ color: (s.eps_actual ?? 0) >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
+                    {s.eps_actual != null ? s.eps_actual.toFixed(3) : "—"}
+                  </td>
+                  {data.has_estimates && (
+                    <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>
+                      {s.eps_estimate != null ? s.eps_estimate.toFixed(3) : "—"}
+                    </td>
+                  )}
+                  {data.has_estimates && (
+                    <td className="px-2 py-1.5 num font-semibold" style={{ color: surpColor }}>
+                      {s.surprise_pct != null ? `${s.surprise_pct > 0 ? "+" : ""}${s.surprise_pct.toFixed(1)}%` : "—"}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        資料來源：Yahoo Finance earnings_dates｜Surprise = (實際 - 預估) / |預估|
+      </div>
+    </Section>
   );
 }
 
@@ -1586,6 +1812,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [peerData,  setPeerData]  = useState<PeerComparisonResponse | null>(null);
   const [fhData,    setFhData]    = useState<ForeignHoldingResponse  | null>(null);
   const [divData,   setDivData]   = useState<DividendHistoryResponse | null>(null);
+  const [earnData,  setEarnData]  = useState<EarningsResponse | null>(null);
   const [customPeers, setCustomPeers] = useState("");
 
   const [techLoad, setTechLoad]   = useState(false);
@@ -1596,6 +1823,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [peerLoad, setPeerLoad]   = useState(false);
   const [fhLoad,   setFhLoad]     = useState(false);
   const [divLoad,  setDivLoad]    = useState(false);
+  const [earnLoad, setEarnLoad]   = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
@@ -1605,6 +1833,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [peerErr, setPeerErr]     = useState<string | null>(null);
   const [fhErr,   setFhErr]       = useState<string | null>(null);
   const [divErr,  setDivErr]      = useState<string | null>(null);
+  const [earnErr, setEarnErr]     = useState<string | null>(null);
 
   const loadPeers = (sym: string, peers = "") => {
     setPeerLoad(true); setPeerErr(null);
@@ -1614,8 +1843,8 @@ export default function AnalysisPanel({ symbol }: Props) {
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);  setEarnData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);   setEarnErr(null);
     setCustomPeers("");
 
     setTechLoad(true);
@@ -1640,6 +1869,9 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setDivLoad(true);
     getDividendHistory(symbol).then(setDivData).catch(e => setDivErr(e.message)).finally(() => setDivLoad(false));
+
+    setEarnLoad(true);
+    getEarnings(symbol).then(setEarnData).catch(e => setEarnErr(e.message)).finally(() => setEarnLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -1676,6 +1908,7 @@ export default function AnalysisPanel({ symbol }: Props) {
           techErr  ? <Err msg={techErr} /> :
           techData ? (
             <div className="space-y-4">
+              <AiAnalysisSection symbol={symbol} />
               <TechSection data={techData} />
               <ForeignHoldingSection data={fhData} loading={fhLoad} error={fhErr} />
             </div>
@@ -1707,7 +1940,12 @@ export default function AnalysisPanel({ symbol }: Props) {
         {tab === "financials" && (
           finLoad ? <Loading msg="載入財務報表中..." /> :
           finErr  ? <Err msg={finErr} /> :
-          finData ? <FinancialSection data={finData} /> :
+          finData ? (
+            <div className="space-y-4">
+              <EarningsSurpriseSection data={earnData} loading={earnLoad} error={earnErr} />
+              <FinancialSection data={finData} />
+            </div>
+          ) :
           <Loading msg="載入中..." />
         )}
       </div>

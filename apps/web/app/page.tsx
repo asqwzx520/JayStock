@@ -51,6 +51,11 @@ const BacktestPanel = dynamic(
   { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center" style={{ color: "var(--text-tertiary)" }}>載入回測引擎中...</div> }
 );
 
+const CompareChart = dynamic(
+  () => import("@/components/chart/CompareChart"),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+
 const AnalysisPanel = dynamic(
   () => import("@/components/analysis/AnalysisPanel"),
   { ssr: false, loading: () => <DashboardSkeleton /> }
@@ -80,7 +85,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis";
+type ViewTab   = "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis" | "compare";
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -329,7 +334,7 @@ export default function Home() {
               </svg>
             </button>
 
-            {(["kline", "chips", "market", "screener", "news", "backtest", "analysis"] as ViewTab[]).map((tab) => (
+            {(["kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
@@ -345,7 +350,8 @@ export default function Home() {
                   : tab === "screener"? "選股"
                   : tab === "news"     ? "新聞"
                   : tab === "backtest" ? "回測"
-                  : "分析"}
+                  : tab === "analysis" ? "分析"
+                  : "比較"}
               </button>
             ))}
           </div>
@@ -590,6 +596,11 @@ export default function Home() {
             {/* 分析 */}
             {viewTab === "analysis" && (
               <AnalysisPanel symbol={symbol} />
+            )}
+
+            {/* 多股比較 */}
+            {viewTab === "compare" && (
+              <CompareChart initialSymbol={symbol} />
             )}
 
             {/* 籌碼 — 融資融券 */}
