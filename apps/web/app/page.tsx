@@ -652,19 +652,18 @@ export default function Home() {
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
-        {/* 自選股 */}
+        {/* 首頁 */}
         <button
-          onClick={() => setLeftPanelOpen((v) => !v)}
+          onClick={() => { setViewTab("home"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
-          style={{ color: leftPanelOpen ? "var(--color-brand)" : "var(--text-tertiary)" }}
-          aria-label="自選股"
+          style={{ color: !leftPanelOpen && viewTab === "home" ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="首頁"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <rect x="2" y="4" width="16" height="2" rx="1" fill="currentColor"/>
-            <rect x="2" y="9" width="16" height="2" rx="1" fill="currentColor"/>
-            <rect x="2" y="14" width="16" height="2" rx="1" fill="currentColor"/>
+            <path d="M3 9.5L10 3l7 6.5V17a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+            <path d="M7 18v-5h6v5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
           </svg>
-          <span className="text-[10px] font-medium">自選</span>
+          <span className="text-[10px] font-medium">首頁</span>
         </button>
 
         {/* 走勢圖 */}
@@ -677,7 +676,22 @@ export default function Home() {
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <polyline points="2,15 6,9 10,12 14,5 18,8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          <span className="text-[10px] font-medium">圖表</span>
+          <span className="text-[10px] font-medium">走勢</span>
+        </button>
+
+        {/* 分析 */}
+        <button
+          onClick={() => { setViewTab("analysis"); setLeftPanelOpen(false); }}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
+          style={{ color: !leftPanelOpen && viewTab === "analysis" ? "var(--color-brand)" : "var(--text-tertiary)" }}
+          aria-label="分析"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M13.5 13.5 L17.5 17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M6.5 9h5M9 6.5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="text-[10px] font-medium">分析</span>
         </button>
 
         {/* 大盤 */}
@@ -704,8 +718,7 @@ export default function Home() {
           aria-label="選股"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="M13.5 13.5 L17.5 17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M3 5h14M5 10h10M7 15h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <span className="text-[10px] font-medium">選股</span>
         </button>
