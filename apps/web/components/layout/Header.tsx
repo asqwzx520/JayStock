@@ -4,8 +4,85 @@ import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { StockItem, AlertNotification, WatchlistState } from "@/lib/api";
 import { searchStocks, getMarketIndices, alertsApi, watchlistApi } from "@/lib/api";
+import { usePushNotification } from "@/hooks/usePushNotification";
 
 const AuthButton = dynamic(() => import("@/components/auth/AuthButton"), { ssr: false });
+
+// ── Web Push 訂閱按鈕 ─────────────────────────────────────────────────────────
+function PushSubscribeButton() {
+  const { isSupported, permission, isSubscribed, isLoading, subscribe, unsubscribe } =
+    usePushNotification();
+  const [tooltip, setTooltip] = useState("");
+
+  if (!isSupported || permission === "unsupported") return null;
+
+  function getUserId(): string | null {
+    try { return localStorage.getItem("stockpulse_user_id"); } catch { return null; }
+  }
+
+  async function handleClick() {
+    const userId = getUserId();
+    if (!userId) {
+      setTooltip("請先登入以啟用推播");
+      setTimeout(() => setTooltip(""), 2000);
+      return;
+    }
+    if (isSubscribed) {
+      const ok = await unsubscribe(userId);
+      setTooltip(ok ? "已取消推播通知" : "取消失敗，請重試");
+    } else {
+      if (permission === "denied") {
+        setTooltip("推播已被封鎖，請在瀏覽器設定中允許");
+        setTimeout(() => setTooltip(""), 3000);
+        return;
+      }
+      const ok = await subscribe(userId);
+      setTooltip(ok ? "✅ 推播通知已啟用" : "啟用失敗，請重試");
+    }
+    setTimeout(() => setTooltip(""), 2500);
+  }
+
+  const active = isSubscribed;
+  const label  = isSubscribed ? "關閉到價推播" : "開啟到價推播";
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleClick}
+        disabled={isLoading}
+        title={label}
+        aria-label={label}
+        className="flex items-center justify-center w-7 h-7 rounded transition-colors shrink-0"
+        style={{
+          background: active ? "rgba(59,130,246,0.15)" : "var(--bg-elevated)",
+          color:      active ? "var(--color-brand)"    : "var(--text-secondary)",
+          border:     `1px solid ${active ? "var(--color-brand)" : "var(--border)"}`,
+          opacity:    isLoading ? 0.5 : 1,
+        }}
+      >
+        {/* Bell icon */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          {active && <circle cx="18" cy="6" r="4" fill="var(--color-brand)" stroke="none"/>}
+        </svg>
+      </button>
+      {tooltip && (
+        <div
+          className="absolute right-0 top-9 z-50 whitespace-nowrap rounded px-2 py-1 text-xs"
+          style={{
+            background: "var(--bg-elevated)",
+            border:     "1px solid var(--border)",
+            color:      "var(--text-primary)",
+            boxShadow:  "0 4px 12px rgba(0,0,0,0.3)",
+          }}
+        >
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Theme Toggle ──────────────────────────────────────────────────────────────
 function useTheme() {
@@ -589,6 +666,9 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
 
           {/* Price Alert Notifications */}
           <NotificationBell />
+
+          {/* Web Push 訂閱按鈕 */}
+          <PushSubscribeButton />
 
           {/* Theme Toggle */}
           <button

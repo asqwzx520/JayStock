@@ -41,5 +41,13 @@ class Settings(BaseSettings):
     # Data / file storage
     data_dir: str = "/tmp"
 
+    # Web Push Notification (VAPID)
+    # Generate keys: openssl ecparam -name prime256v1 -genkey -noout -out vapid_private.pem
+    # then: python -c "from pywebpush import vapid; vapid.Vapid().from_file('vapid_private.pem').generate_vapid_keypair()"
+    # Or use: https://vapidkeys.com/
+    vapid_private_key: str = ""   # PEM or base64url private key
+    vapid_public_key:  str = ""   # base64url public key (sent to browser)
+    vapid_sub:         str = "mailto:admin@jaystock.app"  # contact email
+
 
 settings = Settings()

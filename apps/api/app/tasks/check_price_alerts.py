@@ -14,6 +14,23 @@ from zoneinfo import ZoneInfo
 from app.core.supabase_client import get_supabase
 from app.services.twse_fetcher import fetch_quotes
 
+
+def _schedule_push(user_id: str, symbol: str, alert_type: str, threshold: float, price: float) -> None:
+    """安排 Web Push 通知（fire-and-forget，不阻塞 alert 流程）"""
+    try:
+        import asyncio
+        from app.services.push_service import send_push_to_user
+        direction = "突破" if alert_type == "above" else "跌破"
+        asyncio.ensure_future(send_push_to_user(
+            user_id=user_id,
+            title=f"📈 {symbol} {direction}提醒",
+            body=f"{symbol} 現價 {price} 已{direction}設定值 {threshold}",
+            url=f"/?symbol={symbol}",
+            tag=f"price-alert-{symbol}",
+        ))
+    except Exception as e:
+        logger.warning("[push] 排程 push 失敗: %s", e)
+
 logger = logging.getLogger(__name__)
 
 TZ_TAIPEI = ZoneInfo("Asia/Taipei")
@@ -115,6 +132,22 @@ async def _check_via_supabase(sb) -> None:
 
     logger.info(f"[alerts] 本輪觸發 {len(notifications)} 筆通知（Supabase）")
 
+    # ── Web Push ──────────────────────────────────────────────────────────────
+    try:
+        import asyncio
+        from app.services.push_service import send_push_to_user
+        for n in notifications:
+            direction = "突破" if n["alert_type"] == "above" else "跌破"
+            asyncio.ensure_future(send_push_to_user(
+                user_id=n["user_id"],
+                title=f"📈 {n['symbol']} {direction}提醒",
+                body=f"{n['symbol']} 現價 {n['price']} 已{direction}設定值 {n['threshold']}",
+                url=f"/?symbol={n['symbol']}",
+                tag=f"price-alert-{n['symbol']}",
+            ))
+    except Exception as e:
+        logger.warning(f"[push] Web Push 排程失敗: {e}")
+
 
 async def _check_via_memory() -> None:
     """In-memory fallback：讀 watchlist._store，寫 alert_store"""
@@ -167,12 +200,14 @@ async def _check_via_memory() -> None:
                     it["price_alert_above"] = None   # 一次性提醒，清除
                     triggered += 1
                     logger.info(f"[alerts] {sym} 突破 {above}（現價 {price}）[mem]")
+                    _schedule_push(uid, sym, "above", float(above), price)
 
                 elif below is not None and price <= float(below):
                     add_notification(uid, sym, "below", float(below), price)
                     it["price_alert_below"] = None
                     triggered += 1
                     logger.info(f"[alerts] {sym} 跌破 {below}（現價 {price}）[mem]")
+                    _schedule_push(uid, sym, "below", float(below), price)
 
     if triggered:
         logger.info(f"[alerts] 本輪觸發 {triggered} 筆通知（memory）")

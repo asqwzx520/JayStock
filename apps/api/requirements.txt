@@ -21,4 +21,6 @@ pandas>=2.0.0
 numpy>=1.26.0
 pandas_ta>=0.3.14b
 lxml>=4.9.0
+# Web Push Notification (VAPID)
+pywebpush>=1.14.0
 

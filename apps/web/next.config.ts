@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
       // nonce-based or hash-based inline script.
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
+      // Service Worker registration requires worker-src
+      "worker-src 'self'",
       // News thumbnails and chart images come from external CDNs
       "img-src 'self' data: https:",
       // API calls + WebSocket quotes feed

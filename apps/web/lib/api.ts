@@ -1177,3 +1177,25 @@ export const alertRulesApi = {
   toggle: (id: string) =>
     alertsFetcher<AlertRule>(`/api/v1/alert-rules/${id}/toggle`, { method: "PATCH" }),
 };
+
+// ── Web Push ──────────────────────────────────────────────────────────────────
+
+export interface PushVapidResponse {
+  enabled:    boolean;
+  public_key: string | null;
+}
+
+export interface PushStatusResponse {
+  enabled:          boolean;
+  subscribed_count: number;
+}
+
+export function getPushVapidKey(): Promise<PushVapidResponse> {
+  return fetcher<PushVapidResponse>("/api/v1/push/vapid-public-key");
+}
+
+export function getPushStatus(userId: string): Promise<PushStatusResponse> {
+  return fetch(`${API_BASE}/api/v1/push/status`, {
+    headers: { "X-User-ID": userId },
+  }).then((r) => r.json());
+}
