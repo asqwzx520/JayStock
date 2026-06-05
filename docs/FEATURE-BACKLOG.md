@@ -1,6 +1,6 @@
 # StockPulse — 功能待辦清單（競品差距補強）
 
-> 最後更新：2026-06-05（Personal Dashboard — 首頁 Tab、批次摘要、自訂警示規則）
+> 最後更新：2026-06-06（籌碼 Tab 全面翻新、首頁 280px 自選股側欄、佈局架構重構）
 > 依據：與 TradingView、Yahoo Finance、富途牛牛、鉅亨網、台灣股市資訊網的競品差距分析
 
 ---
@@ -223,6 +223,9 @@
 | ATR / ADX / Stochastic RSI / Ichimoku 技術指標 | 前端純 TS 實作，Wilder 平滑法，Ichimoku 含時間偏移（先行/遲行帶）|
 | UptimeRobot 防冷啟動監控 | 每 14 分鐘 ping /health，防 Render 閒置休眠 |
 | **個人化首頁儀錶板（首頁 Tab）** | 自選股報價列表、今日警示 8 種信號、7日重要日期、自訂 AND/OR 警示規則（Supabase `user_alert_rules` 表已建立，持久化啟用）|
+| **佈局架構重構（`e4381ef`）** | 移除 LeftPanel/RightPanel 固定側欄；K 線圖高度修正（`h-full`）；新增「排行」主 Tab；WorkspaceModal 拖曳排序 |
+| **籌碼 Tab 全面翻新（`234cf4f`）** | 6 區塊垂直滾動；7 項加權評分環形圖（滿分 100）；三大法人累積持倉 cumsum 折線；外資持股% 雙軸圖；券商分點外資/投信/隔日沖分類（已知名單＋算法偵測）；`/chips/{symbol}/brokers?days=5/10/20` 端點；TTL 300s |
+| **首頁 280px 自選股多群組側欄（`234cf4f`）** | WatchlistSidebar 嵌入首頁 Tab；TickerTape 純大盤指數；HomeDashboard 移除重複 WatchlistBlock |
 
 ---
 
