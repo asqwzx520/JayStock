@@ -1,6 +1,6 @@
 # StockPulse — 功能待辦清單（競品差距補強）
 
-> 最後更新：2026-06-05（UptimeRobot 防冷啟動完成）
+> 最後更新：2026-06-05（UI 視覺提升：Header 指數列 + Skeleton + RightPanel 修復）
 > 依據：與 TradingView、Yahoo Finance、富途牛牛、鉅亨網、台灣股市資訊網的競品差距分析
 
 ---
@@ -177,6 +177,9 @@
 | 月營收走勢 + YoY 柱狀圖 | 台股每月 10 日公告，MOPS 來源 |
 | 外資持股比例走勢（近 12 個月） | TWSE MI_QIANW，台股專屬 |
 | 行動版 RWD 三段式佈局 | 底部 Tab bar + 側欄折疊抽屜，手機看盤可用（`1960da0`）|
+| **Header 大盤指數列（骨架 + 即時）** | IndicesBar 重構：Skeleton loading → 點位/漲跌點/漲跌幅三欄式顯示 |
+| **Skeleton 動畫全覆蓋** | 新增 `RightPanelSkeleton`；AnalysisPanel tabs 改脈衝骨架；K線/市場/選股/新聞已覆蓋 |
+| **RightPanel 寬螢幕放寬** | `hidden xl:block` → `hidden lg:block`，1024px 以上即可見，含 isLoading skeleton |
 | ATR / ADX / Stochastic RSI / Ichimoku 技術指標 | 前端純 TS 實作，Wilder 平滑法，Ichimoku 含時間偏移（先行/遲行帶）|
 | UptimeRobot 防冷啟動監控 | 每 14 分鐘 ping /health，防 Render 閒置休眠 |
 

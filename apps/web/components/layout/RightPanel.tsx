@@ -1,9 +1,11 @@
 "use client";
 
 import type { Quote } from "@/lib/api";
+import { RightPanelSkeleton } from "@/components/ui/Skeleton";
 
 interface RightPanelProps {
-  quote: Quote | null;
+  quote:      Quote | null;
+  isLoading?: boolean;
 }
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -17,7 +19,7 @@ function Row({ label, value, color }: { label: string; value: string; color?: st
   );
 }
 
-export default function RightPanel({ quote }: RightPanelProps) {
+export default function RightPanel({ quote, isLoading }: RightPanelProps) {
   const q = quote;
 
   const changeColor = q
@@ -30,14 +32,16 @@ export default function RightPanel({ quote }: RightPanelProps) {
 
   return (
     <aside
-      className="shrink-0 border-l overflow-y-auto hidden xl:block"
+      className="shrink-0 border-l overflow-y-auto hidden lg:block"
       style={{
         width: "var(--panel-right)",
         background: "var(--bg-surface)",
         borderColor: "var(--border)",
       }}
     >
-      {q ? (
+      {isLoading && !q ? (
+        <RightPanelSkeleton />
+      ) : q ? (
         <div className="p-4">
           <div className="mb-4">
             <div className="flex items-baseline gap-2 mb-1">
@@ -63,17 +67,14 @@ export default function RightPanel({ quote }: RightPanelProps) {
             </div>
           </div>
 
-          <div
-            className="border-t pt-3"
-            style={{ borderColor: "var(--border)" }}
-          >
+          <div className="border-t pt-3" style={{ borderColor: "var(--border)" }}>
             <Row label="開盤" value={q.open.toFixed(2)} />
             <Row label="最高" value={q.high.toFixed(2)} color="var(--color-up)" />
             <Row label="最低" value={q.low.toFixed(2)} color="var(--color-down)" />
             <Row label="昨收" value={q.prev_close.toFixed(2)} />
             <Row label="成交量" value={formatVolume(q.volume)} />
-            <Row label="內盤" value={q.bid.toFixed(2)} />
-            <Row label="外盤" value={q.ask.toFixed(2)} />
+            {q.bid > 0 && <Row label="內盤" value={q.bid.toFixed(2)} />}
+            {q.ask > 0 && <Row label="外盤" value={q.ask.toFixed(2)} />}
           </div>
         </div>
       ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { StockItem, IndexQuote, AlertNotification } from "@/lib/api";
 import { searchStocks, getMarketIndices, alertsApi } from "@/lib/api";
@@ -210,53 +210,77 @@ function NotificationBell() {
 // ── Market Indices Bar ────────────────────────────────────────────────────────
 function IndicesBar() {
   const [indices, setIndices] = useState<IndexQuote[]>([]);
+  const [loaded, setLoaded]   = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const res = await getMarketIndices();
-        if (!cancelled) setIndices(res.indices);
-      } catch {}
+        if (!cancelled) { setIndices(res.indices); setLoaded(true); }
+      } catch {
+        if (!cancelled) setLoaded(true);
+      }
     }
     load();
     const id = setInterval(load, 30_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
+  const barStyle: React.CSSProperties = {
+    height: "32px",
+    background: "var(--bg-elevated)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: "12px",
+  };
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center gap-6 px-4 overflow-x-auto shrink-0" style={barStyle}>
+        {[72, 88, 64].map((w, i) => (
+          <div key={i} className="flex items-center gap-2 shrink-0">
+            <div className="animate-pulse rounded" style={{ width: "60px", height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100}ms` }} />
+            <div className="animate-pulse rounded" style={{ width: `${w}px`, height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100 + 50}ms` }} />
+            <div className="animate-pulse rounded" style={{ width: "52px", height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100 + 100}ms` }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (indices.length === 0) return null;
 
   return (
-    <div
-      className="flex items-center gap-5 px-4 overflow-x-auto shrink-0"
-      style={{
-        height: "28px",
-        background: "var(--bg-elevated)",
-        borderBottom: "1px solid var(--border)",
-        fontSize: "11px",
-      }}
-    >
-      {indices.map((idx) => {
-        const pct = idx.change_pct;
-        const color =
-          pct == null ? "var(--text-secondary)"
-          : pct > 0   ? "var(--color-up)"
-          : pct < 0   ? "var(--color-down)"
-          :              "var(--text-secondary)";
-        const arrow = pct == null ? "" : pct > 0 ? "▲" : pct < 0 ? "▼" : "";
+    <div className="flex items-center overflow-x-auto shrink-0" style={barStyle}>
+      {indices.map((idx, i) => {
+        const changePct = idx.change_pct;
+        const changePts = idx.change;
+        const isUp   = changePct != null && changePct > 0;
+        const isDown = changePct != null && changePct < 0;
+        const color  = isUp ? "var(--color-up)" : isDown ? "var(--color-down)" : "var(--text-secondary)";
+        const arrow  = isUp ? "▲" : isDown ? "▼" : "";
         return (
-          <div key={idx.id} className="flex items-center gap-1 shrink-0">
+          <div
+            key={idx.id}
+            className="flex items-center gap-2 shrink-0 px-4"
+            style={{
+              height: "100%",
+              borderLeft: i > 0 ? "1px solid var(--border)" : "none",
+            }}
+          >
             <span style={{ color: "var(--text-tertiary)" }}>
               {idx.flag} {idx.name}
             </span>
             {idx.price != null && (
-              <span className="num font-medium" style={{ color: "var(--text-primary)" }}>
+              <span className="num font-semibold" style={{ color: "var(--text-primary)" }}>
                 {idx.price.toLocaleString()}
               </span>
             )}
-            {pct != null && (
-              <span className="num" style={{ color }}>
-                {arrow}{Math.abs(pct).toFixed(2)}%
+            {(changePts != null || changePct != null) && (
+              <span className="num" style={{ color, letterSpacing: "0.01em" }}>
+                {arrow}
+                {changePts != null && Math.abs(changePts).toFixed(2)}
+                {changePct != null && ` (${Math.abs(changePct).toFixed(2)}%)`}
               </span>
             )}
           </div>

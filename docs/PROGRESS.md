@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
 > **更新日期：** 2026-06-05  
-> **當前版本：** commit `41e7233`（基本面補強 + 股利歷史）  
+> **當前版本：** commit `321b949`（ATR/ADX/Stochastic RSI/Ichimoku 指標）→ UI 視覺提升（Header 指數列骨架、Skeleton 動畫、RightPanel lg 顯示）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -103,10 +103,10 @@
 
 | 問題 | 位置 | 改法 |
 |------|------|------|
-| **Header 無大盤指數** | `Header.tsx` | 加入 TWII + 美股三大指數即時跳動列 |
+| ~~**Header 無大盤指數**~~ | `Header.tsx` | ✅ 已完成：IndicesBar 顯示骨架動畫 → 即時點位/漲跌點/漲跌幅（`IndicesBar` 重構）|
 | **Tab 顯示英文代碼** | `page.tsx` tab labels | 改為「走勢圖 / 籌碼 / 大盤 / 選股 / 新聞」中文標籤（✅ 已修） |
-| **載入動畫太陽春** | 所有 dynamic import | 改用 CSS Skeleton 動畫取代純文字「載入中…」 |
-| **RightPanel 隱藏** | `RightPanel.tsx` `hidden xl:block` | 改為 `lg:block` 或整合進主要佈局 |
+| ~~**載入動畫太陽春**~~ | 所有 dynamic import | ✅ 已完成：CSS Skeleton 動畫覆蓋 K線/市場/選股/新聞/分析，新增 `RightPanelSkeleton`，AnalysisPanel 替換 ⏳ spinner |
+| ~~**RightPanel 隱藏**~~ | `RightPanel.tsx` `hidden xl:block` | ✅ 已修：改為 `hidden lg:block`（1024px+ 顯示），新增 isLoading skeleton |
 | **無基本面摘要列** | 工具列下方空白 | 在 K線圖上方加一列：市值 / P/E / EPS / 52週高低 |
 | **Toolbar 太擁擠** | `page.tsx` | 主 tab 與圖表控制同一列（✅ 已拆成兩列）|
 | **登入按鈕位置怪** | `Header.tsx` | AuthButton 非最右側（✅ 已修，ml-auto 推到右邊）|

@@ -613,7 +613,7 @@ export default function Home() {
           <div className="md:hidden shrink-0 h-14" />
         </main>
 
-        <RightPanel quote={quote} />
+        <RightPanel quote={quote} isLoading={loading} />
       </div>
 
       {/* ── 底部 Tab Bar（手機版 < 768px 專用）── */}

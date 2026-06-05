@@ -14,8 +14,9 @@ import type {
   PeerComparisonResponse,
   ForeignHoldingItem,
   ForeignHoldingResponse,
+  DividendHistoryResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1378,6 +1379,196 @@ function FinancialSection({ data }: { data: FinancialsData }) {
   );
 }
 
+// ── Dividend History Section ──────────────────────────────────────────────────
+
+function DividendHistorySection({
+  data,
+  loading,
+  error,
+}: {
+  data:    DividendHistoryResponse | null;
+  loading: boolean;
+  error:   string | null;
+}) {
+  if (loading) return <Loading msg="從 yfinance 載入股利歷史中..." />;
+  if (error)   return <Err msg={error} />;
+  if (!data)   return null;
+
+  if (!data.annual.length) {
+    return (
+      <Section title="💰 股利歷史（近 10 年）">
+        <p className="text-xs py-2" style={{ color: "var(--text-tertiary)" }}>
+          暫無配息紀錄（可能為不配息成長股，或 yfinance 無此資料）
+        </p>
+      </Section>
+    );
+  }
+
+  const items = data.annual;
+  const maxDiv   = Math.max(...items.map(d => d.total_dividend ?? 0), 0.01);
+  const yieldVals = items.filter(d => d.yield_pct != null).map(d => d.yield_pct!);
+  const maxYield  = Math.max(...yieldVals, 1);
+
+  const BAR_CLR  = "#f59e0b";
+  const LINE_CLR = "#22c55e";
+
+  const W = 560, H = 150;
+  const PAD = { t: 20, r: 50, b: 28, l: 44 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+  const n  = items.length;
+  const barW = Math.max(8, Math.floor(iW / n) - 4);
+
+  const toX      = (i: number) => PAD.l + (i + 0.5) * (iW / n);
+  const toDivY   = (v: number) => PAD.t + (1 - v / maxDiv)   * iH;
+  const toYieldY = (v: number) => PAD.t + (1 - v / maxYield) * iH;
+
+  const yieldPts = items
+    .map((d, i) => d.yield_pct != null ? `${toX(i)},${toYieldY(d.yield_pct)}` : null)
+    .filter(Boolean).join(" ");
+
+  const yTicks = [0, 0.5, 1].map(r => ({
+    y:     PAD.t + (1 - r) * iH,
+    label: (r * maxDiv).toFixed(2),
+  }));
+
+  return (
+    <div className="space-y-4">
+      <Section title="💰 股利歷史（近 10 年）">
+        {/* Summary cards */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>連續配息年數</div>
+            <div className="text-lg num font-bold"
+              style={{ color: data.consecutive_years >= 10 ? "var(--color-up)" : "var(--text-primary)" }}>
+              {data.consecutive_years > 0 ? `${data.consecutive_years} 年` : "—"}
+            </div>
+          </div>
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>當前殖利率</div>
+            <div className="text-lg num font-bold"
+              style={{ color: data.latest_yield != null && data.latest_yield >= 4 ? "var(--color-up)" : "var(--text-primary)" }}>
+              {data.latest_yield != null ? `${data.latest_yield.toFixed(2)}%` : "—"}
+            </div>
+          </div>
+          <div className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>下次除息日</div>
+            <div className="text-sm num font-bold">{data.next_ex_date ?? "—"}</div>
+            {data.next_dividend != null && (
+              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                每股 {data.next_dividend.toFixed(2)} {data.currency}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Combined bar (dividend) + line (yield) chart */}
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} aria-label="股利歷史圖">
+          {/* Grid + left Y ticks (dividend) */}
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={PAD.l} x2={W - PAD.r} y1={t.y} y2={t.y}
+                stroke="var(--border)" strokeWidth={0.5} />
+              <text x={PAD.l - 4} y={t.y + 3} textAnchor="end" fontSize={8} fill="var(--text-tertiary)">
+                {t.label}
+              </text>
+            </g>
+          ))}
+
+          {/* Bars: annual dividend */}
+          {items.map((d, i) => {
+            const v    = d.total_dividend ?? 0;
+            const barH = Math.max(2, (v / maxDiv) * iH);
+            const x    = toX(i) - barW / 2;
+            const y    = PAD.t + iH - barH;
+            return (
+              <rect key={d.year} x={x} y={y} width={barW} height={barH}
+                fill={BAR_CLR} opacity={0.82} rx={2}>
+                <title>{`${d.year}: ${data.currency} ${v.toFixed(2)}`}</title>
+              </rect>
+            );
+          })}
+
+          {/* Line: yield % */}
+          {yieldPts && (
+            <polyline points={yieldPts} fill="none"
+              stroke={LINE_CLR} strokeWidth={2} strokeLinejoin="round" />
+          )}
+          {items.map((d, i) =>
+            d.yield_pct != null ? (
+              <circle key={`dot-${d.year}`}
+                cx={toX(i)} cy={toYieldY(d.yield_pct)}
+                r={3} fill={LINE_CLR} />
+            ) : null
+          )}
+
+          {/* Right Y label (yield %) */}
+          <text x={W - PAD.r + 4} y={PAD.t + 10} fontSize={8} fill={LINE_CLR}>%</text>
+
+          {/* X labels */}
+          {items.map((d, i) => (
+            <text key={`xl-${d.year}`} x={toX(i)} y={H - 4}
+              textAnchor="middle" fontSize={8} fill="var(--text-tertiary)">
+              {d.year}
+            </text>
+          ))}
+
+          <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={PAD.t + iH}
+            stroke="var(--border)" strokeWidth={0.5} />
+        </svg>
+
+        <div className="flex items-center gap-4 mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          <span><span style={{ color: BAR_CLR }}>■</span> 每股股利（{data.currency}）</span>
+          <span><span style={{ color: LINE_CLR }}>─</span> 殖利率（%，右軸）</span>
+          <span className="ml-auto">資料來源：Yahoo Finance</span>
+        </div>
+      </Section>
+
+      {/* Detail table */}
+      <Section title="📋 年度股利明細">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" style={{ minWidth: 380 }}>
+            <thead>
+              <tr>
+                {["年度", `每股股利（${data.currency}）`, "殖利率", "配息次數", "除息日"].map(h => (
+                  <th key={h} className="px-2 py-1.5 text-left"
+                    style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...items].reverse().map((d, i) => (
+                <tr key={d.year}
+                  style={{ borderBottom: "1px solid var(--border)", background: i % 2 ? "var(--bg-elevated)" : "transparent" }}>
+                  <td className="px-2 py-1.5 num font-medium">{d.year}</td>
+                  <td className="px-2 py-1.5 num" style={{ color: BAR_CLR }}>
+                    {d.total_dividend != null ? d.total_dividend.toFixed(2) : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 num"
+                    style={{ color: d.yield_pct != null ? (d.yield_pct >= 4 ? "var(--color-up)" : "var(--text-primary)") : "var(--text-tertiary)" }}>
+                    {d.yield_pct != null ? `${d.yield_pct.toFixed(2)}%` : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>
+                    {d.payments}
+                  </td>
+                  <td className="px-2 py-1.5 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                    {d.dates.join("、") || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+          殖利率計算基準：除息年年底收盤價。資料來源：Yahoo Finance。
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 type AnalysisTab = "technical" | "fundamental" | "financials";
@@ -1394,6 +1585,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [bandData,  setBandData]  = useState<ValuationBandResponse  | null>(null);
   const [peerData,  setPeerData]  = useState<PeerComparisonResponse | null>(null);
   const [fhData,    setFhData]    = useState<ForeignHoldingResponse  | null>(null);
+  const [divData,   setDivData]   = useState<DividendHistoryResponse | null>(null);
   const [customPeers, setCustomPeers] = useState("");
 
   const [techLoad, setTechLoad]   = useState(false);
@@ -1403,6 +1595,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [bandLoad, setBandLoad]   = useState(false);
   const [peerLoad, setPeerLoad]   = useState(false);
   const [fhLoad,   setFhLoad]     = useState(false);
+  const [divLoad,  setDivLoad]    = useState(false);
 
   const [techErr, setTechErr]     = useState<string | null>(null);
   const [fundErr, setFundErr]     = useState<string | null>(null);
@@ -1411,6 +1604,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [bandErr, setBandErr]     = useState<string | null>(null);
   const [peerErr, setPeerErr]     = useState<string | null>(null);
   const [fhErr,   setFhErr]       = useState<string | null>(null);
+  const [divErr,  setDivErr]      = useState<string | null>(null);
 
   const loadPeers = (sym: string, peers = "") => {
     setPeerLoad(true); setPeerErr(null);
@@ -1420,8 +1614,8 @@ export default function AnalysisPanel({ symbol }: Props) {
 
   // Load on symbol change
   useEffect(() => {
-    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);
-    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);
+    setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);
+    setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);
     setCustomPeers("");
 
     setTechLoad(true);
@@ -1443,6 +1637,9 @@ export default function AnalysisPanel({ symbol }: Props) {
 
     setFhLoad(true);
     getForeignHolding(symbol).then(setFhData).catch(e => setFhErr(e.message)).finally(() => setFhLoad(false));
+
+    setDivLoad(true);
+    getDividendHistory(symbol).then(setDivData).catch(e => setDivErr(e.message)).finally(() => setDivLoad(false));
   }, [symbol]);
 
   const TABS: { id: AnalysisTab; label: string }[] = [
@@ -1493,6 +1690,7 @@ export default function AnalysisPanel({ symbol }: Props) {
           fundData ? (
             <div className="space-y-4">
               <FundSection data={fundData} />
+              <DividendHistorySection data={divData} loading={divLoad} error={divErr} />
               <ValuationBandSection  data={bandData} loading={bandLoad} error={bandErr} />
               <MonthlyRevenueSection data={revData}  loading={revLoad}  error={revErr}  />
               <PeerComparisonSection
@@ -1517,10 +1715,15 @@ export default function AnalysisPanel({ symbol }: Props) {
   );
 }
 
-function Loading({ msg }: { msg: string }) {
+function Loading({ msg: _msg }: { msg: string }) {
   return (
-    <div className="flex items-center justify-center h-48 gap-2 text-sm" style={{ color: "var(--text-tertiary)" }}>
-      <span className="animate-spin">⏳</span> {msg}
+    <div className="py-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex justify-between py-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="animate-pulse rounded" style={{ width: "38%", height: "10px", background: "var(--bg-elevated)", animationDelay: `${i * 50}ms` }} />
+          <div className="animate-pulse rounded" style={{ width: "26%", height: "10px", background: "var(--bg-elevated)", animationDelay: `${i * 50 + 25}ms` }} />
+        </div>
+      ))}
     </div>
   );
 }

@@ -128,6 +128,31 @@ export function NewsListSkeleton() {
   );
 }
 
+/** Right panel stock quote skeleton */
+export function RightPanelSkeleton() {
+  return (
+    <div className="p-4 flex flex-col">
+      <div className="flex items-center gap-2 mb-3">
+        <Bar w="40px" h="11px" />
+        <Bar w="72px" h="11px" />
+      </div>
+      <Bar w="110px" h="30px" radius="6px" />
+      <div className="flex gap-2 mt-2 mb-1">
+        <Bar w="80px" h="13px" />
+        <Bar w="60px" h="13px" />
+      </div>
+      <Bar w="70px" h="10px" />
+      <div className="mt-4 mb-1" style={{ height: "1px", background: "var(--border)" }} />
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div key={i} className="flex justify-between py-1.5">
+          <div className="animate-pulse rounded" style={{ width: "32%", height: "11px", background: "var(--bg-elevated)", animationDelay: `${i * 60}ms` }} />
+          <div className="animate-pulse rounded" style={{ width: "38%", height: "11px", background: "var(--bg-elevated)", animationDelay: `${i * 60 + 30}ms` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Table rows skeleton — for screener */
 export function TableSkeleton({ rows = 8 }: { rows?: number }) {
   const cols = [15, 12, 10, 10, 10, 10, 10, 10];
