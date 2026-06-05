@@ -222,7 +222,7 @@
 | **RightPanel 寬螢幕放寬** | `hidden xl:block` → `hidden lg:block`，1024px 以上即可見，含 isLoading skeleton |
 | ATR / ADX / Stochastic RSI / Ichimoku 技術指標 | 前端純 TS 實作，Wilder 平滑法，Ichimoku 含時間偏移（先行/遲行帶）|
 | UptimeRobot 防冷啟動監控 | 每 14 分鐘 ping /health，防 Render 閒置休眠 |
-| **個人化首頁儀錶板（首頁 Tab）** | 自選股報價列表、今日警示 8 種信號、7日重要日期、自訂 AND/OR 警示規則（Supabase 持久化）|
+| **個人化首頁儀錶板（首頁 Tab）** | 自選股報價列表、今日警示 8 種信號、7日重要日期、自訂 AND/OR 警示規則（Supabase `user_alert_rules` 表已建立，持久化啟用）|
 
 ---
 
