@@ -363,9 +363,11 @@ function TickerTape() {
 
 interface HeaderProps {
   onSelectStock: (symbol: string, name: string) => void;
+  currentSymbol?: string;
+  currentName?: string;
 }
 
-export default function Header({ onSelectStock }: HeaderProps) {
+export default function Header({ onSelectStock, currentSymbol, currentName }: HeaderProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -373,6 +375,41 @@ export default function Header({ onSelectStock }: HeaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { theme, toggle } = useTheme();
+
+  // ── 自選股快速浮層 ────────────────────────────────────────────────────────
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
+  const watchlistPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // 先讀 localStorage 快速顯示
+    try {
+      const raw = localStorage.getItem("stockpulse_watchlist_v2");
+      if (raw) {
+        const state = JSON.parse(raw) as { items?: Record<string, { symbol: string }[]>; groups?: unknown[] };
+        if (state.items) {
+          const syms = Object.values(state.items).flat().map((i) => i.symbol);
+          setWatchlistSymbols(syms);
+        }
+      }
+    } catch {}
+    // 再從 Supabase 同步
+    watchlistApi.get().then((remote) => {
+      const syms = Object.values(remote.items).flat().map((i) => i.symbol);
+      setWatchlistSymbols(syms);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!watchlistOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (watchlistPanelRef.current && !watchlistPanelRef.current.contains(e.target as Node)) {
+        setWatchlistOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [watchlistOpen]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -453,6 +490,26 @@ export default function Header({ onSelectStock }: HeaderProps) {
           />
         </div>
 
+        {/* 當前股票 chip */}
+        {currentSymbol && (
+          <div
+            className="flex items-center gap-2 shrink-0 px-2 py-1"
+            style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "12px",
+            }}
+          >
+            <span className="num font-bold" style={{ color: "var(--color-brand)", letterSpacing: "0.05em" }}>
+              {currentSymbol}
+            </span>
+            {currentName && (
+              <span style={{ color: "var(--text-secondary)" }}>{currentName}</span>
+            )}
+          </div>
+        )}
+
         {/* 分隔 */}
         <div style={{ width: "1px", height: "18px", background: "var(--border)", flexShrink: 0 }} />
 
@@ -506,8 +563,82 @@ export default function Header({ onSelectStock }: HeaderProps) {
           )}
         </div>
 
+        {/* 自選股快速浮層 */}
+        <div className="ml-auto relative" ref={watchlistPanelRef}>
+          <button
+            onClick={() => setWatchlistOpen((v) => !v)}
+            title="快速切換自選股"
+            className="flex items-center gap-1.5 h-7 px-3 transition-colors shrink-0"
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: watchlistOpen ? "var(--color-brand)" : "var(--text-secondary)",
+              background: watchlistOpen ? "rgba(59,130,246,0.1)" : "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+            }}
+          >
+            ☆ 自選股
+            {watchlistSymbols.length > 0 && (
+              <span className="num" style={{ color: "var(--text-tertiary)", fontSize: "10px" }}>
+                ({watchlistSymbols.length})
+              </span>
+            )}
+          </button>
+
+          {watchlistOpen && (
+            <div
+              className="absolute right-0 top-full mt-1.5 overflow-hidden z-50"
+              style={{
+                width: "180px",
+                maxHeight: "320px",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-strong)",
+                borderRadius: "var(--radius-md)",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
+                overflowY: "auto",
+              }}
+            >
+              <div className="px-3 py-2 border-b" style={{ borderColor: "var(--border)", fontSize: "10px", color: "var(--text-tertiary)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                自選股
+              </div>
+              {watchlistSymbols.length === 0 ? (
+                <div className="px-3 py-4 text-center" style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                  尚未加入自選股
+                </div>
+              ) : (
+                watchlistSymbols.map((sym) => (
+                  <button
+                    key={sym}
+                    onClick={() => { onSelectStock(sym, ""); setWatchlistOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 border-b transition-colors"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: sym === currentSymbol ? "rgba(59,130,246,0.08)" : "transparent",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <span
+                      className="num font-bold"
+                      style={{
+                        color: sym === currentSymbol ? "var(--color-brand)" : "var(--text-primary)",
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      {sym}
+                    </span>
+                    {sym === currentSymbol && (
+                      <span style={{ fontSize: "9px", color: "var(--color-brand)", marginLeft: "auto" }}>▶</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Google 登入/登出按鈕 */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <AuthButton />
 
           {/* Price Alert Notifications */}

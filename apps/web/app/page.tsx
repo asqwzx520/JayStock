@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/layout/Header";
-import LeftPanel from "@/components/layout/LeftPanel";
-import RightPanel from "@/components/layout/RightPanel";
 import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
+import { useTabConfig } from "@/hooks/useTabConfig";
+import type { ViewTab } from "@/hooks/useTabConfig";
 // Type-only imports (erased at runtime — safe to keep static)
 import type { IndicatorType, ChartType, DrawingTool } from "@/components/chart/KLineChart";
 import type { Period }                   from "@/components/chart/PeriodSelector";
@@ -65,6 +65,16 @@ const AnalysisPanel = dynamic(
   () => import("@/components/analysis/AnalysisPanel"),
   { ssr: false, loading: () => <DashboardSkeleton /> }
 );
+
+const HotRanking = dynamic(
+  () => import("@/components/market/HotRanking"),
+  { ssr: false, loading: () => <TableSkeleton rows={10} /> }
+);
+
+const WorkspaceModal = dynamic(
+  () => import("@/components/ui/WorkspaceModal"),
+  { ssr: false }
+);
 import {
   getQuote,
   getKline,
@@ -90,7 +100,7 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-type ViewTab   = "home" | "kline" | "chips" | "market" | "screener" | "news" | "backtest" | "analysis" | "compare";
+// ViewTab type is imported from @/hooks/useTabConfig
 type ChipsSubTab = "institutional" | "margin";
 
 const CHIPS_DAYS = [20, 60, 120] as const;
@@ -186,13 +196,12 @@ export default function Home() {
   const [activeTool, setActiveTool]   = useState<DrawingTool>("cursor");
   const [drawingClearKey, setDrawingClearKey] = useState(0);
 
-  // 手機版左側 Drawer
-  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
+  // 自訂工作區 Modal
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const { tabs, visibleTabs, reorder, toggleVisible } = useTabConfig();
 
-  useEffect(() => {
-    document.body.style.overflow = leftPanelOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [leftPanelOpen]);
+  // 手機版：已移除 LeftPanel Drawer，保留狀態供底部 nav 用
+  const [leftPanelOpen, setLeftPanelOpen] = useState(false);
 
   // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
@@ -308,16 +317,13 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header onSelectStock={handleSelectStock} />
+      <Header
+        onSelectStock={handleSelectStock}
+        currentSymbol={symbol}
+        currentName={stockName}
+      />
 
       <div className="flex flex-1 min-h-0">
-        <LeftPanel
-          currentSymbol={symbol}
-          onSelectStock={(sym) => handleSelectStock(sym)}
-          drawerOpen={leftPanelOpen}
-          onDrawerClose={() => setLeftPanelOpen(false)}
-        />
-
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
 
           {/* ── Row 1：主導航 Tab ──────────────────────── */}
@@ -329,34 +335,12 @@ export default function Home() {
               height: "36px",
             }}
           >
-            {/* 漢堡按鈕（手機版專用，< 768px） */}
-            <button
-              onClick={() => setLeftPanelOpen(true)}
-              className="md:hidden shrink-0 flex items-center justify-center w-10"
-              style={{
-                color: "var(--text-tertiary)",
-                borderRight: "1px solid var(--border)",
-              }}
-              aria-label="開啟自選股"
-            >
-              <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                <rect y="3" width="18" height="2" rx="1" fill="currentColor"/>
-                <rect y="8" width="18" height="2" rx="1" fill="currentColor"/>
-                <rect y="13" width="18" height="2" rx="1" fill="currentColor"/>
-              </svg>
-            </button>
-
-            {(["home", "kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => {
-              const isActive = viewTab === tab;
-              const TAB_LABELS: Record<ViewTab, string> = {
-                home: "首頁", kline: "走勢圖", chips: "籌碼",
-                market: "大盤", screener: "選股", news: "新聞",
-                backtest: "回測", analysis: "分析", compare: "比較",
-              };
+            {visibleTabs.map((tab) => {
+              const isActive = viewTab === tab.id;
               return (
                 <button
-                  key={tab}
-                  onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
+                  key={tab.id}
+                  onClick={() => setViewTab(tab.id)}
                   className="shrink-0 flex items-center px-4 transition-colors"
                   style={{
                     height: "100%",
@@ -369,10 +353,25 @@ export default function Home() {
                     borderRight: "1px solid var(--border)",
                   }}
                 >
-                  {TAB_LABELS[tab]}
+                  {tab.label}
                 </button>
               );
             })}
+
+            {/* ⚙ 自訂工作區按鈕 */}
+            <button
+              onClick={() => setWorkspaceOpen(true)}
+              title="自訂 Tab 排序與顯示"
+              className="shrink-0 flex items-center justify-center ml-auto px-3 transition-colors"
+              style={{
+                height: "100%",
+                fontSize: "13px",
+                color: "var(--text-tertiary)",
+                borderLeft: "1px solid var(--border)",
+              }}
+            >
+              ⚙
+            </button>
           </div>
 
           {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
@@ -535,47 +534,167 @@ export default function Home() {
               />
             )}
 
-            {/* K 線 */}
+            {/* K 線 — 左側資訊欄 + 圖表 */}
             {viewTab === "kline" && (
-              <>
-                {loading && klineData.length === 0 && <ChartSkeleton />}
-                {error && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--color-up)" }}>{error}</span>
-                  </div>
-                )}
-                {klineData.length > 0 && (
-                  <>
-                    <KLineChart
-                      data={klineData}
-                      indicators={indicators}
-                      chipsData={klineChipsData}
-                      chartType={chartType}
-                      activeTool={activeTool}
-                      clearKey={drawingClearKey}
-                      symbol={symbol}
-                    />
-                    {/* Chip-lane labels when overlay active */}
-                    {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
-                      <div className="pointer-events-none absolute z-10 left-2 flex flex-col"
-                           style={{ bottom: "2%", gap: "7.5%" }}>
+              <div className="flex flex-1 min-h-0 overflow-hidden">
+
+                {/* 左側資訊欄（190px，桌面版才顯示）*/}
+                <aside
+                  className="hidden md:flex flex-col shrink-0 overflow-y-auto border-r"
+                  style={{
+                    width: "190px",
+                    background: "var(--bg-surface)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  {quote ? (
+                    <div className="p-3 flex flex-col gap-4">
+                      {/* ① 即時報價 */}
+                      <div>
+                        <div className="text-[9px] font-bold tracking-widest mb-2"
+                             style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                          即時報價
+                        </div>
+                        <div className="num font-black"
+                             style={{
+                               fontSize: "26px",
+                               lineHeight: 1,
+                               letterSpacing: "-1px",
+                               color: quote.change > 0 ? "var(--color-up)" : quote.change < 0 ? "var(--color-down)" : "var(--text-primary)",
+                             }}>
+                          {quote.price.toFixed(2)}
+                        </div>
+                        <div className="num mt-1 text-xs font-semibold"
+                             style={{
+                               color: quote.change > 0 ? "var(--color-up)" : quote.change < 0 ? "var(--color-down)" : "var(--text-secondary)",
+                             }}>
+                          {quote.change > 0 ? "▲" : quote.change < 0 ? "▼" : "—"}
+                          {" "}{Math.abs(quote.change).toFixed(2)}
+                          {" "}({quote.change_pct > 0 ? "+" : ""}{quote.change_pct.toFixed(2)}%)
+                        </div>
+                      </div>
+
+                      {/* ② 今日行情 */}
+                      <div>
+                        <div className="text-[9px] font-bold tracking-widest mb-2"
+                             style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                          今日行情
+                        </div>
                         {[
-                          { label: "自營", color: "#06B6D4" },
-                          { label: "投信", color: "#8B5CF6" },
-                          { label: "外資", color: "#F59E0B" },
-                        ].map((l) => (
-                          <div key={l.label}
-                               className="text-[9px] font-semibold"
-                               style={{ color: l.color }}>
-                            {l.label}
+                          { label: "開盤", value: quote.open?.toFixed(2) ?? "--" },
+                          { label: "最高", value: quote.high?.toFixed(2) ?? "--", color: "var(--color-up)" },
+                          { label: "最低", value: quote.low?.toFixed(2) ?? "--", color: "var(--color-down)" },
+                          { label: "成交量", value: quote.volume ? `${(quote.volume / 1000).toFixed(0)}張` : "--" },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="flex justify-between items-center py-1 border-b"
+                               style={{ borderColor: "var(--border)", fontSize: "11.5px" }}>
+                            <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
+                            <span className="num font-semibold" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
                           </div>
                         ))}
                       </div>
-                    )}
-                  </>
-                )}
-              </>
+
+                      {/* ③ 三大法人（最新一日）*/}
+                      {klineChipsData.length > 0 && (() => {
+                        const last = klineChipsData[klineChipsData.length - 1];
+                        return (
+                          <div>
+                            <div className="text-[9px] font-bold tracking-widest mb-2"
+                                 style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                              三大法人
+                            </div>
+                            {[
+                              { label: "外資", value: last.foreign_net, color: "#F59E0B" },
+                              { label: "投信", value: last.trust_net,   color: "#8B5CF6" },
+                              { label: "自營", value: last.dealer_net,  color: "#06B6D4" },
+                            ].map(({ label, value, color }) => {
+                              const v = value ?? 0;
+                              const fmt = v >= 0 ? `+${(v/1e8).toFixed(1)}億` : `${(v/1e8).toFixed(1)}億`;
+                              return (
+                                <div key={label} className="flex justify-between items-center py-1 border-b"
+                                     style={{ borderColor: "var(--border)", fontSize: "11.5px" }}>
+                                  <span style={{ color }}>{label}</span>
+                                  <span className="num font-semibold"
+                                        style={{ color: v >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
+                                    {fmt}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ④ 技術指標快讀 */}
+                      {fundamental && (
+                        <div>
+                          <div className="text-[9px] font-bold tracking-widest mb-2"
+                               style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                            基本面
+                          </div>
+                          {[
+                            { label: "本益比",  value: fundamental.pe_trailing != null ? fundamental.pe_trailing.toFixed(1) : "--" },
+                            { label: "EPS",     value: fundamental.eps_trailing != null ? fundamental.eps_trailing.toFixed(2) : "--",
+                              color: fundamental.eps_trailing != null && fundamental.eps_trailing >= 0 ? "var(--color-up)" : "var(--color-down)" },
+                            { label: "殖利率",  value: fundamental.dividend_yield != null ? `${fundamental.dividend_yield.toFixed(2)}%` : "--" },
+                            { label: "Beta",    value: fundamental.beta != null ? fundamental.beta.toFixed(2) : "--" },
+                          ].map(({ label, value, color }) => (
+                            <div key={label} className="flex justify-between items-center py-1 border-b"
+                                 style={{ borderColor: "var(--border)", fontSize: "11.5px" }}>
+                              <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
+                              <span className="num font-semibold" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 flex flex-col gap-2">
+                      {[60, 80, 70, 50, 75, 65].map((w, i) => (
+                        <div key={i} className="animate-pulse rounded"
+                             style={{ height: "12px", width: `${w}%`, background: "var(--bg-elevated)" }} />
+                      ))}
+                    </div>
+                  )}
+                </aside>
+
+                {/* 圖表區 */}
+                <div className="flex-1 relative min-w-0 min-h-0">
+                  {loading && klineData.length === 0 && <ChartSkeleton />}
+                  {error && (
+                    <div className="absolute inset-0 flex items-center justify-center z-10"
+                      style={{ background: "var(--bg-surface)" }}>
+                      <span style={{ color: "var(--color-up)" }}>{error}</span>
+                    </div>
+                  )}
+                  {klineData.length > 0 && (
+                    <>
+                      <KLineChart
+                        data={klineData}
+                        indicators={indicators}
+                        chipsData={klineChipsData}
+                        chartType={chartType}
+                        activeTool={activeTool}
+                        clearKey={drawingClearKey}
+                        symbol={symbol}
+                      />
+                      {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
+                        <div className="pointer-events-none absolute z-10 left-2 flex flex-col"
+                             style={{ bottom: "2%", gap: "7.5%" }}>
+                          {[
+                            { label: "自營", color: "#06B6D4" },
+                            { label: "投信", color: "#8B5CF6" },
+                            { label: "外資", color: "#F59E0B" },
+                          ].map((l) => (
+                            <div key={l.label} className="text-[9px] font-semibold"
+                                 style={{ color: l.color }}>{l.label}</div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* 籌碼 — 三大法人 */}
@@ -592,6 +711,16 @@ export default function Home() {
                   <ChipsChart data={chipsData} cumulative={chipsCumul} />
                 )}
               </>
+            )}
+
+            {/* 熱門排行 */}
+            {viewTab === "ranking" && (
+              <div className="flex-1 overflow-y-auto">
+                <HotRanking onSelectSymbol={(sym) => {
+                  handleSelectStock(sym, "");
+                  setViewTab("kline");
+                }} />
+              </div>
             )}
 
             {/* M5 市場儀錶板（廣度 + 板塊 + 法人） */}
@@ -652,9 +781,16 @@ export default function Home() {
           {/* 底部 Tab Bar 佔位（手機版推高內容，避免被 fixed bar 遮住） */}
           <div className="md:hidden shrink-0 h-14" />
         </main>
-
-        <RightPanel quote={quote} isLoading={loading} />
       </div>
+
+      {/* ⚙ 自訂工作區 Modal */}
+      {workspaceOpen && (
+        <WorkspaceModal
+          tabs={tabs}
+          onSave={(next) => { reorder(next); }}
+          onClose={() => setWorkspaceOpen(false)}
+        />
+      )}
 
       {/* ── 底部 Tab Bar（手機版 < 768px 專用）── */}
       <nav
