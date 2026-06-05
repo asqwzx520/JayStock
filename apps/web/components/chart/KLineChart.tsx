@@ -164,9 +164,9 @@ function barTime(d: ChartBar): Time {
 function barDate(d: ChartBar): string | undefined {
   return "date" in d ? d.date : undefined;
 }
-import { sma, ema, bollinger, macd, rsi, kd, vwap, wr, obv, type OHLCV } from "@/lib/indicators";
+import { sma, ema, bollinger, macd, rsi, kd, vwap, wr, obv, atr, adx, stochRsi, ichimoku, type OHLCV } from "@/lib/indicators";
 
-export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "WR" | "OBV";
+export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "WR" | "OBV" | "ATR" | "ADX" | "SRSI" | "ICHI";
 
 // ── Heikin-Ashi 計算 ──────────────────────────────────────────────────────────
 function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
@@ -738,6 +738,66 @@ export default function KLineChart({
       s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
       s.setData(obvResult.values.map((v, i) => ({ time: barTime(data[i]), value: v })));
       seriesRefs.current.push(s);
+    }
+
+    if (indicators.includes("ATR")) {
+      const atrResult = atr(bars, 14);
+      const lineData: LineData<Time>[] = [];
+      atrResult.values.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
+      const s = chart.addSeries(LineSeries, { color: "#FB923C", lineWidth: 1, priceScaleId: "atr", priceLineVisible: false, lastValueVisible: false, title: "ATR" });
+      s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
+      s.setData(lineData);
+      seriesRefs.current.push(s);
+    }
+
+    if (indicators.includes("ADX")) {
+      const adxResult = adx(bars, 14);
+      const addADXLine = (vals: (number | null)[], color: string, title: string) => {
+        const lineData: LineData<Time>[] = [];
+        vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
+        const s = chart.addSeries(LineSeries, { color, lineWidth: 1, priceScaleId: "adx", priceLineVisible: false, lastValueVisible: false, title });
+        s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
+        s.setData(lineData);
+        seriesRefs.current.push(s);
+      };
+      addADXLine(adxResult.adx,     "#FBBF24", "ADX");
+      addADXLine(adxResult.diPlus,  "#22C55E", "DI+");
+      addADXLine(adxResult.diMinus, "#EF4444", "DI−");
+    }
+
+    if (indicators.includes("SRSI")) {
+      const srsiResult = stochRsi(closes, 14, 14, 3, 3);
+      const kData: LineData<Time>[] = [], dData: LineData<Time>[] = [];
+      srsiResult.k.forEach((v, i) => { if (v !== null) kData.push({ time: barTime(data[i]), value: v }); });
+      srsiResult.d.forEach((v, i) => { if (v !== null) dData.push({ time: barTime(data[i]), value: v }); });
+      const kLine = chart.addSeries(LineSeries, { color: "#FBBF24", lineWidth: 1, priceScaleId: "srsi", priceLineVisible: false, lastValueVisible: false, title: "%K" });
+      kLine.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
+      kLine.setData(kData);
+      const dLine = chart.addSeries(LineSeries, { color: "#A78BFA", lineWidth: 1, priceScaleId: "srsi", priceLineVisible: false, lastValueVisible: false, title: "%D" });
+      dLine.setData(dData);
+      seriesRefs.current.push(kLine, dLine);
+    }
+
+    if (indicators.includes("ICHI") && !isIntraday) {
+      const ichiResult = ichimoku(bars);
+      const SHIFT = 26;
+      const addIchiLine = (vals: (number | null)[], shift: number, color: string, title: string, lw: 1 | 2 = 1) => {
+        const lineData: LineData<Time>[] = [];
+        vals.forEach((v, i) => {
+          if (v === null) return;
+          const ti = i + shift;
+          if (ti < 0 || ti >= data.length) return;
+          lineData.push({ time: barTime(data[ti]), value: v });
+        });
+        const s = chart.addSeries(LineSeries, { color, lineWidth: lw, priceLineVisible: false, lastValueVisible: false, title });
+        s.setData(lineData);
+        seriesRefs.current.push(s);
+      };
+      addIchiLine(ichiResult.tenkan,  0,      "#EF4444", "転換", 1);
+      addIchiLine(ichiResult.kijun,   0,      "#3B82F6", "基準", 2);
+      addIchiLine(ichiResult.senkouA, SHIFT,  "#22C55E", "先A",  1);
+      addIchiLine(ichiResult.senkouB, SHIFT,  "#F59E0B", "先B",  1);
+      addIchiLine(ichiResult.chikou,  -SHIFT, "#A78BFA", "遲行", 1);
     }
 
     // ── 法人籌碼疊圖 ─────────────────────────────────────────────────────

@@ -288,3 +288,212 @@ export function kd(bars: OHLCV[], kPeriod = 9, dPeriod = 3): KDResult {
 
   return { k: kValues, d: dValues };
 }
+
+// ── ATR (Average True Range) ──────────────────────────────────────────────────
+export interface ATRResult {
+  values: (number | null)[];
+}
+
+export function atr(bars: OHLCV[], period = 14): ATRResult {
+  const values: (number | null)[] = [null];
+  const trs: number[] = [];
+
+  for (let i = 1; i < bars.length; i++) {
+    trs.push(Math.max(
+      bars[i].high - bars[i].low,
+      Math.abs(bars[i].high - bars[i - 1].close),
+      Math.abs(bars[i].low  - bars[i - 1].close),
+    ));
+  }
+
+  for (let i = 0; i < trs.length; i++) {
+    if (i < period - 1) { values.push(null); continue; }
+    if (i === period - 1) {
+      values.push(trs.slice(0, period).reduce((s, v) => s + v, 0) / period);
+      continue;
+    }
+    values.push(((values[values.length - 1] as number) * (period - 1) + trs[i]) / period);
+  }
+
+  return { values };
+}
+
+// ── ADX (Average Directional Index) ──────────────────────────────────────────
+export interface ADXResult {
+  adx:     (number | null)[];
+  diPlus:  (number | null)[];
+  diMinus: (number | null)[];
+}
+
+export function adx(bars: OHLCV[], period = 14): ADXResult {
+  const n = bars.length;
+  const adxArr:     (number | null)[] = new Array(n).fill(null);
+  const diPlusArr:  (number | null)[] = new Array(n).fill(null);
+  const diMinusArr: (number | null)[] = new Array(n).fill(null);
+
+  if (n <= period) return { adx: adxArr, diPlus: diPlusArr, diMinus: diMinusArr };
+
+  const dmP: number[] = new Array(n).fill(0);
+  const dmM: number[] = new Array(n).fill(0);
+  const tr:  number[] = new Array(n).fill(0);
+
+  for (let i = 1; i < n; i++) {
+    const up   = bars[i].high  - bars[i - 1].high;
+    const down = bars[i - 1].low - bars[i].low;
+    dmP[i] = (up   > down && up   > 0) ? up   : 0;
+    dmM[i] = (down > up   && down > 0) ? down : 0;
+    tr[i]  = Math.max(
+      bars[i].high - bars[i].low,
+      Math.abs(bars[i].high - bars[i - 1].close),
+      Math.abs(bars[i].low  - bars[i - 1].close),
+    );
+  }
+
+  // Wilder seed: simple sum of first `period` true range bars (indices 1..period)
+  let smTR = 0, smDMP = 0, smDMM = 0;
+  for (let i = 1; i <= period; i++) { smTR += tr[i]; smDMP += dmP[i]; smDMM += dmM[i]; }
+
+  const dxArr: (number | null)[] = new Array(n).fill(null);
+
+  const setDI = (i: number) => {
+    const dp = smTR > 0 ? 100 * smDMP / smTR : 0;
+    const dm = smTR > 0 ? 100 * smDMM / smTR : 0;
+    diPlusArr[i]  = dp;
+    diMinusArr[i] = dm;
+    dxArr[i]      = dp + dm > 0 ? 100 * Math.abs(dp - dm) / (dp + dm) : 0;
+  };
+
+  setDI(period);
+  for (let i = period + 1; i < n; i++) {
+    smTR  = smTR  - smTR  / period + tr[i];
+    smDMP = smDMP - smDMP / period + dmP[i];
+    smDMM = smDMM - smDMM / period + dmM[i];
+    setDI(i);
+  }
+
+  // ADX = Wilder smooth of DX; needs `period` valid DX values to seed (starts at 2*period-1)
+  const adxSeedEnd = period * 2 - 1;
+  if (adxSeedEnd < n) {
+    let seed = 0;
+    for (let i = period; i <= adxSeedEnd; i++) seed += dxArr[i] as number;
+    adxArr[adxSeedEnd] = seed / period;
+    for (let i = adxSeedEnd + 1; i < n; i++) {
+      if (dxArr[i] === null || adxArr[i - 1] === null) continue;
+      adxArr[i] = ((adxArr[i - 1] as number) * (period - 1) + (dxArr[i] as number)) / period;
+    }
+  }
+
+  return { adx: adxArr, diPlus: diPlusArr, diMinus: diMinusArr };
+}
+
+// ── Stochastic RSI ────────────────────────────────────────────────────────────
+export interface StochRSIResult {
+  k: (number | null)[];
+  d: (number | null)[];
+}
+
+export function stochRsi(
+  data: number[],
+  rsiPeriod = 14,
+  stochPeriod = 14,
+  kSmooth = 3,
+  dSmooth = 3,
+): StochRSIResult {
+  const n = data.length;
+  const kArr: (number | null)[] = new Array(n).fill(null);
+  const dArr: (number | null)[] = new Array(n).fill(null);
+  const rsiVals = rsi(data, rsiPeriod).values;
+
+  // Raw stochastic of RSI (0–100)
+  const stoch: (number | null)[] = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (rsiVals[i] === null) continue;
+    let count = 0, minR = Infinity, maxR = -Infinity;
+    for (let j = i; j >= 0 && count < stochPeriod; j--) {
+      const rv = rsiVals[j];
+      if (rv === null) continue;
+      if (rv < minR) minR = rv;
+      if (rv > maxR) maxR = rv;
+      count++;
+    }
+    if (count < stochPeriod) continue;
+    const cur = rsiVals[i] as number;
+    stoch[i] = maxR === minR ? 0 : (cur - minR) / (maxR - minR) * 100;
+  }
+
+  // %K = rolling SMA(stoch, kSmooth)
+  for (let i = 0; i < n; i++) {
+    let count = 0, sum = 0;
+    for (let j = i; j >= 0 && count < kSmooth; j--) {
+      if (stoch[j] === null) continue;
+      sum += stoch[j] as number;
+      count++;
+    }
+    if (count === kSmooth) kArr[i] = sum / kSmooth;
+  }
+
+  // %D = rolling SMA(%K, dSmooth)
+  for (let i = 0; i < n; i++) {
+    let count = 0, sum = 0;
+    for (let j = i; j >= 0 && count < dSmooth; j--) {
+      if (kArr[j] === null) continue;
+      sum += kArr[j] as number;
+      count++;
+    }
+    if (count === dSmooth) dArr[i] = sum / dSmooth;
+  }
+
+  return { k: kArr, d: dArr };
+}
+
+// ── Ichimoku Cloud (一目均衡表) ───────────────────────────────────────────────
+export interface IchimokuResult {
+  tenkan:  (number | null)[];
+  kijun:   (number | null)[];
+  senkouA: (number | null)[];
+  senkouB: (number | null)[];
+  chikou:  (number | null)[];
+}
+
+function periodRange(bars: OHLCV[], i: number, period: number): [number, number] {
+  let h = -Infinity, l = Infinity;
+  for (let j = i - period + 1; j <= i; j++) {
+    if (bars[j].high > h) h = bars[j].high;
+    if (bars[j].low  < l) l = bars[j].low;
+  }
+  return [h, l];
+}
+
+export function ichimoku(
+  bars: OHLCV[],
+  tenkanPeriod = 9,
+  kijunPeriod = 26,
+  senkouBPeriod = 52,
+): IchimokuResult {
+  const n = bars.length;
+  const tenkan:  (number | null)[] = new Array(n).fill(null);
+  const kijun:   (number | null)[] = new Array(n).fill(null);
+  const senkouA: (number | null)[] = new Array(n).fill(null);
+  const senkouB: (number | null)[] = new Array(n).fill(null);
+  const chikou:  (number | null)[] = bars.map(b => b.close);
+
+  for (let i = 0; i < n; i++) {
+    if (i >= tenkanPeriod - 1) {
+      const [h, l] = periodRange(bars, i, tenkanPeriod);
+      tenkan[i] = (h + l) / 2;
+    }
+    if (i >= kijunPeriod - 1) {
+      const [h, l] = periodRange(bars, i, kijunPeriod);
+      kijun[i] = (h + l) / 2;
+    }
+    if (i >= senkouBPeriod - 1) {
+      const [h, l] = periodRange(bars, i, senkouBPeriod);
+      senkouB[i] = (h + l) / 2;
+    }
+    if (tenkan[i] !== null && kijun[i] !== null) {
+      senkouA[i] = ((tenkan[i] as number) + (kijun[i] as number)) / 2;
+    }
+  }
+
+  return { tenkan, kijun, senkouA, senkouB, chikou };
+}

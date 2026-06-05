@@ -12,6 +12,10 @@ const INDICATORS: { key: IndicatorType; label: string; desc: string; special?: b
   { key: "VWAP",  label: "VWAP", desc: "成交量加權均價（分K累積 / 日K滾動20）", special: false },
   { key: "WR",    label: "%R",   desc: "Williams %R 超買超賣 (14)" },
   { key: "OBV",   label: "OBV",  desc: "能量潮 On Balance Volume" },
+  { key: "ATR",   label: "ATR",      desc: "平均真實波幅 ATR(14)" },
+  { key: "ADX",   label: "ADX",      desc: "趨勢強度 ADX / DI±(14)" },
+  { key: "SRSI",  label: "StochRSI", desc: "Stochastic RSI %K/%D(3,3)" },
+  { key: "ICHI",  label: "Ichimoku", desc: "一目均衡表 転換/基準/雲層(9/26/52)" },
   { key: "CHIPS", label: "法人", desc: "三大法人疊圖", special: true },
 ];
 

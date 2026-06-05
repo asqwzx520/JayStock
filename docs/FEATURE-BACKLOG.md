@@ -96,7 +96,7 @@
 
 ---
 
-### [ ] 7. 技術指標補強（4 個）
+### [x] 7. 技術指標補強（ATR / ADX / Stochastic RSI / Ichimoku）
 
 | 指標 | 用途 | 優先級 |
 |------|------|--------|
@@ -106,8 +106,9 @@
 | **Ichimoku（一目均衡表）** | 日本技術分析主流，判斷支撐壓力 | 中 |
 
 - **位置**：K 線圖 → IndicatorSelector 新增選項 + KLineChart.tsx 實作
-- **資料來源**：pandas_ta（後端已安裝）或前端 `lib/indicators.ts` 自算
+- **資料來源**：前端 `lib/indicators.ts` 自算（TypeScript 純實作，Wilder 平滑法）
 - **難度**：中
+- **實作**：`apps/web/lib/indicators.ts`（atr / adx / stochRsi / ichimoku），`KLineChart.tsx` 子面板渲染，`IndicatorSelector.tsx` 新增按鈕
 
 ---
 
@@ -175,6 +176,8 @@
 | 同業比較表（可自訂對比標的） | 中位色碼標記優/劣 |
 | 月營收走勢 + YoY 柱狀圖 | 台股每月 10 日公告，MOPS 來源 |
 | 外資持股比例走勢（近 12 個月） | TWSE MI_QIANW，台股專屬 |
+| 行動版 RWD 三段式佈局 | 底部 Tab bar + 側欄折疊抽屜，手機看盤可用（`1960da0`）|
+| ATR / ADX / Stochastic RSI / Ichimoku 技術指標 | 前端純 TS 實作，Wilder 平滑法，Ichimoku 含時間偏移（先行/遲行帶）|
 | UptimeRobot 防冷啟動監控 | 每 14 分鐘 ping /health，防 Render 閒置休眠 |
 
 ---
