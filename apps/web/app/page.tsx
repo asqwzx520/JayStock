@@ -322,44 +322,57 @@ export default function Home() {
 
           {/* ── Row 1：主導航 Tab ──────────────────────── */}
           <div
-            className="shrink-0 flex items-center border-b overflow-x-auto"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+            className="shrink-0 flex items-stretch border-b overflow-x-auto"
+            style={{
+              background: "var(--bg-base)",
+              borderColor: "var(--border)",
+              height: "36px",
+            }}
           >
             {/* 漢堡按鈕（手機版專用，< 768px） */}
             <button
               onClick={() => setLeftPanelOpen(true)}
-              className="md:hidden shrink-0 flex items-center justify-center w-10 h-10 ml-1"
-              style={{ color: "var(--text-secondary)" }}
+              className="md:hidden shrink-0 flex items-center justify-center w-10"
+              style={{
+                color: "var(--text-tertiary)",
+                borderRight: "1px solid var(--border)",
+              }}
               aria-label="開啟自選股"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
                 <rect y="3" width="18" height="2" rx="1" fill="currentColor"/>
                 <rect y="8" width="18" height="2" rx="1" fill="currentColor"/>
                 <rect y="13" width="18" height="2" rx="1" fill="currentColor"/>
               </svg>
             </button>
 
-            {(["home", "kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
-                className="px-3 sm:px-4 py-2.5 text-sm font-medium transition-colors shrink-0"
-                style={{
-                  color: viewTab === tab ? "var(--color-brand)" : "var(--text-secondary)",
-                  borderBottom: viewTab === tab ? "2px solid var(--color-brand)" : "2px solid transparent",
-                }}
-              >
-                {tab === "home"     ? "首頁"
-                  : tab === "kline"   ? "走勢圖"
-                  : tab === "chips"   ? "籌碼"
-                  : tab === "market"  ? "大盤"
-                  : tab === "screener"? "選股"
-                  : tab === "news"     ? "新聞"
-                  : tab === "backtest" ? "回測"
-                  : tab === "analysis" ? "分析"
-                  : "比較"}
-              </button>
-            ))}
+            {(["home", "kline", "chips", "market", "screener", "news", "backtest", "analysis", "compare"] as ViewTab[]).map((tab) => {
+              const isActive = viewTab === tab;
+              const TAB_LABELS: Record<ViewTab, string> = {
+                home: "首頁", kline: "走勢圖", chips: "籌碼",
+                market: "大盤", screener: "選股", news: "新聞",
+                backtest: "回測", analysis: "分析", compare: "比較",
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => { setViewTab(tab); setLeftPanelOpen(false); }}
+                  className="shrink-0 flex items-center px-4 transition-colors"
+                  style={{
+                    height: "100%",
+                    fontSize: "12.5px",
+                    fontWeight: isActive ? 600 : 500,
+                    letterSpacing: "0.02em",
+                    color: isActive ? "var(--color-brand)" : "var(--text-tertiary)",
+                    background: isActive ? "rgba(59,130,246,0.07)" : "transparent",
+                    borderBottom: isActive ? "2px solid var(--color-brand)" : "2px solid transparent",
+                    borderRight: "1px solid var(--border)",
+                  }}
+                >
+                  {TAB_LABELS[tab]}
+                </button>
+              );
+            })}
           </div>
 
           {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
@@ -650,6 +663,7 @@ export default function Home() {
           background: "var(--bg-surface)",
           borderColor: "var(--border)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          height: "52px",
         }}
       >
         {/* 首頁 */}

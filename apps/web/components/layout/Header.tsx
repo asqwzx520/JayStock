@@ -2,8 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { StockItem, IndexQuote, AlertNotification } from "@/lib/api";
-import { searchStocks, getMarketIndices, alertsApi } from "@/lib/api";
+import type { StockItem, AlertNotification, WatchlistState } from "@/lib/api";
+import { searchStocks, getMarketIndices, alertsApi, watchlistApi } from "@/lib/api";
 
 const AuthButton = dynamic(() => import("@/components/auth/AuthButton"), { ssr: false });
 
@@ -207,85 +207,156 @@ function NotificationBell() {
   );
 }
 
-// ── Market Indices Bar ────────────────────────────────────────────────────────
-function IndicesBar() {
-  const [indices, setIndices] = useState<IndexQuote[]>([]);
-  const [loaded, setLoaded]   = useState(false);
+// ── Ticker Tape（跑馬燈）────────────────────────────────────────────────────
+interface TickerItem {
+  key: string;
+  label: string;
+  price: string;
+  change: number | null;
+  changePct: number | null;
+}
+
+// localStorage key（與 LeftPanel 一致）
+const LS_WATCHLIST_KEY = "stockpulse_watchlist_v2";
+
+function extractSymbols(state: WatchlistState): string[] {
+  // WatchlistState.items: Record<groupId, WatchlistItem[]>
+  return Object.values(state.items)
+    .flat()
+    .map((item) => item.symbol)
+    .slice(0, 10);
+}
+
+function lsGetWatchlistSymbols(): string[] {
+  try {
+    const raw = localStorage.getItem(LS_WATCHLIST_KEY);
+    if (!raw) return [];
+    const state = JSON.parse(raw) as WatchlistState;
+    // 相容舊格式（純陣列）
+    if (Array.isArray(state)) {
+      return (state as { symbol: string }[]).slice(0, 10).map((s) => s.symbol);
+    }
+    return extractSymbols(state);
+  } catch {
+    return [];
+  }
+}
+
+function TickerTape() {
+  const [items, setItems] = useState<TickerItem[]>([]);
+
+  function buildItems(idxItems: TickerItem[], watchSyms: string[]): TickerItem[] {
+    const watchItems: TickerItem[] = watchSyms.map((sym) => ({
+      key: `watch-${sym}`,
+      label: sym,
+      price: "--",
+      change: null,
+      changePct: null,
+    }));
+    return [...idxItems, ...watchItems];
+  }
 
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       try {
+        // 1️⃣ 大盤指數（API）
         const res = await getMarketIndices();
-        if (!cancelled) { setIndices(res.indices); setLoaded(true); }
+        const idxItems: TickerItem[] = res.indices.map((idx) => ({
+          key: idx.id,
+          label: `${idx.flag} ${idx.name}`,
+          price: idx.price != null ? idx.price.toLocaleString() : "--",
+          change: idx.change ?? null,
+          changePct: idx.change_pct ?? null,
+        }));
+
+        // 2️⃣ 先用 localStorage 快速顯示（避免閃爍）
+        const lsSyms = lsGetWatchlistSymbols();
+        if (!cancelled && lsSyms.length > 0) {
+          setItems(buildItems(idxItems, lsSyms));
+        }
+
+        // 3️⃣ 再從 Supabase 拉真正的用戶自選股（跨裝置同步）
+        try {
+          const remote = await watchlistApi.get();
+          const remoteSyms = extractSymbols(remote);
+          if (!cancelled) {
+            setItems(buildItems(idxItems, remoteSyms));
+          }
+        } catch {
+          // 未登入或 API 失敗 → 維持 localStorage 結果
+        }
       } catch {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) setItems([]);
       }
     }
+
     load();
     const id = setInterval(load, 30_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const barStyle: React.CSSProperties = {
-    height: "32px",
-    background: "var(--bg-elevated)",
-    borderBottom: "1px solid var(--border)",
-    fontSize: "12px",
-  };
+  if (items.length === 0) return null;
 
-  if (!loaded) {
-    return (
-      <div className="flex items-center gap-6 px-4 overflow-x-auto shrink-0" style={barStyle}>
-        {[72, 88, 64].map((w, i) => (
-          <div key={i} className="flex items-center gap-2 shrink-0">
-            <div className="animate-pulse rounded" style={{ width: "60px", height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100}ms` }} />
-            <div className="animate-pulse rounded" style={{ width: `${w}px`, height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100 + 50}ms` }} />
-            <div className="animate-pulse rounded" style={{ width: "52px", height: "10px", background: "var(--bg-surface)", animationDelay: `${i * 100 + 100}ms` }} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (indices.length === 0) return null;
+  // 複製兩份讓捲動無縫
+  const all = [...items, ...items];
 
   return (
-    <div className="flex items-center overflow-x-auto shrink-0" style={barStyle}>
-      {indices.map((idx, i) => {
-        const changePct = idx.change_pct;
-        const changePts = idx.change;
-        const isUp   = changePct != null && changePct > 0;
-        const isDown = changePct != null && changePct < 0;
-        const color  = isUp ? "var(--color-up)" : isDown ? "var(--color-down)" : "var(--text-secondary)";
-        const arrow  = isUp ? "▲" : isDown ? "▼" : "";
-        return (
-          <div
-            key={idx.id}
-            className="flex items-center gap-2 shrink-0 px-4"
-            style={{
-              height: "100%",
-              borderLeft: i > 0 ? "1px solid var(--border)" : "none",
-            }}
-          >
-            <span style={{ color: "var(--text-tertiary)" }}>
-              {idx.flag} {idx.name}
+    <div
+      className="shrink-0 overflow-hidden relative"
+      style={{
+        height: "26px",
+        background: "var(--bg-surface)",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <style>{`
+        @keyframes ticker-scroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .ticker-inner {
+          display: inline-flex;
+          animation: ticker-scroll ${Math.max(items.length * 5, 30)}s linear infinite;
+          white-space: nowrap;
+        }
+        .ticker-inner:hover { animation-play-state: paused; }
+      `}</style>
+      <div className="ticker-inner" style={{ height: "26px", alignItems: "center" }}>
+        {all.map((item, i) => {
+          const isUp   = item.change != null && item.change > 0;
+          const isDown = item.change != null && item.change < 0;
+          const color  = isUp ? "var(--color-up)" : isDown ? "var(--color-down)" : "var(--text-secondary)";
+          const arrow  = isUp ? "▲" : isDown ? "▼" : "";
+          return (
+            <span
+              key={`${item.key}-${i}`}
+              className="inline-flex items-center gap-2"
+              style={{
+                padding: "0 18px",
+                height: "26px",
+                borderRight: "1px solid var(--border)",
+                fontSize: "11px",
+              }}
+            >
+              <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.05em" }}>
+                {item.label}
+              </span>
+              {item.price !== "--" && (
+                <span className="num" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                  {item.price}
+                </span>
+              )}
+              {item.changePct != null && (
+                <span className="num" style={{ color }}>
+                  {arrow}{Math.abs(item.changePct).toFixed(2)}%
+                </span>
+              )}
             </span>
-            {idx.price != null && (
-              <span className="num font-semibold" style={{ color: "var(--text-primary)" }}>
-                {idx.price.toLocaleString()}
-              </span>
-            )}
-            {(changePts != null || changePct != null) && (
-              <span className="num" style={{ color, letterSpacing: "0.01em" }}>
-                {arrow}
-                {changePts != null && Math.abs(changePts).toFixed(2)}
-                {changePct != null && ` (${Math.abs(changePct).toFixed(2)}%)`}
-              </span>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -350,39 +421,67 @@ export default function Header({ onSelectStock }: HeaderProps) {
     <div className="shrink-0" style={{ background: "var(--bg-surface)" }}>
       {/* Row 1: Logo + Search + Auth */}
       <header
-        className="flex items-center gap-4 px-4 border-b"
+        className="flex items-center gap-3 px-4 border-b"
         style={{
           height: "var(--header-h)",
           borderColor: "var(--border)",
         }}
       >
-        <div className="flex items-center gap-2 font-semibold text-lg">
-          <span style={{ color: "var(--color-brand)" }}>StockPulse</span>
+        {/* Logo — Terminal 風格 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontWeight: 800,
+              fontSize: "14px",
+              letterSpacing: "2px",
+              color: "var(--color-brand)",
+            }}
+          >
+            JAYSTOCK
+          </span>
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: "var(--color-down)",
+              boxShadow: "0 0 6px var(--color-down)",
+              animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite",
+            }}
+            title="市場資料更新中"
+          />
         </div>
 
-        <div className="relative flex-1 min-w-0 max-w-md">
+        {/* 分隔 */}
+        <div style={{ width: "1px", height: "18px", background: "var(--border)", flexShrink: 0 }} />
+
+        <div className="relative flex-1 min-w-0 max-w-sm">
           <input
             ref={inputRef}
             type="text"
-            placeholder="搜尋股票代號或名稱... (如 2330、台積電)"
+            placeholder="搜尋股票代號或名稱..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 200)}
-            className="w-full h-8 px-3 text-sm rounded-md outline-none"
+            className="w-full h-8 px-3 text-sm outline-none"
             style={{
               background: "var(--bg-elevated)",
               color: "var(--text-primary)",
               border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              fontFamily: "var(--font-sans)",
             }}
           />
           {open && (
             <div
-              className="absolute top-full left-0 right-0 mt-1 rounded-md overflow-hidden z-50 shadow-lg"
+              className="absolute top-full left-0 right-0 mt-1 overflow-hidden z-50 shadow-lg"
               style={{
                 background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--border-strong)",
+                borderRadius: "var(--radius-sm)",
               }}
             >
               {results.map((item, i) => (
@@ -431,8 +530,8 @@ export default function Header({ onSelectStock }: HeaderProps) {
         </div>
       </header>
 
-      {/* Row 2: Market indices ticker */}
-      <IndicesBar />
+      {/* Row 2: Ticker tape（大盤指數 + 自選股滾動行情）*/}
+      <TickerTape />
     </div>
   );
 }
