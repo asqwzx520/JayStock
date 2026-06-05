@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from app.core.rate_limit import limiter
 from app.core.cache import ttl_cache
+from app.core.validators import validate_symbol
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -150,7 +151,7 @@ async def get_financials(request: Request, symbol: str):
     台股：GET /api/v1/financials/2330
     美股：GET /api/v1/financials/AAPL
     """
-    sym = symbol.upper().strip()
+    sym = validate_symbol(symbol)
     loop = asyncio.get_event_loop()
     data = await loop.run_in_executor(None, _fetch_financials_sync, sym)
     if not data:

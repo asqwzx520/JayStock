@@ -6,8 +6,10 @@ GET  /api/v1/digest/status — 確認 SMTP 設定是否完整
 """
 import os
 import logging
-from fastapi import APIRouter, HTTPException, Request
+from typing import Optional
+from fastapi import APIRouter, Header, HTTPException, Request
 from app.core.rate_limit import limiter
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,13 +35,19 @@ async def digest_status():
 
 @router.post("/digest/send")
 @limiter.limit("3/minute")
-async def send_digest(request: Request):
+async def send_digest(
+    request: Request,
+    x_admin_token: Optional[str] = Header(default=None),
+):
     """
     手動觸發盤前 AI 精選推播（測試 / 補發用）。
 
     注意：screener 快取需要有資料（曾呼叫過 /api/v1/screener/run）
     若快取空白，會先執行一次 screener refresh 再送信。
     """
+    if not settings.admin_token or x_admin_token != settings.admin_token:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     from app.services.digest_service import (
         _get_cached_metrics, _pick_top5, _generate_reason,
         _fallback_reason, _build_html, _send_email,

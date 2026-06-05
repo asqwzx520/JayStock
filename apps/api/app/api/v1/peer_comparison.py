@@ -15,6 +15,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.core.rate_limit import limiter
+from app.core.validators import validate_symbol, validate_symbols
 from app.services.peer_comparison_service import get_peer_comparison
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,11 @@ async def peer_comparison_endpoint(
     美股：GET /api/v1/peer-comparison/AAPL
     自訂：GET /api/v1/peer-comparison/2330?peers=2454,2303,6770
     """
-    sym = symbol.upper().strip()
-    # Limit custom peers to 6
-    clean_peers = ",".join(p.strip() for p in peers.split(",") if p.strip())[:60]
+    sym = validate_symbol(symbol)
+    # Validate each custom peer symbol individually (max 6)
+    peer_list = [p.strip() for p in peers.split(",") if p.strip()][:6]
+    validated_peers = validate_symbols(peer_list) if peer_list else []
+    clean_peers = ",".join(validated_peers)
 
     data = await get_peer_comparison(sym, clean_peers)
     if not data:

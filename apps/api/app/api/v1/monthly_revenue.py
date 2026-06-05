@@ -14,6 +14,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.rate_limit import limiter
+from app.core.validators import validate_symbol
 from app.services.monthly_revenue_service import get_monthly_revenue
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ async def monthly_revenue_endpoint(request: Request, symbol: str):
     台股：GET /api/v1/monthly-revenue/2330
     美股：GET /api/v1/monthly-revenue/AAPL  →  is_tw: false
     """
-    sym = symbol.upper().strip()
+    sym = validate_symbol(symbol)
     data = await get_monthly_revenue(sym)
     if data is None:
         raise HTTPException(status_code=404, detail=f"無法取得 {sym} 月營收資料")
