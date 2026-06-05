@@ -1199,6 +1199,47 @@ function PercentileArc({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+function ValuationCard({ stats, label, color }: { stats: ValuationBandStats; label: string; color: string }) {
+  const zone =
+    stats.current > stats.band_1std_high ? { text: "偏高估",   clr: "var(--color-down)" } :
+    stats.current < stats.band_1std_low  ? { text: "偏低估",   clr: "var(--color-up)"   } :
+    stats.current > stats.mean           ? { text: "中性偏高", clr: "#f59e0b"           } :
+                                           { text: "中性偏低", clr: "#3b82f6"           };
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-4">
+        <PercentileArc pct={stats.percentile} color={color} />
+        <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
+          <div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>當前 {label}</div>
+            <div className="text-lg num font-bold" style={{ color }}>{stats.current.toFixed(1)}x</div>
+          </div>
+          <div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>估值評估</div>
+            <div className="text-sm font-semibold" style={{ color: zone.clr }}>{zone.text}</div>
+          </div>
+          <div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>5 年均值</div>
+            <div className="text-xs num">{stats.mean.toFixed(1)}x</div>
+          </div>
+          <div>
+            <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>±1σ 正常區間</div>
+            <div className="text-xs num">{stats.band_1std_low.toFixed(1)} – {stats.band_1std_high.toFixed(1)}</div>
+          </div>
+        </div>
+      </div>
+      <ValuationBandChart stats={stats} color={color} ariaLabel={`${label} 歷史估值帶`} />
+      <div className="flex items-center gap-4 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        <span><span style={{ color }}>─</span> 歷史 {label}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+          <span style={{ display: "inline-block", width: 12, height: 8, background: color, opacity: 0.15, borderRadius: 1 }} />±1σ 帶
+        </span>
+        <span>分位弧 = 當前在 5 年中的位置</span>
+      </div>
+    </div>
+  );
+}
+
 function ValuationBandSection({
   data,
   loading,
@@ -1222,47 +1263,6 @@ function ValuationBandSection({
           歷史季度財務數據不足，無法計算估值帶（需至少 4 季 EPS / 淨值資料）。
         </p>
       </Section>
-    );
-  }
-
-  function ValuationCard({ stats, label, color }: { stats: ValuationBandStats; label: string; color: string }) {
-    const zone =
-      stats.current > stats.band_1std_high ? { text: "偏高估",   clr: "var(--color-down)" } :
-      stats.current < stats.band_1std_low  ? { text: "偏低估",   clr: "var(--color-up)"   } :
-      stats.current > stats.mean           ? { text: "中性偏高", clr: "#f59e0b"           } :
-                                             { text: "中性偏低", clr: "#3b82f6"           };
-    return (
-      <div className="space-y-3">
-        <div className="flex items-start gap-4">
-          <PercentileArc pct={stats.percentile} color={color} />
-          <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
-            <div>
-              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>當前 {label}</div>
-              <div className="text-lg num font-bold" style={{ color }}>{stats.current.toFixed(1)}x</div>
-            </div>
-            <div>
-              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>估值評估</div>
-              <div className="text-sm font-semibold" style={{ color: zone.clr }}>{zone.text}</div>
-            </div>
-            <div>
-              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>5 年均值</div>
-              <div className="text-xs num">{stats.mean.toFixed(1)}x</div>
-            </div>
-            <div>
-              <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>±1σ 正常區間</div>
-              <div className="text-xs num">{stats.band_1std_low.toFixed(1)} – {stats.band_1std_high.toFixed(1)}</div>
-            </div>
-          </div>
-        </div>
-        <ValuationBandChart stats={stats} color={color} ariaLabel={`${label} 歷史估值帶`} />
-        <div className="flex items-center gap-4 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-          <span><span style={{ color }}>─</span> 歷史 {label}</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-            <span style={{ display: "inline-block", width: 12, height: 8, background: color, opacity: 0.15, borderRadius: 1 }} />±1σ 帶
-          </span>
-          <span>分位弧 = 當前在 5 年中的位置</span>
-        </div>
-      </div>
     );
   }
 
