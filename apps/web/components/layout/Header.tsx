@@ -216,52 +216,14 @@ interface TickerItem {
   changePct: number | null;
 }
 
-// localStorage key（與 LeftPanel 一致）
-const LS_WATCHLIST_KEY = "stockpulse_watchlist_v2";
-
-function extractSymbols(state: WatchlistState): string[] {
-  // WatchlistState.items: Record<groupId, WatchlistItem[]>
-  return Object.values(state.items)
-    .flat()
-    .map((item) => item.symbol)
-    .slice(0, 10);
-}
-
-function lsGetWatchlistSymbols(): string[] {
-  try {
-    const raw = localStorage.getItem(LS_WATCHLIST_KEY);
-    if (!raw) return [];
-    const state = JSON.parse(raw) as WatchlistState;
-    // 相容舊格式（純陣列）
-    if (Array.isArray(state)) {
-      return (state as { symbol: string }[]).slice(0, 10).map((s) => s.symbol);
-    }
-    return extractSymbols(state);
-  } catch {
-    return [];
-  }
-}
-
 function TickerTape() {
   const [items, setItems] = useState<TickerItem[]>([]);
-
-  function buildItems(idxItems: TickerItem[], watchSyms: string[]): TickerItem[] {
-    const watchItems: TickerItem[] = watchSyms.map((sym) => ({
-      key: `watch-${sym}`,
-      label: sym,
-      price: "--",
-      change: null,
-      changePct: null,
-    }));
-    return [...idxItems, ...watchItems];
-  }
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        // 1️⃣ 大盤指數（API）
         const res = await getMarketIndices();
         const idxItems: TickerItem[] = res.indices.map((idx) => ({
           key: idx.id,
@@ -270,23 +232,7 @@ function TickerTape() {
           change: idx.change ?? null,
           changePct: idx.change_pct ?? null,
         }));
-
-        // 2️⃣ 先用 localStorage 快速顯示（避免閃爍）
-        const lsSyms = lsGetWatchlistSymbols();
-        if (!cancelled && lsSyms.length > 0) {
-          setItems(buildItems(idxItems, lsSyms));
-        }
-
-        // 3️⃣ 再從 Supabase 拉真正的用戶自選股（跨裝置同步）
-        try {
-          const remote = await watchlistApi.get();
-          const remoteSyms = extractSymbols(remote);
-          if (!cancelled) {
-            setItems(buildItems(idxItems, remoteSyms));
-          }
-        } catch {
-          // 未登入或 API 失敗 → 維持 localStorage 結果
-        }
+        if (!cancelled) setItems(idxItems);
       } catch {
         if (!cancelled) setItems([]);
       }

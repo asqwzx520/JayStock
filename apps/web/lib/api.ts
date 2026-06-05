@@ -134,16 +134,65 @@ export interface ChipsStreakMap {
   dealer:  ChipsStreak;
 }
 
+export interface ChipsCumulativePoint {
+  date:    string;
+  foreign: number;
+  trust:   number;
+  dealer:  number;
+  total:   number;
+}
+
+export interface ChipsScoreItem {
+  score: number;
+  max:   number;
+  label: string;
+  value: string;
+  na?:   boolean;
+}
+
+export interface ChipsScore {
+  total: number;
+  items: Record<string, ChipsScoreItem>;
+}
+
 export interface ChipsResponse {
-  symbol:     string;
-  days:       number;
-  data:       ChipsBar[];
-  cumulative: ChipsCumulative;
-  streak:     ChipsStreakMap;
+  symbol:            string;
+  days:              number;
+  data:              ChipsBar[];
+  cumulative:        ChipsCumulative;
+  cumulative_series: ChipsCumulativePoint[];
+  streak:            ChipsStreakMap;
+  score:             ChipsScore;
 }
 
 export function getChips(symbol: string, days = 60) {
   return fetcher<ChipsResponse>(`/api/v1/chips/${symbol}?days=${days}`);
+}
+
+// ── Broker chips (分點) ───────────────────────────────────────────────────────
+
+export interface BrokerEntry {
+  broker_id:     string;
+  broker_name:   string;
+  buy:           number;
+  sell:          number;
+  net:           number;
+  type:          "foreign" | "trust" | "daytrade" | "general";
+  daytrade_rate: number;
+  pattern?:      "known" | "detected";
+}
+
+export interface BrokerChipsResponse {
+  symbol:   string;
+  days:     number;
+  general:  { top_buy: BrokerEntry[]; top_sell: BrokerEntry[] };
+  foreign:  { top_buy: BrokerEntry[]; top_sell: BrokerEntry[] };
+  trust:    { top_buy: BrokerEntry[]; top_sell: BrokerEntry[] };
+  daytrade: BrokerEntry[];
+}
+
+export function getBrokerChips(symbol: string, days: 5 | 10 | 20 = 5) {
+  return fetcher<BrokerChipsResponse>(`/api/v1/chips/${symbol}/brokers?days=${days}`);
 }
 
 // ── Margin (融資融券) ──────────────────────────────────────────

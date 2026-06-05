@@ -21,14 +21,9 @@ const KLineChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
-const ChipsChart = dynamic(
-  () => import("@/components/chart/ChipsChart"),
-  { ssr: false }
-);
-
-const MarginChart = dynamic(
-  () => import("@/components/chart/MarginChart"),
-  { ssr: false }
+const ChipsPanel = dynamic(
+  () => import("@/components/chips/ChipsPanel"),
+  { ssr: false, loading: () => <ChartSkeleton /> }
 );
 
 const MarketDashboard = dynamic(
@@ -59,6 +54,11 @@ const CompareChart = dynamic(
 const HomeDashboard = dynamic(
   () => import("@/components/dashboard/HomeDashboard"),
   { ssr: false, loading: () => <DashboardSkeleton /> }
+);
+
+const WatchlistSidebar = dynamic(
+  () => import("@/components/layout/LeftPanel"),
+  { ssr: false }
 );
 
 const AnalysisPanel = dynamic(
@@ -100,9 +100,6 @@ import type { ChartBar } from "@/components/chart/KLineChart";
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
 
-// ViewTab type is imported from @/hooks/useTabConfig
-type ChipsSubTab = "institutional" | "margin";
-
 const CHIPS_DAYS = [20, 60, 120] as const;
 type ChipsDays = (typeof CHIPS_DAYS)[number];
 
@@ -117,33 +114,6 @@ function readInitSymbol(): string {
     return v;
   }
   return DEFAULT_SYMBOL;
-}
-
-// ── streak badge ──────────────────────────────────────────────────
-function StreakBadge({
-  label,
-  streak,
-  color,
-}: {
-  label: string;
-  streak: { days: number; direction: string } | undefined;
-  color: string;
-}) {
-  if (!streak || streak.days === 0) return null;
-  const isBuy = streak.direction === "buy";
-  return (
-    <span
-      className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-      style={{
-        background: isBuy ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-        color: isBuy ? "var(--color-up)" : "var(--color-down)",
-        border: `1px solid ${isBuy ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-      }}
-      title={`${label} 連續${isBuy ? "買超" : "賣超"} ${streak.days} 日`}
-    >
-      {label} {isBuy ? "▲" : "▼"}{streak.days}日
-    </span>
-  );
 }
 
 function FundItem({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -170,24 +140,11 @@ export default function Home() {
   // 法人疊圖 (chips in K-line view)
   const [klineChipsData, setKlineChipsData] = useState<ChipsBar[]>([]);
 
-  // 籌碼
-  const [chipsData, setChipsData]   = useState<ChipsBar[]>([]);
-  const [chipsCumul, setChipsCumul] = useState<ChipsCumulative | null>(null);
-  const [chipsStreak, setChipsStreak] = useState<ChipsStreakMap | null>(null);
-  const [chipsDays, setChipsDays]   = useState<ChipsDays>(60);
-  const [chipsLoading, setChipsLoading] = useState(false);
-  const [chipsError, setChipsError] = useState("");
-
-  // 融資融券
-  const [marginData, setMarginData]   = useState<MarginBar[]>([]);
-  const [marginLatest, setMarginLatest] = useState<MarginResponse["latest"]>(null);
-  const [marginLoading, setMarginLoading] = useState(false);
-  const [marginError, setMarginError] = useState("");
+  // 籌碼日期範圍（傳給 ChipsPanel）
+  const [chipsDays, setChipsDays] = useState<ChipsDays>(60);
 
   // 主 tab
-  const [viewTab, setViewTab]         = useState<ViewTab>("kline");
-  // 籌碼子 tab
-  const [chipsSubTab, setChipsSubTab] = useState<ChipsSubTab>("institutional");
+  const [viewTab, setViewTab] = useState<ViewTab>("kline");
 
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
@@ -198,7 +155,7 @@ export default function Home() {
 
   // 自訂工作區 Modal
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const { tabs, visibleTabs, reorder, toggleVisible } = useTabConfig();
+  const { tabs, visibleTabs, reorder } = useTabConfig();
 
   // 手機版：已移除 LeftPanel Drawer，保留狀態供底部 nav 用
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
@@ -242,36 +199,6 @@ export default function Home() {
     }
   }, []);
 
-  // ── 載入籌碼 ────────────────────────────────────────────────────
-  const loadChips = useCallback(async (sym: string, days: number) => {
-    setChipsLoading(true); setChipsError("");
-    try {
-      const resp = await getChips(sym, days);
-      setChipsData(resp.data);
-      setChipsCumul(resp.cumulative);
-      setChipsStreak(resp.streak ?? null);
-    } catch (e) {
-      setChipsError(e instanceof Error ? e.message : "籌碼資料載入失敗");
-      setChipsData([]); setChipsCumul(null); setChipsStreak(null);
-    } finally {
-      setChipsLoading(false);
-    }
-  }, []);
-
-  // ── 載入融資融券 ────────────────────────────────────────────────
-  const loadMargin = useCallback(async (sym: string, days: number) => {
-    setMarginLoading(true); setMarginError("");
-    try {
-      const resp = await getMargin(sym, days);
-      setMarginData(resp.data);
-      setMarginLatest(resp.latest);
-    } catch (e) {
-      setMarginError(e instanceof Error ? e.message : "融資融券資料載入失敗");
-      setMarginData([]); setMarginLatest(null);
-    } finally {
-      setMarginLoading(false);
-    }
-  }, []);
 
   // K 線：symbol / period 變動時重載
   useEffect(() => { loadKline(symbol, period); }, [symbol, period, loadKline]);
@@ -285,15 +212,6 @@ export default function Home() {
     }
   }, [symbol, indicators, period, loadKlineChips]);
 
-  // 籌碼：切換到 chips tab 或 symbol/days 改變時重載
-  useEffect(() => {
-    if (viewTab === "chips") loadChips(symbol, chipsDays);
-  }, [symbol, chipsDays, viewTab, loadChips]);
-
-  // 融資券：chips tab + margin 子 tab 或 symbol/days 改變時重載
-  useEffect(() => {
-    if (viewTab === "chips" && chipsSubTab === "margin") loadMargin(symbol, chipsDays);
-  }, [symbol, chipsDays, viewTab, chipsSubTab, loadMargin]);
 
   // 即時報價：WebSocket（盤中 5s，盤外 30s）
   const { quotes: wsQuotes } = useStockWebSocket([symbol]);
@@ -311,8 +229,6 @@ export default function Home() {
   function handleSelectStock(sym: string, name?: string) {
     setSymbol(sym);
     if (name) setStockName(name);
-    setChipsData([]); setChipsCumul(null); setChipsStreak(null);
-    setMarginData([]); setMarginLatest(null);
   }
 
   return (
@@ -437,32 +353,6 @@ export default function Home() {
                       ))}
                     </div>
 
-                    <div
-                      className="flex items-center gap-0.5 rounded p-0.5"
-                      style={{ background: "var(--bg-elevated)" }}
-                    >
-                      {(["institutional", "margin"] as ChipsSubTab[]).map((st) => (
-                        <button
-                          key={st}
-                          onClick={() => setChipsSubTab(st)}
-                          className="px-2.5 py-1 text-xs rounded font-medium transition-colors"
-                          style={{
-                            background: chipsSubTab === st ? "var(--bg-surface)" : "transparent",
-                            color: chipsSubTab === st ? "var(--text-primary)" : "var(--text-secondary)",
-                          }}
-                        >
-                          {st === "institutional" ? "三大法人" : "融資券"}
-                        </button>
-                      ))}
-                    </div>
-
-                    {chipsSubTab === "institutional" && chipsStreak && (
-                      <div className="flex items-center gap-1.5">
-                        <StreakBadge label="外資" streak={chipsStreak.foreign} color="#F59E0B" />
-                        <StreakBadge label="投信" streak={chipsStreak.trust}   color="#8B5CF6" />
-                        <StreakBadge label="自營" streak={chipsStreak.dealer}  color="#06B6D4" />
-                      </div>
-                    )}
                   </>
                 )}
               </div>
@@ -524,19 +414,41 @@ export default function Home() {
           {/* ── 主圖區 ──────────────────────────────────── */}
           <div className="flex-1 min-h-0 relative">
 
-            {/* 首頁儀錶板 */}
+            {/* 首頁：280px 自選股側欄 + 右側儀錶板 */}
             {viewTab === "home" && (
-              <HomeDashboard
-                onSelectStock={(sym) => {
-                  handleSelectStock(sym, "");
-                  setViewTab("kline");
-                }}
-              />
+              <div className="flex h-full min-h-0">
+                {/* 自選股側欄（桌面版顯示）*/}
+                <aside
+                  className="hidden md:block shrink-0 border-r overflow-hidden"
+                  style={{
+                    width: "280px",
+                    background: "var(--bg-surface)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  <WatchlistSidebar
+                    currentSymbol={symbol}
+                    onSelectStock={(sym) => {
+                      handleSelectStock(sym, "");
+                      setViewTab("kline");
+                    }}
+                  />
+                </aside>
+                {/* 右側儀錶板 */}
+                <div className="flex-1 min-w-0 min-h-0">
+                  <HomeDashboard
+                    onSelectStock={(sym) => {
+                      handleSelectStock(sym, "");
+                      setViewTab("kline");
+                    }}
+                  />
+                </div>
+              </div>
             )}
 
             {/* K 線 — 左側資訊欄 + 圖表 */}
             {viewTab === "kline" && (
-              <div className="flex flex-1 min-h-0 overflow-hidden">
+              <div className="flex h-full min-h-0 overflow-hidden">
 
                 {/* 左側資訊欄（190px，桌面版才顯示）*/}
                 <aside
@@ -697,20 +609,13 @@ export default function Home() {
               </div>
             )}
 
-            {/* 籌碼 — 三大法人 */}
-            {viewTab === "chips" && chipsSubTab === "institutional" && (
-              <>
-                {chipsLoading && chipsData.length === 0 && <ChartSkeleton />}
-                {chipsError && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--color-up)" }}>{chipsError}</span>
-                  </div>
-                )}
-                {chipsData.length > 0 && chipsCumul && (
-                  <ChipsChart data={chipsData} cumulative={chipsCumul} />
-                )}
-              </>
+            {/* 籌碼面板（垂直滾動，6 區塊）*/}
+            {viewTab === "chips" && (
+              <ChipsPanel
+                symbol={symbol}
+                days={chipsDays}
+                onDaysChange={setChipsDays}
+              />
             )}
 
             {/* 熱門排行 */}
@@ -761,21 +666,6 @@ export default function Home() {
               <CompareChart initialSymbol={symbol} />
             )}
 
-            {/* 籌碼 — 融資融券 */}
-            {viewTab === "chips" && chipsSubTab === "margin" && (
-              <>
-                {marginLoading && marginData.length === 0 && <ChartSkeleton />}
-                {marginError && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10"
-                    style={{ background: "var(--bg-surface)" }}>
-                    <span style={{ color: "var(--color-up)" }}>{marginError}</span>
-                  </div>
-                )}
-                {marginData.length > 0 && (
-                  <MarginChart data={marginData} latest={marginLatest} />
-                )}
-              </>
-            )}
           </div>
 
           {/* 底部 Tab Bar 佔位（手機版推高內容，避免被 fixed bar 遮住） */}

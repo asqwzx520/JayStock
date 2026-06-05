@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JayStock — 完整 App 排版預覽</title>
+<style>
+/* =========================================
+   RESET & BASE
+========================================= */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f1117;
+  --bg-2: #161b27;
+  --bg-3: #1a2236;
+  --border: #1e293b;
+  --border-2: #243047;
+  --text-1: #f1f5f9;
+  --text-2: #94a3b8;
+  --text-3: #64748b;
+  --text-4: #475569;
+  --brand: #3b82f6;
+  --up: #ef4444;
+  --down: #22c55e;
+  --warn: #f59e0b;
+}
+body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================================
+   TOP BAR
+========================================= */
+.topbar {
+  height: 48px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+.logo {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--brand);
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+.search-box {
+  flex: 1;
+  max-width: 280px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.search-box span { color: var(--text-2); font-size: 13px; }
+.stock-chip {
+  background: rgba(59,130,246,0.15);
+  border: 1px solid rgba(59,130,246,0.3);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.watchlist-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: white;
+}
+
+/* =========================================
+   TAB BAR
+========================================= */
+.tabbar {
+  height: 40px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 2px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 0 14px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-3);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.1s;
+  flex-shrink: 0;
+}
+.tab:hover { color: var(--text-2); }
+.tab.active { color: var(--text-1); border-bottom-color: var(--brand); }
+
+/* =========================================
+   MAIN CONTENT AREA
+========================================= */
+.content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.page { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.page.active { display: flex; }
+
+/* =========================================
+   PAGE: 首頁 — 區塊分頁式（方案三）
+========================================= */
+.home-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sum-cell {
+  background: var(--bg);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: center;
+}
+.sum-cell.active { background: var(--bg-2); border-bottom: 2px solid var(--brand); }
+.sum-cell:hover:not(.active) { background: #111827; }
+.sum-num { font-size: 20px; font-weight: 800; line-height: 1.1; }
+.sum-lbl { font-size: 10px; color: var(--text-3); margin-top: 2px; letter-spacing: 0.03em; }
+.sum-sub { font-size: 10px; margin-top: 2px; }
+
+.home-tabnav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+.home-tab {
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-3);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+  transition: color 0.1s;
+}
+.home-tab:hover { color: var(--text-2); }
+.home-tab.active { color: var(--text-1); border-bottom-color: var(--brand); }
+.htab-count {
+  font-size: 9px;
+  background: #ef4444;
+  color: white;
+  border-radius: 8px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+.home-body { flex: 1; overflow-y: auto; padding: 16px; }
+.home-panel { display: none; }
+.home-panel.active { display: block; }
+
+/* stock cards */
+.scard {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.1s;
+}
+.scard:last-child { margin-bottom: 0; }
+.scard:hover { border-color: var(--border-2); }
+.scard.alerted { border-left-color: var(--up); border-left-width: 3px; }
+.sc-sym { font-size: 15px; font-weight: 800; }
+.sc-name { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.sc-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 6px; }
+.sc-price { font-size: 20px; font-weight: 800; }
+.sc-chg { font-size: 12px; margin-top: 3px; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+/* alert cards */
+.acard {
+  background: var(--bg-2);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex; gap: 12px;
+}
+.acard:last-child { margin-bottom: 0; }
+.acard-sym { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.acard-msg { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+/* date cards */
+.dcard {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.dcard:last-child { margin-bottom: 0; }
+.day-pill {
+  font-size: 11px; font-weight: 700;
+  padding: 6px 10px; border-radius: 7px;
+  text-align: center; flex-shrink: 0; min-width: 54px;
+}
+.d1 { background: rgba(239,68,68,0.2); color: #f87171; }
+.d3 { background: rgba(245,158,11,0.2); color: #fbbf24; }
+.d5 { background: rgba(100,116,139,0.15); color: var(--text-2); }
+.ev-tag { font-size: 11px; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
+.ev-div { background: rgba(34,197,94,0.15); color: #4ade80; }
+.ev-earn { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.dinfo-sym { font-size: 14px; font-weight: 600; }
+.dinfo-desc { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+/* rules */
+.rule-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.rule-card:last-child { margin-bottom: 0; }
+.toggle {
+  width: 34px; height: 19px; border-radius: 9px; flex-shrink: 0; cursor: pointer; position: relative;
+}
+.ton { background: var(--brand); }
+.toff { background: #334155; }
+.toggle::after {
+  content: ''; position: absolute; top: 2px;
+  width: 15px; height: 15px; border-radius: 50%; background: white;
+}
+.ton::after { right: 2px; }
+.toff::after { left: 2px; }
+.rule-name { font-size: 13px; font-weight: 600; }
+.rule-cond { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* =========================================
+   PAGE: K線圖
+========================================= */
+.kline-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.kline-sidebar {
+  width: 200px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 12px;
+  flex-shrink: 0;
+}
+.kline-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.kline-toolbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0;
+}
+.kline-chart {
+  flex: 1;
+  background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-4); font-size: 13px; flex-direction: column; gap: 8px;
+  min-height: 0;
+}
+.chart-placeholder {
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 39px,
+    var(--border) 40px
+  ),
+  repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 79px,
+    var(--border) 80px
+  );
+  position: relative;
+  overflow: hidden;
+}
+.chart-line {
+  position: absolute;
+  bottom: 30%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--brand);
+  clip-path: polygon(
+    0% 60%, 5% 55%, 10% 65%, 15% 50%, 20% 40%, 25% 45%, 30% 30%,
+    35% 25%, 40% 35%, 45% 20%, 50% 15%, 55% 10%, 60% 20%, 65% 5%,
+    70% 15%, 75% 8%, 80% 18%, 85% 12%, 90% 5%, 95% 10%, 100% 0%,
+    100% 5%, 95% 15%, 90% 10%, 85% 17%, 80% 23%, 75% 13%, 70% 20%,
+    65% 10%, 60% 25%, 55% 15%, 50% 20%, 45% 25%, 40% 40%, 35% 30%,
+    30% 35%, 25% 50%, 20% 45%, 15% 55%, 10% 70%, 5% 60%, 0% 65%
+  );
+  height: 120px;
+  transform: translateY(50%);
+}
+
+/* shared helpers */
+.badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.badge-r { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+.badge-a { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+.badge-b { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+.badge-p { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.2); }
+.badge-g { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+
+.ind-btn {
+  font-size: 11px; padding: 3px 8px; border-radius: 5px;
+  border: 1px solid var(--border-2); background: transparent; color: var(--text-2); cursor: pointer;
+}
+.ind-btn.on { background: var(--brand); border-color: var(--brand); color: white; }
+
+.period-btn {
+  font-size: 11px; padding: 3px 9px; border-radius: 5px;
+  border: 1px solid transparent; background: transparent; color: var(--text-2); cursor: pointer;
+}
+.period-btn.on { background: var(--bg-3); color: var(--text-1); border-color: var(--border-2); }
+
+.sidebar-section { margin-bottom: 16px; }
+.sidebar-label { font-size: 10px; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+.stat-key { color: var(--text-3); }
+.stat-val { color: var(--text-1); font-weight: 600; }
+
+/* =========================================
+   PAGE: 大盤
+========================================= */
+.market-grid {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.mcard {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.mcard-label { font-size: 11px; color: var(--text-3); margin-bottom: 8px; }
+.mcard-val { font-size: 24px; font-weight: 800; }
+.mcard-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.mcard-bar { height: 4px; border-radius: 2px; margin-top: 10px; background: var(--border); overflow: hidden; }
+.mcard-bar-fill { height: 100%; border-radius: 2px; }
+
+/* =========================================
+   PAGE: 選股
+========================================= */
+.screener-layout {
+  flex: 1; overflow: hidden; display: flex;
+}
+.screener-filter {
+  width: 220px; border-right: 1px solid var(--border);
+  padding: 14px; overflow-y: auto; flex-shrink: 0;
+}
+.screener-results { flex: 1; overflow-y: auto; padding: 14px; }
+.filter-group { margin-bottom: 16px; }
+.filter-label { font-size: 10px; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.filter-chip {
+  font-size: 11px; padding: 4px 10px; border-radius: 5px;
+  border: 1px solid var(--border-2); background: transparent; color: var(--text-2);
+  cursor: pointer; margin-right: 4px; margin-bottom: 4px; display: inline-block;
+}
+.filter-chip.on { background: rgba(59,130,246,0.15); border-color: var(--brand); color: #60a5fa; }
+.screener-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 70px 70px 80px;
+  gap: 8px; align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.screener-row.header { font-size: 10px; color: var(--text-4); text-transform: uppercase; padding: 6px 12px; }
+.screener-row:not(.header):hover { background: var(--bg-2); cursor: pointer; }
+
+/* =========================================
+   BOTTOM NAV (mobile feel)
+========================================= */
+.bottomnav {
+  height: 56px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-shrink: 0;
+}
+.bnav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; cursor: pointer; color: var(--text-4); font-size: 9px;
+  transition: color 0.1s;
+}
+.bnav-item:hover { color: var(--text-2); }
+.bnav-item.active { color: var(--brand); }
+.bnav-icon { font-size: 18px; line-height: 1; }
+
+/* =========================================
+   SCROLLBAR
+========================================= */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== TOP BAR ==================== -->
+<div class="topbar">
+  <div class="logo">📈 JayStock</div>
+  <div class="search-box">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <span>搜尋股票…</span>
+  </div>
+  <div class="stock-chip">2330 台積電</div>
+  <div class="topbar-right">
+    <button class="watchlist-btn">☆ 自選股 (5)</button>
+    <div class="avatar">J</div>
+  </div>
+</div>
+
+<!-- ==================== TAB BAR ==================== -->
+<div class="tabbar">
+  <div class="tab active" onclick="switchPage('home', this)">🏠 首頁</div>
+  <div class="tab" onclick="switchPage('kline', this)">📊 走勢圖</div>
+  <div class="tab" onclick="switchPage('chips', this)">🏦 籌碼</div>
+  <div class="tab" onclick="switchPage('market', this)">📉 大盤</div>
+  <div class="tab" onclick="switchPage('screener', this)">🔍 選股</div>
+  <div class="tab" onclick="switchPage('news', this)">📰 新聞</div>
+  <div class="tab" onclick="switchPage('backtest', this)">⚗️ 回測</div>
+  <div class="tab" onclick="switchPage('analysis', this)">🧠 分析</div>
+  <div class="tab" onclick="switchPage('compare', this)">📐 比較</div>
+</div>
+
+<!-- ==================== CONTENT ==================== -->
+<div class="content">
+
+  <!-- 🏠 首頁 -->
+  <div class="page active" id="page-home">
+
+    <!-- 頂部摘要數字 -->
+    <div class="home-summary">
+      <div class="sum-cell active" onclick="switchHomeTab('quotes', this)">
+        <div class="sum-num" style="color:#94a3b8">5</div>
+        <div class="sum-lbl">自選股</div>
+        <div class="sum-sub up">↑ 3 漲 / ↓ 2 跌</div>
+      </div>
+      <div class="sum-cell" onclick="switchHomeTab('alerts', this)">
+        <div class="sum-num" style="color:#f59e0b">3</div>
+        <div class="sum-lbl">今日警示</div>
+        <div class="sum-sub" style="color:#f59e0b">新訊號觸發</div>
+      </div>
+      <div class="sum-cell" onclick="switchHomeTab('dates', this)">
+        <div class="sum-num" style="color:#60a5fa">4</div>
+        <div class="sum-lbl">近7日事件</div>
+        <div class="sum-sub" style="color:#64748b">除息2 法說1 財報1</div>
+      </div>
+      <div class="sum-cell" onclick="switchHomeTab('rules', this)">
+        <div class="sum-num" style="color:#a78bfa">3</div>
+        <div class="sum-lbl">警示規則</div>
+        <div class="sum-sub" style="color:#64748b">啟用2 / 停用1</div>
+      </div>
+    </div>
+
+    <!-- 子 Tab -->
+    <div class="home-tabnav">
+      <div class="home-tab active" id="htab-quotes" onclick="switchHomeTab('quotes', this)">
+        📊 自選股報價
+      </div>
+      <div class="home-tab" id="htab-alerts" onclick="switchHomeTab('alerts', this)">
+        🔔 今日警示 <span class="htab-count">3</span>
+      </div>
+      <div class="home-tab" id="htab-dates" onclick="switchHomeTab('dates', this)">
+        📅 重要日期
+      </div>
+      <div class="home-tab" id="htab-rules" onclick="switchHomeTab('rules', this)">
+        ⚙️ 規則管理
+      </div>
+    </div>
+
+    <div class="home-body">
+
+      <!-- 自選股 -->
+      <div class="home-panel active" id="hp-quotes">
+        <div class="scard alerted" onclick="switchPage('kline', document.querySelector('.tab:nth-child(2)'))">
+          <div style="flex:1">
+            <div class="sc-sym">2330 <span style="font-size:11px;font-weight:400;color:var(--text-3)">台積電</span></div>
+            <div class="sc-badges">
+              <span class="badge badge-r">外資連買5日</span>
+              <span class="badge badge-a">量 2.3x</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="sc-price up">1,045</div>
+            <div class="sc-chg up">▲ +15 (+1.46%)</div>
+          </div>
+        </div>
+        <div class="scard alerted">
+          <div style="flex:1">
+            <div class="sc-sym">2317 <span style="font-size:11px;font-weight:400;color:var(--text-3)">鴻海</span></div>
+            <div class="sc-badges"><span class="badge badge-b">RSI 28 超賣</span></div>
+          </div>
+          <div style="text-align:right">
+            <div class="sc-price down">188</div>
+            <div class="sc-chg down">▼ -2 (-1.05%)</div>
+          </div>
+        </div>
+        <div class="scard alerted">
+          <div style="flex:1">
+            <div class="sc-sym">2454 <span style="font-size:11px;font-weight:400;color:var(--text-3)">聯發科</span></div>
+            <div class="sc-badges">
+              <span class="badge badge-r">突破MA20</span>
+              <span class="badge badge-p">信託連買3日</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="sc-price up">1,320</div>
+            <div class="sc-chg up">▲ +30 (+2.32%)</div>
+          </div>
+        </div>
+        <div class="scard">
+          <div style="flex:1">
+            <div class="sc-sym">0050 <span style="font-size:11px;font-weight:400;color:var(--text-3)">元大台灣50</span></div>
+            <div class="sc-badges"></div>
+          </div>
+          <div style="text-align:right">
+            <div class="sc-price up">198.5</div>
+            <div class="sc-chg up">▲ +1.5 (+0.76%)</div>
+          </div>
+        </div>
+        <div class="scard">
+          <div style="flex:1">
+            <div class="sc-sym">2881 <span style="font-size:11px;font-weight:400;color:var(--text-3)">富邦金</span></div>
+            <div class="sc-badges"><span class="badge badge-g">除息 明天</span></div>
+          </div>
+          <div style="text-align:right">
+            <div class="sc-price down">82.3</div>
+            <div class="sc-chg down">▼ -0.7 (-0.84%)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 警示 -->
+      <div class="home-panel" id="hp-alerts">
+        <div class="acard">
+          <div style="font-size:20px;flex-shrink:0;margin-top:2px">🔴</div>
+          <div>
+            <div class="acard-sym">2330 台積電</div>
+            <div class="acard-msg">外資連續買超 ≥ 3 日（目前連續 5 日，合計淨買入 +8.2億元）<br>觸發規則：外資強攻策略</div>
+            <div style="margin-top:8px"><span class="badge badge-r" style="font-size:11px;padding:2px 8px">外資動向</span></div>
+          </div>
+        </div>
+        <div class="acard" style="border-color:rgba(245,158,11,0.2)">
+          <div style="font-size:20px;flex-shrink:0;margin-top:2px">🟡</div>
+          <div>
+            <div class="acard-sym">2317 鴻海</div>
+            <div class="acard-msg">RSI(14) 跌破 30 超賣區（目前 RSI = 28.4）<br>觸發規則：RSI 反彈買點</div>
+            <div style="margin-top:8px"><span class="badge badge-a" style="font-size:11px;padding:2px 8px">RSI 超賣</span></div>
+          </div>
+        </div>
+        <div class="acard" style="border-color:rgba(59,130,246,0.2)">
+          <div style="font-size:20px;flex-shrink:0;margin-top:2px">🔵</div>
+          <div>
+            <div class="acard-sym">2454 聯發科</div>
+            <div class="acard-msg">收盤突破 MA20，偏離 +1.7%（收 1,320 > MA20 1,298）</div>
+            <div style="margin-top:8px"><span class="badge badge-b" style="font-size:11px;padding:2px 8px">突破訊號</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日期 -->
+      <div class="home-panel" id="hp-dates">
+        <div class="dcard">
+          <div class="day-pill d1">明天<br><span style="font-size:9px;font-weight:400">6/7</span></div>
+          <span class="ev-tag ev-div">除息</span>
+          <div><div class="dinfo-sym">2881 富邦金控</div><div class="dinfo-desc">現金股利 2.5 元，殖利率 3.04%</div></div>
+        </div>
+        <div class="dcard">
+          <div class="day-pill d3">3天後<br><span style="font-size:9px;font-weight:400">6/9</span></div>
+          <span class="ev-tag ev-earn">法說</span>
+          <div><div class="dinfo-sym">2330 台積電</div><div class="dinfo-desc">Q2 2026 法人說明會，預計公佈 Q3 展望</div></div>
+        </div>
+        <div class="dcard">
+          <div class="day-pill d5">5天後<br><span style="font-size:9px;font-weight:400">6/11</span></div>
+          <span class="ev-tag ev-div">除息</span>
+          <div><div class="dinfo-sym">0050 元大台灣50</div><div class="dinfo-desc">現金股利 1.8 元，殖利率 0.91%</div></div>
+        </div>
+        <div class="dcard">
+          <div class="day-pill d5">7天後<br><span style="font-size:9px;font-weight:400">6/13</span></div>
+          <span class="ev-tag ev-earn">財報</span>
+          <div><div class="dinfo-sym">2454 聯發科</div><div class="dinfo-desc">Q2 2026 月營收公告</div></div>
+        </div>
+      </div>
+
+      <!-- 規則 -->
+      <div class="home-panel" id="hp-rules">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:12px;color:var(--text-3)">自訂觸發條件，命中時出現在「今日警示」</div>
+          <button style="font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--brand);background:rgba(59,130,246,0.1);color:#60a5fa;cursor:pointer">＋ 新增</button>
+        </div>
+        <div class="rule-card">
+          <div class="toggle ton"></div>
+          <div style="flex:1"><div class="rule-name">外資強攻策略</div><div class="rule-cond">外資連買天數 ≥ 3 AND 成交量比 ≥ 2.0</div></div>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid var(--border-2);background:transparent;color:var(--text-2);cursor:pointer;margin-right:4px">編輯</button>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid rgba(239,68,68,0.3);background:transparent;color:#f87171;cursor:pointer">刪除</button>
+        </div>
+        <div class="rule-card">
+          <div class="toggle ton"></div>
+          <div style="flex:1"><div class="rule-name">RSI 反彈買點</div><div class="rule-cond">RSI(14) ≤ 30</div></div>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid var(--border-2);background:transparent;color:var(--text-2);cursor:pointer;margin-right:4px">編輯</button>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid rgba(239,68,68,0.3);background:transparent;color:#f87171;cursor:pointer">刪除</button>
+        </div>
+        <div class="rule-card" style="opacity:0.55">
+          <div class="toggle toff"></div>
+          <div style="flex:1"><div class="rule-name" style="color:var(--text-4)">高成交量預警</div><div class="rule-cond">成交量比 ≥ 3.0（已停用）</div></div>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid var(--border-2);background:transparent;color:var(--text-2);cursor:pointer;margin-right:4px">編輯</button>
+          <button style="font-size:11px;padding:3px 9px;border-radius:4px;border:1px solid rgba(239,68,68,0.3);background:transparent;color:#f87171;cursor:pointer">刪除</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 📊 走勢圖 -->
+  <div class="page" id="page-kline">
+    <div class="kline-layout">
+      <div class="kline-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">即時報價</div>
+          <div style="font-size:26px;font-weight:800;color:var(--up)">1,045</div>
+          <div style="font-size:13px;color:var(--up);margin-top:2px">▲ +15 (+1.46%)</div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">今日</div>
+          <div class="stat-row"><span class="stat-key">開盤</span><span class="stat-val">1,030</span></div>
+          <div class="stat-row"><span class="stat-key">最高</span><span class="stat-val up">1,052</span></div>
+          <div class="stat-row"><span class="stat-key">最低</span><span class="stat-val down">1,025</span></div>
+          <div class="stat-row"><span class="stat-key">成交量</span><span class="stat-val">4.2萬張</span></div>
+          <div class="stat-row"><span class="stat-key">成交額</span><span class="stat-val">43.9億</span></div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">法人動態</div>
+          <div class="stat-row"><span class="stat-key">外資</span><span class="stat-val up">+2.1億</span></div>
+          <div class="stat-row"><span class="stat-key">投信</span><span class="stat-val up">+1.3億</span></div>
+          <div class="stat-row"><span class="stat-key">自營</span><span class="stat-val down">-0.4億</span></div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">技術指標</div>
+          <div class="stat-row"><span class="stat-key">RSI(14)</span><span class="stat-val" style="color:var(--warn)">62.4</span></div>
+          <div class="stat-row"><span class="stat-key">MACD</span><span class="stat-val up">+8.2</span></div>
+          <div class="stat-row"><span class="stat-key">MA20</span><span class="stat-val">1,012</span></div>
+        </div>
+      </div>
+      <div class="kline-main">
+        <div class="kline-toolbar">
+          <button class="period-btn on">日K</button>
+          <button class="period-btn">週K</button>
+          <button class="period-btn">月K</button>
+          <button class="period-btn">5分</button>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+          <button class="ind-btn on">MA</button>
+          <button class="ind-btn">EMA</button>
+          <button class="ind-btn on">BOLL</button>
+          <button class="ind-btn">MACD</button>
+          <button class="ind-btn on">RSI</button>
+          <button class="ind-btn">KD</button>
+          <button class="ind-btn">ATR</button>
+          <button class="ind-btn">ADX</button>
+          <button class="ind-btn">Ichimoku</button>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+          <button class="ind-btn" style="font-size:10px">↖游標</button>
+          <button class="ind-btn" style="font-size:10px">— 水平</button>
+          <button class="ind-btn" style="font-size:10px">╱ 趨勢</button>
+          <button class="ind-btn" style="font-size:10px">φ Fib</button>
+        </div>
+        <div class="kline-chart">
+          <div class="chart-placeholder">
+            <div class="chart-line"></div>
+            <div style="position:absolute;bottom:10px;right:10px;font-size:11px;color:var(--text-4)">
+              📊 此處為 K 線圖（lightweight-charts）
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🏦 籌碼 — 簡略佔位 -->
+  <div class="page" id="page-chips" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px">
+    <div style="font-size:32px">🏦</div>
+    <div style="font-size:15px">籌碼分析</div>
+    <div style="font-size:12px;color:var(--text-4)">外資 / 投信 / 自營 三大法人動向圖</div>
+  </div>
+
+  <!-- 📉 大盤 -->
+  <div class="page" id="page-market">
+    <div class="market-grid">
+      <div class="mcard">
+        <div class="mcard-label">加權指數 TAIEX</div>
+        <div class="mcard-val up">22,150</div>
+        <div class="mcard-sub up">▲ +185 (+0.84%)</div>
+        <div class="mcard-bar"><div class="mcard-bar-fill" style="width:72%;background:var(--up)"></div></div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-label">上漲 / 下跌 / 平盤</div>
+        <div class="mcard-val" style="font-size:18px"><span class="up">748</span> / <span class="down">452</span> / <span style="color:var(--text-3)">215</span></div>
+        <div class="mcard-sub">市場廣度：漲跌比 1.66</div>
+        <div class="mcard-bar"><div class="mcard-bar-fill" style="width:62%;background:var(--up)"></div></div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-label">成交量 (億元)</div>
+        <div class="mcard-val" style="color:#60a5fa">3,842</div>
+        <div class="mcard-sub" style="color:var(--text-3)">10日均量 3,120 億</div>
+        <div class="mcard-bar"><div class="mcard-bar-fill" style="width:80%;background:#3b82f6"></div></div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-label">外資買賣超 (億元)</div>
+        <div class="mcard-val up">+185</div>
+        <div class="mcard-sub up">連續 3 日買超</div>
+        <div class="mcard-bar"><div class="mcard-bar-fill" style="width:68%;background:var(--up)"></div></div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-label">半導體板塊</div>
+        <div class="mcard-val up">+1.52%</div>
+        <div class="mcard-sub" style="color:var(--text-3)">台積電 +1.46% 聯發科 +2.32%</div>
+      </div>
+      <div class="mcard">
+        <div class="mcard-label">金融板塊</div>
+        <div class="mcard-val down">-0.43%</div>
+        <div class="mcard-sub" style="color:var(--text-3)">富邦金 -0.84% 國泰金 -0.21%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔍 選股 -->
+  <div class="page" id="page-screener">
+    <div class="screener-layout">
+      <div class="screener-filter">
+        <div class="filter-group">
+          <div class="filter-label">市值規模</div>
+          <span class="filter-chip on">大型股</span>
+          <span class="filter-chip">中型股</span>
+          <span class="filter-chip">小型股</span>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">產業</div>
+          <span class="filter-chip on">半導體</span>
+          <span class="filter-chip">金融</span>
+          <span class="filter-chip">電子</span>
+          <span class="filter-chip">傳產</span>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">技術條件</div>
+          <span class="filter-chip on">外資買超</span>
+          <span class="filter-chip on">RSI&lt;30</span>
+          <span class="filter-chip">突破MA20</span>
+          <span class="filter-chip">量>2x</span>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">基本面</div>
+          <span class="filter-chip">PE&lt;15</span>
+          <span class="filter-chip on">ROE>15%</span>
+          <span class="filter-chip">殖利率>5%</span>
+        </div>
+      </div>
+      <div class="screener-results">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">找到 <strong style="color:var(--text-1)">24</strong> 檔符合條件</div>
+        <div class="screener-row header">
+          <div>代號</div><div>名稱</div><div>現價</div><div>漲跌%</div><div>RSI</div><div>外資</div>
+        </div>
+        <div class="screener-row"><div>2330</div><div>台積電</div><div class="up">1,045</div><div class="up">+1.46%</div><div style="color:var(--warn)">62.4</div><div class="up">+2.1億</div></div>
+        <div class="screener-row"><div>2454</div><div>聯發科</div><div class="up">1,320</div><div class="up">+2.32%</div><div style="color:var(--warn)">58.7</div><div class="up">+1.8億</div></div>
+        <div class="screener-row"><div>2317</div><div>鴻海</div><div class="down">188</div><div class="down">-1.05%</div><div class="down">28.4</div><div class="down">-0.5億</div></div>
+        <div class="screener-row"><div>3008</div><div>大立光</div><div class="up">2,480</div><div class="up">+1.64%</div><div style="color:var(--warn)">55.2</div><div class="up">+0.9億</div></div>
+        <div class="screener-row"><div>2308</div><div>台達電</div><div class="up">385</div><div class="up">+0.52%</div><div style="color:var(--text-2)">48.1</div><div class="up">+0.3億</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 其他頁面佔位 -->
+  <div class="page" id="page-news" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px">
+    <div style="font-size:32px">📰</div><div style="font-size:15px">AI 新聞摘要</div>
+  </div>
+  <div class="page" id="page-backtest" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px">
+    <div style="font-size:32px">⚗️</div><div style="font-size:15px">策略回測</div>
+  </div>
+  <div class="page" id="page-analysis" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px">
+    <div style="font-size:32px">🧠</div><div style="font-size:15px">技術 + 基本面分析</div>
+  </div>
+  <div class="page" id="page-compare" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px">
+    <div style="font-size:32px">📐</div><div style="font-size:15px">多股比較</div>
+  </div>
+
+</div>
+
+<!-- ==================== BOTTOM NAV ==================== -->
+<div class="bottomnav">
+  <div class="bnav-item active" id="bnav-home" onclick="switchPage('home', document.querySelector('.tab:nth-child(1)'))">
+    <div class="bnav-icon">🏠</div><div>首頁</div>
+  </div>
+  <div class="bnav-item" id="bnav-kline" onclick="switchPage('kline', document.querySelector('.tab:nth-child(2)'))">
+    <div class="bnav-icon">📊</div><div>走勢圖</div>
+  </div>
+  <div class="bnav-item" id="bnav-analysis" onclick="switchPage('analysis', document.querySelector('.tab:nth-child(8)'))">
+    <div class="bnav-icon">🧠</div><div>分析</div>
+  </div>
+  <div class="bnav-item" id="bnav-market" onclick="switchPage('market', document.querySelector('.tab:nth-child(4)'))">
+    <div class="bnav-icon">📉</div><div>大盤</div>
+  </div>
+  <div class="bnav-item" id="bnav-screener" onclick="switchPage('screener', document.querySelector('.tab:nth-child(5)'))">
+    <div class="bnav-icon">🔍</div><div>選股</div>
+  </div>
+</div>
+
+<script>
+const pageMap = { home:'home', kline:'kline', chips:'chips', market:'market', screener:'screener', news:'news', backtest:'backtest', analysis:'analysis', compare:'compare' };
+
+function switchPage(name, tabEl) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('active'));
+
+  document.getElementById('page-' + name).classList.add('active');
+  if (tabEl) tabEl.classList.add('active');
+
+  const bnav = document.getElementById('bnav-' + name);
+  if (bnav) bnav.classList.add('active');
+}
+
+function switchHomeTab(name, el) {
+  document.querySelectorAll('.home-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.home-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sum-cell').forEach(c => c.classList.remove('active'));
+
+  document.getElementById('hp-' + name).classList.add('active');
+  document.getElementById('htab-' + name).classList.add('active');
+
+  const map = { quotes:0, alerts:1, dates:2, rules:3 };
+  document.querySelectorAll('.sum-cell')[map[name]].classList.add('active');
+}
+</script>
+</body>
+</html>

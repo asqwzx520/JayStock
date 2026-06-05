@@ -147,6 +147,37 @@ async def fetch_market_chips_all(target_date: date) -> list[dict]:
 
 
 @ttl_cache(ttl=300)
+async def fetch_broker_data(
+    symbol: str,
+    start: date | None = None,
+    end: date | None = None,
+) -> list[dict]:
+    """
+    券商分點買賣資料 — TaiwanStockBrokerTokenization
+    每天每個分點的買賣張數（張 = 1000股）
+    TTL: 300s
+    """
+    if end is None:
+        end = date.today()
+    if start is None:
+        start = end - timedelta(days=30)  # 20 交易日 ≈ 30 calendar days
+
+    params = {
+        "dataset":    "TaiwanStockBrokerTokenization",
+        "data_id":    symbol,
+        "start_date": start.isoformat(),
+        "end_date":   end.isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+
+    return data.get("data", [])
+
+
+@ttl_cache(ttl=300)
 async def fetch_margin(
     symbol: str,
     start: date | None = None,

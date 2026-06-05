@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JayStock — Theme C: Clean Pro</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #111318;
+  --bg-2: #16191f;
+  --bg-card: #1c1f28;
+  --bg-hover: #22252f;
+  --border: #252933;
+  --border-hi: #333849;
+  --text-1: #edf0f7;
+  --text-2: #8e9ab5;
+  --text-3: #555f78;
+  --text-4: #333d52;
+  --brand: #5b8dee;
+  --brand-soft: rgba(91,141,238,0.12);
+  --up: #f04e5e;
+  --up-soft: rgba(240,78,94,0.12);
+  --down: #22c782;
+  --down-soft: rgba(34,199,130,0.12);
+  --warn: #e8a735;
+  --warn-soft: rgba(232,167,53,0.12);
+  --purple: #9b7eea;
+  --purple-soft: rgba(155,126,234,0.12);
+}
+html, body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: -apple-system, "Helvetica Neue", "Segoe UI", sans-serif;
+  height: 100vh; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  height: 50px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 12px;
+  flex-shrink: 0;
+}
+.logo {
+  display: flex; align-items: center; gap: 8px; text-decoration: none;
+}
+.logo-mark {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: linear-gradient(135deg, var(--brand), var(--purple));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 900; color: white;
+}
+.logo-text { font-size: 14px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+.logo-text span { color: var(--text-3); font-weight: 400; }
+
+.sep { width: 1px; height: 20px; background: var(--border); }
+
+.stock-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card); border: 1px solid var(--border-hi);
+  border-radius: 8px; padding: 5px 12px; cursor: pointer;
+  transition: all 0.15s;
+}
+.stock-pill:hover { border-color: var(--brand); background: var(--brand-soft); }
+.sp-sym { font-size: 13px; font-weight: 800; color: var(--text-1); letter-spacing: -0.2px; }
+.sp-name { font-size: 11px; color: var(--text-3); }
+.sp-price { font-size: 14px; font-weight: 700; color: var(--up); }
+.sp-chg { font-size: 11px; color: var(--up); }
+
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.search-pill {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; height: 34px; width: 220px;
+  display: flex; align-items: center; padding: 0 12px; gap: 8px;
+  font-size: 12px; color: var(--text-3); cursor: pointer;
+  transition: border-color 0.15s;
+}
+.search-pill:hover { border-color: var(--border-hi); }
+.kbd { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border-hi); color: var(--text-3); margin-left: auto; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-2); font-size: 14px; transition: all 0.15s;
+}
+.icon-btn:hover { background: var(--bg-hover); border-color: var(--border-hi); color: var(--text-1); }
+.avatar { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--brand), var(--purple)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: white; cursor: pointer; }
+
+/* ── TAB BAR ── */
+.tabbar {
+  height: 40px; background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: stretch; padding: 0 8px; gap: 2px;
+  flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 0 14px; display: flex; align-items: center;
+  font-size: 12.5px; font-weight: 500; color: var(--text-3);
+  border-radius: 7px; white-space: nowrap; cursor: pointer; transition: all 0.15s;
+  flex-shrink: 0; gap: 5px;
+}
+.tab:hover { color: var(--text-2); background: rgba(255,255,255,0.04); }
+.tab.active { color: var(--text-1); background: var(--bg-card); }
+.tab .tab-icon { font-size: 13px; }
+
+/* ── CONTENT ── */
+.content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.page { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.page.active { display: flex; }
+
+/* ── HOME ── */
+.home-summary {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; padding: 14px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  background: var(--bg-2);
+}
+.sum-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; cursor: pointer;
+  transition: all 0.15s; position: relative; overflow: hidden;
+}
+.sum-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 10px 10px 0 0; }
+.sum-card:nth-child(1)::before { background: var(--brand); }
+.sum-card:nth-child(2)::before { background: var(--up); }
+.sum-card:nth-child(3)::before { background: #22c782; }
+.sum-card:nth-child(4)::before { background: var(--purple); }
+.sum-card:hover { border-color: var(--border-hi); background: var(--bg-hover); }
+.sum-card.active { border-color: var(--border-hi); }
+.sum-icon { font-size: 18px; margin-bottom: 8px; }
+.sum-num { font-size: 26px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+.sum-lbl { font-size: 11px; color: var(--text-2); margin-top: 5px; }
+.sum-sub { font-size: 10px; margin-top: 3px; }
+
+.home-tabnav {
+  display: flex; border-bottom: 1px solid var(--border);
+  background: var(--bg); flex-shrink: 0; padding: 0 14px; gap: 2px;
+  align-items: stretch;
+}
+.home-tab {
+  padding: 0 14px; display: flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 500; color: var(--text-3);
+  border-bottom: 2px solid transparent; white-space: nowrap; cursor: pointer; transition: all 0.15s;
+}
+.home-tab:hover { color: var(--text-2); }
+.home-tab.active { color: var(--text-1); border-bottom-color: var(--brand); }
+.htab-count { font-size: 9.5px; background: var(--up); color: white; border-radius: 10px; padding: 1px 5px; line-height: 1.5; }
+
+.home-body { flex: 1; overflow-y: auto; padding: 16px; background: var(--bg); }
+.home-panel { display: none; }
+.home-panel.active { display: block; }
+
+/* Clean stock cards with left color bar */
+.scard {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 14px; cursor: pointer;
+  transition: all 0.15s; position: relative;
+}
+.scard:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+.scard.alerted::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--up); }
+.scard.alerted { padding-left: 20px; }
+.scard-rank { width: 20px; font-size: 11px; color: var(--text-4); font-weight: 700; flex-shrink: 0; }
+.sc-sym { font-size: 14px; font-weight: 800; letter-spacing: -0.3px; }
+.sc-name { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.sc-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+.sc-right { text-align: right; flex-shrink: 0; }
+.sc-price { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.sc-chg { font-size: 12px; margin-top: 4px; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+/* Badge system */
+.badge {
+  font-size: 10.5px; padding: 2px 7px; border-radius: 5px; font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.badge-r { background: var(--up-soft); color: #f87171; }
+.badge-a { background: var(--warn-soft); color: #fbbf24; }
+.badge-b { background: var(--brand-soft); color: #7eb5fa; }
+.badge-p { background: var(--purple-soft); color: #c4b5fd; }
+.badge-g { background: var(--down-soft); color: #34d399; }
+
+/* Alert cards */
+.acard {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; margin-bottom: 10px; transition: all 0.15s;
+}
+.acard:hover { background: var(--bg-hover); }
+.acard-header {
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.acard-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.acard-sym { font-size: 14px; font-weight: 700; }
+.acard-time { font-size: 10.5px; color: var(--text-4); margin-left: auto; }
+.acard-body { padding: 12px 16px; }
+.acard-msg { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.acard-foot { padding: 8px 16px; display: flex; gap: 6px; }
+
+/* Date cards */
+.dcard {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+  display: grid; grid-template-columns: 80px auto 1fr; gap: 12px;
+  align-items: center; transition: all 0.15s;
+}
+.dcard:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+.dcard-countdown {
+  text-align: center;
+}
+.dc-days { font-size: 24px; font-weight: 800; line-height: 1; }
+.dc-unit { font-size: 9px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+.dc-date { font-size: 10px; color: var(--text-4); margin-top: 2px; }
+.ev-tag { font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 6px; white-space: nowrap; }
+.ev-div { background: var(--down-soft); color: #22c782; }
+.ev-earn { background: var(--brand-soft); color: var(--brand); }
+.dcard-info .di-sym { font-size: 14px; font-weight: 700; }
+.dcard-info .di-desc { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+
+/* Rules */
+.rule-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px; transition: all 0.15s;
+}
+.rule-card:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+.toggle { width: 36px; height: 20px; border-radius: 10px; flex-shrink: 0; cursor: pointer; position: relative; transition: background 0.2s; }
+.ton { background: var(--brand); }
+.toff { background: var(--text-4); }
+.toggle::after { content: ''; position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left 0.15s, right 0.15s; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+.ton::after { right: 2px; }
+.toff::after { left: 2px; }
+.rule-name { font-size: 13px; font-weight: 600; }
+.rule-cond { font-size: 11px; color: var(--text-3); margin-top: 3px; font-family: "SFMono-Regular", monospace; }
+.btn-sm {
+  font-size: 11px; padding: 4px 11px; border-radius: 6px;
+  border: 1px solid var(--border-hi); background: transparent; color: var(--text-2);
+  cursor: pointer; transition: all 0.12s; font-weight: 500;
+}
+.btn-sm:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-danger { border-color: rgba(240,78,94,0.3); color: #f87171; }
+.btn-danger:hover { background: var(--up-soft); }
+
+/* ── KLINE ── */
+.kline-layout { display: flex; flex: 1; overflow: hidden; }
+.kline-sidebar { width: 210px; border-right: 1px solid var(--border); overflow-y: auto; padding: 14px; flex-shrink: 0; background: var(--bg-2); }
+.kline-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.kline-toolbar { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; background: var(--bg-2); }
+.kline-chart { flex: 1; background: var(--bg); display: flex; align-items: center; justify-content: center; min-height: 0; position: relative; overflow: hidden; }
+.chart-bg { width: 100%; height: 100%; background: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(91,141,238,0.03) 40px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(91,141,238,0.03) 80px); position: relative; }
+.ind-btn { font-size: 11px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-3); cursor: pointer; transition: all 0.12s; font-weight: 500; }
+.ind-btn:hover { border-color: var(--border-hi); color: var(--text-2); }
+.ind-btn.on { background: var(--brand-soft); border-color: rgba(91,141,238,0.4); color: #7eb5fa; }
+.period-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-3); cursor: pointer; transition: all 0.12s; font-weight: 500; }
+.period-btn:hover { color: var(--text-2); }
+.period-btn.on { background: var(--bg-card); color: var(--text-1); border-color: var(--border-hi); }
+.sbs { margin-bottom: 16px; }
+.sbl { font-size: 10px; font-weight: 700; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.srow { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+.sk { color: var(--text-3); }
+.sv { color: var(--text-1); font-weight: 600; }
+
+/* ── MARKET ── */
+.market-grid { flex: 1; overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; align-content: start; }
+.mcard { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: all 0.15s; }
+.mcard:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+.mcard-label { font-size: 10px; font-weight: 700; color: var(--text-3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+.mcard-val { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.mcard-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.mcard-bar { height: 3px; border-radius: 2px; margin-top: 12px; background: var(--border); overflow: hidden; }
+.mcard-fill { height: 100%; border-radius: 2px; }
+
+/* ── SCREENER ── */
+.screener-layout { flex: 1; overflow: hidden; display: flex; }
+.screener-filter { width: 210px; border-right: 1px solid var(--border); padding: 14px; overflow-y: auto; flex-shrink: 0; background: var(--bg-2); }
+.screener-results { flex: 1; overflow-y: auto; padding: 14px; }
+.fg { margin-bottom: 16px; }
+.fl { font-size: 10px; font-weight: 700; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.fc { font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-2); cursor: pointer; margin-right: 4px; margin-bottom: 4px; display: inline-block; transition: all 0.12s; }
+.fc:hover { border-color: var(--border-hi); color: var(--text-1); }
+.fc.on { background: var(--brand-soft); border-color: rgba(91,141,238,0.4); color: #7eb5fa; }
+.screener-row { display: grid; grid-template-columns: 60px 1fr 80px 70px 70px 80px; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid rgba(37,41,51,0.8); font-size: 12px; }
+.screener-row.header { font-size: 10px; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.04em; padding: 7px 12px; }
+.screener-row:not(.header):hover { background: var(--bg-card); border-radius: 6px; cursor: pointer; }
+
+/* ── BOTTOM NAV ── */
+.bottomnav { height: 58px; background: var(--bg-2); border-top: 1px solid var(--border); display: flex; flex-shrink: 0; }
+.bnav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; color: var(--text-4); font-size: 9.5px; font-weight: 500; transition: color 0.15s; }
+.bnav-item:hover { color: var(--text-2); }
+.bnav-item.active { color: var(--brand); }
+.bnav-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--brand); margin-top: 2px; }
+.bnav-icon { font-size: 17px; }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">J</div>
+    <div class="logo-text">Jay<span>Stock</span></div>
+  </div>
+  <div class="sep"></div>
+  <div class="stock-pill">
+    <div><div class="sp-sym">2330</div><div class="sp-name">台積電</div></div>
+    <div style="margin-left:8px"><div class="sp-price">1,045</div><div class="sp-chg">▲ +1.46%</div></div>
+  </div>
+  <div class="topbar-right">
+    <div class="search-pill">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      搜尋股票…
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="icon-btn" title="自選股">☆</div>
+    <div class="icon-btn" title="通知">🔔</div>
+    <div class="avatar">J</div>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tabbar">
+  <div class="tab active" onclick="switchPage('home',this)"><span class="tab-icon">🏠</span>首頁</div>
+  <div class="tab" onclick="switchPage('kline',this)"><span class="tab-icon">📊</span>走勢圖</div>
+  <div class="tab" onclick="switchPage('chips',this)"><span class="tab-icon">🏦</span>籌碼</div>
+  <div class="tab" onclick="switchPage('market',this)"><span class="tab-icon">📉</span>大盤</div>
+  <div class="tab" onclick="switchPage('screener',this)"><span class="tab-icon">🔍</span>選股</div>
+  <div class="tab" onclick="switchPage('news',this)"><span class="tab-icon">📰</span>新聞</div>
+  <div class="tab" onclick="switchPage('backtest',this)"><span class="tab-icon">⚗️</span>回測</div>
+  <div class="tab" onclick="switchPage('analysis',this)"><span class="tab-icon">🧠</span>分析</div>
+  <div class="tab" onclick="switchPage('compare',this)"><span class="tab-icon">📐</span>比較</div>
+</div>
+
+<div class="content">
+
+  <!-- 首頁 -->
+  <div class="page active" id="page-home">
+    <div class="home-summary">
+      <div class="sum-card active" onclick="switchHomeTab('quotes',this)">
+        <div class="sum-icon">📊</div>
+        <div class="sum-num" style="color:var(--text-1)">5</div>
+        <div class="sum-lbl">自選股</div>
+        <div class="sum-sub up">↑ 3 漲 &nbsp; ↓ 2 跌</div>
+      </div>
+      <div class="sum-card" onclick="switchHomeTab('alerts',this)">
+        <div class="sum-icon">🔔</div>
+        <div class="sum-num" style="color:var(--up)">3</div>
+        <div class="sum-lbl">今日警示</div>
+        <div class="sum-sub" style="color:var(--warn)">新訊號觸發</div>
+      </div>
+      <div class="sum-card" onclick="switchHomeTab('dates',this)">
+        <div class="sum-icon">📅</div>
+        <div class="sum-num" style="color:var(--down)">4</div>
+        <div class="sum-lbl">近7日事件</div>
+        <div class="sum-sub" style="color:var(--text-3)">除息×2 · 法說×1 · 財報×1</div>
+      </div>
+      <div class="sum-card" onclick="switchHomeTab('rules',this)">
+        <div class="sum-icon">⚙️</div>
+        <div class="sum-num" style="color:var(--purple)">3</div>
+        <div class="sum-lbl">警示規則</div>
+        <div class="sum-sub" style="color:var(--text-3)">啟用2 · 停用1</div>
+      </div>
+    </div>
+    <div class="home-tabnav">
+      <div class="home-tab active" id="htab-quotes" onclick="switchHomeTab('quotes',this)">自選股報價</div>
+      <div class="home-tab" id="htab-alerts" onclick="switchHomeTab('alerts',this)">今日警示 <span class="htab-count">3</span></div>
+      <div class="home-tab" id="htab-dates" onclick="switchHomeTab('dates',this)">重要日期</div>
+      <div class="home-tab" id="htab-rules" onclick="switchHomeTab('rules',this)">警示規則</div>
+    </div>
+    <div class="home-body">
+      <!-- 自選股 -->
+      <div class="home-panel active" id="hp-quotes">
+        <div class="scard alerted">
+          <div style="flex:1">
+            <div class="sc-sym">2330 <span style="font-size:11px;font-weight:400;color:var(--text-3)">台積電</span></div>
+            <div class="sc-badges"><span class="badge badge-r">外資連買5日</span><span class="badge badge-a">量 2.3×</span></div>
+          </div>
+          <div class="sc-right"><div class="sc-price up">1,045</div><div class="sc-chg up">▲ +15 (+1.46%)</div></div>
+        </div>
+        <div class="scard alerted">
+          <div style="flex:1">
+            <div class="sc-sym">2317 <span style="font-size:11px;font-weight:400;color:var(--text-3)">鴻海</span></div>
+            <div class="sc-badges"><span class="badge badge-b">RSI 28 超賣</span></div>
+          </div>
+          <div class="sc-right"><div class="sc-price down">188</div><div class="sc-chg down">▼ -2 (-1.05%)</div></div>
+        </div>
+        <div class="scard alerted">
+          <div style="flex:1">
+            <div class="sc-sym">2454 <span style="font-size:11px;font-weight:400;color:var(--text-3)">聯發科</span></div>
+            <div class="sc-badges"><span class="badge badge-r">突破MA20</span><span class="badge badge-p">信託連買3日</span></div>
+          </div>
+          <div class="sc-right"><div class="sc-price up">1,320</div><div class="sc-chg up">▲ +30 (+2.32%)</div></div>
+        </div>
+        <div class="scard">
+          <div style="flex:1"><div class="sc-sym">0050 <span style="font-size:11px;font-weight:400;color:var(--text-3)">元大台灣50</span></div></div>
+          <div class="sc-right"><div class="sc-price up">198.5</div><div class="sc-chg up">▲ +1.5 (+0.76%)</div></div>
+        </div>
+        <div class="scard">
+          <div style="flex:1">
+            <div class="sc-sym">2881 <span style="font-size:11px;font-weight:400;color:var(--text-3)">富邦金</span></div>
+            <div class="sc-badges"><span class="badge badge-g">除息 明天</span></div>
+          </div>
+          <div class="sc-right"><div class="sc-price down">82.3</div><div class="sc-chg down">▼ -0.7 (-0.84%)</div></div>
+        </div>
+      </div>
+
+      <!-- 警示 -->
+      <div class="home-panel" id="hp-alerts">
+        <div class="acard">
+          <div class="acard-header">
+            <div class="acard-dot" style="background:var(--up)"></div>
+            <div class="acard-sym">2330 台積電</div>
+            <span class="badge badge-r" style="margin-left:8px">外資動向</span>
+            <div class="acard-time">今日 09:32</div>
+          </div>
+          <div class="acard-body"><div class="acard-msg">外資連續買超達第 5 日，合計淨買入 +8.2 億元。觸發規則：外資強攻策略（連買天數 ≥ 3 AND 成交量比 ≥ 2.0）</div></div>
+        </div>
+        <div class="acard">
+          <div class="acard-header">
+            <div class="acard-dot" style="background:var(--warn)"></div>
+            <div class="acard-sym">2317 鴻海</div>
+            <span class="badge badge-a" style="margin-left:8px">RSI 超賣</span>
+            <div class="acard-time">今日 10:15</div>
+          </div>
+          <div class="acard-body"><div class="acard-msg">RSI(14) = 28.4，跌破超賣閾值 30。觸發規則：RSI 反彈買點</div></div>
+        </div>
+        <div class="acard">
+          <div class="acard-header">
+            <div class="acard-dot" style="background:var(--brand)"></div>
+            <div class="acard-sym">2454 聯發科</div>
+            <span class="badge badge-b" style="margin-left:8px">突破訊號</span>
+            <div class="acard-time">今日 13:30</div>
+          </div>
+          <div class="acard-body"><div class="acard-msg">收盤突破 MA20，偏離 +1.7%（1,320 > MA20 1,298）</div></div>
+        </div>
+      </div>
+
+      <!-- 日期 -->
+      <div class="home-panel" id="hp-dates">
+        <div class="dcard">
+          <div class="dcard-countdown"><div class="dc-days up">1</div><div class="dc-unit">天後</div><div class="dc-date">6/7</div></div>
+          <span class="ev-tag ev-div">除息</span>
+          <div class="dcard-info"><div class="di-sym">2881 富邦金控</div><div class="di-desc">現金股利 2.5 元，殖利率 3.04%，填息預估 27 天</div></div>
+        </div>
+        <div class="dcard">
+          <div class="dcard-countdown"><div class="dc-days" style="color:var(--warn)">3</div><div class="dc-unit">天後</div><div class="dc-date">6/9</div></div>
+          <span class="ev-tag ev-earn">法說</span>
+          <div class="dcard-info"><div class="di-sym">2330 台積電</div><div class="di-desc">Q2 2026 法人說明會，預計公佈 Q3 展望</div></div>
+        </div>
+        <div class="dcard">
+          <div class="dcard-countdown"><div class="dc-days" style="color:var(--text-2)">5</div><div class="dc-unit">天後</div><div class="dc-date">6/11</div></div>
+          <span class="ev-tag ev-div">除息</span>
+          <div class="dcard-info"><div class="di-sym">0050 元大台灣50</div><div class="di-desc">現金股利 1.8 元，殖利率 0.91%</div></div>
+        </div>
+        <div class="dcard">
+          <div class="dcard-countdown"><div class="dc-days" style="color:var(--text-2)">7</div><div class="dc-unit">天後</div><div class="dc-date">6/13</div></div>
+          <span class="ev-tag ev-earn">財報</span>
+          <div class="dcard-info"><div class="di-sym">2454 聯發科</div><div class="di-desc">Q2 2026 月營收公告（預估 YoY +18%）</div></div>
+        </div>
+      </div>
+
+      <!-- 規則 -->
+      <div class="home-panel" id="hp-rules">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:12px;color:var(--text-3)">自訂觸發條件，命中時顯示於「今日警示」</div>
+          <button style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:8px;border:1px solid rgba(91,141,238,0.4);background:var(--brand-soft);color:#7eb5fa;cursor:pointer">＋ 新增規則</button>
+        </div>
+        <div class="rule-card"><div class="toggle ton"></div><div style="flex:1"><div class="rule-name">外資強攻策略</div><div class="rule-cond">外資連買天數 ≥ 3 AND 成交量比 ≥ 2.0</div></div><button class="btn-sm" style="margin-right:6px">編輯</button><button class="btn-sm btn-danger">刪除</button></div>
+        <div class="rule-card"><div class="toggle ton"></div><div style="flex:1"><div class="rule-name">RSI 反彈買點</div><div class="rule-cond">RSI(14) ≤ 30</div></div><button class="btn-sm" style="margin-right:6px">編輯</button><button class="btn-sm btn-danger">刪除</button></div>
+        <div class="rule-card" style="opacity:0.55"><div class="toggle toff"></div><div style="flex:1"><div class="rule-name" style="color:var(--text-3)">高成交量預警</div><div class="rule-cond">成交量比 ≥ 3.0（已停用）</div></div><button class="btn-sm" style="margin-right:6px">編輯</button><button class="btn-sm btn-danger">刪除</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 走勢圖 -->
+  <div class="page" id="page-kline">
+    <div class="kline-layout">
+      <div class="kline-sidebar">
+        <div class="sbs"><div class="sbl">即時報價</div><div style="font-size:28px;font-weight:800;color:var(--up);letter-spacing:-1px">1,045</div><div style="font-size:13px;color:var(--up);margin-top:3px">▲ +15 (+1.46%)</div></div>
+        <div class="sbs"><div class="sbl">今日行情</div><div class="srow"><span class="sk">開盤</span><span class="sv">1,030</span></div><div class="srow"><span class="sk">最高</span><span class="sv up">1,052</span></div><div class="srow"><span class="sk">最低</span><span class="sv down">1,025</span></div><div class="srow"><span class="sk">成交量</span><span class="sv">4.2萬張</span></div></div>
+        <div class="sbs"><div class="sbl">三大法人</div><div class="srow"><span class="sk">外資</span><span class="sv up">+2.1億</span></div><div class="srow"><span class="sk">投信</span><span class="sv up">+1.3億</span></div><div class="srow"><span class="sk">自營</span><span class="sv down">-0.4億</span></div></div>
+        <div class="sbs"><div class="sbl">技術指標</div><div class="srow"><span class="sk">RSI(14)</span><span class="sv" style="color:var(--warn)">62.4</span></div><div class="srow"><span class="sk">MACD</span><span class="sv up">+8.2</span></div><div class="srow"><span class="sk">MA20</span><span class="sv">1,012</span></div></div>
+      </div>
+      <div class="kline-main">
+        <div class="kline-toolbar">
+          <button class="period-btn on">日K</button><button class="period-btn">週K</button><button class="period-btn">月K</button><button class="period-btn">60分</button>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+          <button class="ind-btn on">MA</button><button class="ind-btn">EMA</button><button class="ind-btn on">BOLL</button><button class="ind-btn">MACD</button><button class="ind-btn on">RSI</button><button class="ind-btn">KD</button><button class="ind-btn">ATR</button><button class="ind-btn">ADX</button><button class="ind-btn">Ichimoku</button>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+          <button class="ind-btn">↖ 游標</button><button class="ind-btn">— 水平</button><button class="ind-btn">╱ 趨勢</button><button class="ind-btn">φ Fib</button>
+        </div>
+        <div class="kline-chart">
+          <div class="chart-bg">
+            <svg width="100%" height="55%" style="position:absolute;bottom:22%;left:0" viewBox="0 0 800 200" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#5b8dee" stop-opacity="0.2"/>
+                  <stop offset="100%" stop-color="#5b8dee" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,160 L40,140 L80,155 L120,120 L160,100 L200,110 L240,80 L280,60 L320,75 L360,40 L400,30 L440,20 L480,45 L520,10 L560,25 L600,15 L640,35 L680,20 L720,10 L760,18 L800,5 L800,200 L0,200Z" fill="url(#gC)"/>
+              <path d="M0,160 L40,140 L80,155 L120,120 L160,100 L200,110 L240,80 L280,60 L320,75 L360,40 L400,30 L440,20 L480,45 L520,10 L560,25 L600,15 L640,35 L680,20 L720,10 L760,18 L800,5" fill="none" stroke="#5b8dee" stroke-width="2"/>
+            </svg>
+            <div style="position:absolute;bottom:12px;right:14px;font-size:11px;color:var(--text-4)">📊 K 線圖（lightweight-charts）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 大盤 -->
+  <div class="page" id="page-market">
+    <div class="market-grid">
+      <div class="mcard"><div class="mcard-label">加權指數 TAIEX</div><div class="mcard-val up">22,150</div><div class="mcard-sub up">▲ +185 (+0.84%)</div><div class="mcard-bar"><div class="mcard-fill" style="width:72%;background:var(--up)"></div></div></div>
+      <div class="mcard"><div class="mcard-label">上漲 / 下跌 / 平盤</div><div class="mcard-val" style="font-size:18px"><span class="up">748</span> / <span class="down">452</span> / <span style="color:var(--text-3)">215</span></div><div class="mcard-sub">廣度比 1.66</div><div class="mcard-bar"><div class="mcard-fill" style="width:62%;background:var(--up)"></div></div></div>
+      <div class="mcard"><div class="mcard-label">成交量（億元）</div><div class="mcard-val" style="color:var(--brand)">3,842</div><div class="mcard-sub" style="color:var(--text-3)">10日均量 3,120億</div><div class="mcard-bar"><div class="mcard-fill" style="width:80%;background:var(--brand)"></div></div></div>
+      <div class="mcard"><div class="mcard-label">外資買賣超（億元）</div><div class="mcard-val up">+185</div><div class="mcard-sub up">連續 3 日買超</div><div class="mcard-bar"><div class="mcard-fill" style="width:68%;background:var(--up)"></div></div></div>
+      <div class="mcard"><div class="mcard-label">半導體板塊</div><div class="mcard-val up">+1.52%</div><div class="mcard-sub" style="color:var(--text-3)">台積 +1.46% 聯發科 +2.32%</div></div>
+      <div class="mcard"><div class="mcard-label">金融板塊</div><div class="mcard-val down">-0.43%</div><div class="mcard-sub" style="color:var(--text-3)">富邦金 -0.84%</div></div>
+    </div>
+  </div>
+
+  <!-- 選股 -->
+  <div class="page" id="page-screener">
+    <div class="screener-layout">
+      <div class="screener-filter">
+        <div class="fg"><div class="fl">市值規模</div><span class="fc on">大型股</span><span class="fc">中型股</span><span class="fc">小型股</span></div>
+        <div class="fg"><div class="fl">產業</div><span class="fc on">半導體</span><span class="fc">金融</span><span class="fc">電子</span><span class="fc">傳產</span></div>
+        <div class="fg"><div class="fl">技術條件</div><span class="fc on">外資買超</span><span class="fc on">RSI&lt;30</span><span class="fc">突破MA20</span><span class="fc">量&gt;2x</span></div>
+        <div class="fg"><div class="fl">基本面</div><span class="fc">PE&lt;15</span><span class="fc on">ROE&gt;15%</span><span class="fc">殖利率&gt;5%</span></div>
+      </div>
+      <div class="screener-results">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:12px">找到 <strong style="color:var(--text-1)">24</strong> 檔符合條件</div>
+        <div class="screener-row header"><div>代號</div><div>名稱</div><div>現價</div><div>漲跌%</div><div>RSI</div><div>外資</div></div>
+        <div class="screener-row"><div>2330</div><div>台積電</div><div class="up">1,045</div><div class="up">+1.46%</div><div style="color:var(--warn)">62.4</div><div class="up">+2.1億</div></div>
+        <div class="screener-row"><div>2454</div><div>聯發科</div><div class="up">1,320</div><div class="up">+2.32%</div><div style="color:var(--warn)">58.7</div><div class="up">+1.8億</div></div>
+        <div class="screener-row"><div>2317</div><div>鴻海</div><div class="down">188</div><div class="down">-1.05%</div><div class="down">28.4</div><div class="down">-0.5億</div></div>
+        <div class="screener-row"><div>3008</div><div>大立光</div><div class="up">2,480</div><div class="up">+1.64%</div><div style="color:var(--text-2)">55.2</div><div class="up">+0.9億</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-chips" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px"><div style="font-size:32px">🏦</div><div style="font-size:15px">籌碼分析</div></div>
+  <div class="page" id="page-news" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px"><div style="font-size:32px">📰</div><div style="font-size:15px">AI 新聞摘要</div></div>
+  <div class="page" id="page-backtest" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px"><div style="font-size:32px">⚗️</div><div style="font-size:15px">策略回測</div></div>
+  <div class="page" id="page-analysis" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px"><div style="font-size:32px">🧠</div><div style="font-size:15px">技術 + 基本面分析</div></div>
+  <div class="page" id="page-compare" style="align-items:center;justify-content:center;color:var(--text-4);gap:8px"><div style="font-size:32px">📐</div><div style="font-size:15px">多股比較</div></div>
+</div>
+
+<div class="bottomnav">
+  <div class="bnav-item active" id="bnav-home" onclick="switchPage('home',document.querySelector('.tab:nth-child(1)'))"><div class="bnav-icon">🏠</div><div>首頁</div><div class="bnav-dot"></div></div>
+  <div class="bnav-item" id="bnav-kline" onclick="switchPage('kline',document.querySelector('.tab:nth-child(2)'))"><div class="bnav-icon">📊</div><div>走勢圖</div></div>
+  <div class="bnav-item" id="bnav-analysis" onclick="switchPage('analysis',document.querySelector('.tab:nth-child(8)'))"><div class="bnav-icon">🧠</div><div>分析</div></div>
+  <div class="bnav-item" id="bnav-market" onclick="switchPage('market',document.querySelector('.tab:nth-child(4)'))"><div class="bnav-icon">📉</div><div>大盤</div></div>
+  <div class="bnav-item" id="bnav-screener" onclick="switchPage('screener',document.querySelector('.tab:nth-child(5)'))"><div class="bnav-icon">🔍</div><div>選股</div></div>
+</div>
+
+<script>
+function switchPage(n,el){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.bnav-dot').forEach(d=>d.remove());document.getElementById('page-'+n).classList.add('active');if(el)el.classList.add('active');const b=document.getElementById('bnav-'+n);if(b){b.classList.add('active');const d=document.createElement('div');d.className='bnav-dot';b.appendChild(d);}}
+function switchHomeTab(n,el){document.querySelectorAll('.home-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.home-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.sum-card').forEach(c=>c.classList.remove('active'));document.getElementById('hp-'+n).classList.add('active');document.getElementById('htab-'+n).classList.add('active');const m={quotes:0,alerts:1,dates:2,rules:3};document.querySelectorAll('.sum-card')[m[n]].classList.add('active');}
+</script>
+</body>
+</html>

@@ -926,16 +926,7 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
           </div>
         )}
 
-        {/* Block ① 自選股報價列表 */}
-        {(!loading || summary) && (
-          <WatchlistBlock
-            symbols={symbols}
-            data={summary?.data ?? {}}
-            onSelectStock={onSelectStock}
-          />
-        )}
-
-        {/* Block ② 今日警示 */}
+        {/* Block ① 今日警示 */}
         {(!loading || summary) && (
           <AlertsBlock
             symbols={symbols}

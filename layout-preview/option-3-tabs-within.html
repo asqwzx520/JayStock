@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案三：區塊分頁式</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-label {
+    background: #1e3a5f;
+    border-bottom: 1px solid #3b82f6;
+    color: #93c5fd;
+    font-size: 12px;
+    padding: 8px 16px;
+    flex-shrink: 0;
+  }
+
+  /* 頂部摘要卡 — 永遠顯示 */
+  .summary-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: #1e293b;
+    border-bottom: 1px solid #1e293b;
+    flex-shrink: 0;
+  }
+  .summary-cell {
+    background: #0f1117;
+    padding: 14px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .summary-cell:hover { background: #161b27; }
+  .summary-cell.active { background: #161b27; border-bottom: 2px solid #3b82f6; }
+  .summary-num { font-size: 22px; font-weight: 800; line-height: 1.1; }
+  .summary-label { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .summary-sub { font-size: 11px; margin-top: 2px; }
+  .up { color: #ef4444; }
+  .down { color: #22c55e; }
+  .neutral { color: #94a3b8; }
+  .warn { color: #fbbf24; }
+
+  /* 區塊 tab 導航 */
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #1e293b;
+    background: #0f1117;
+    flex-shrink: 0;
+    padding: 0 16px;
+  }
+  .tab-btn {
+    padding: 12px 18px;
+    font-size: 13px;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.1s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab-btn:hover { color: #94a3b8; }
+  .tab-btn.active { color: #f1f5f9; border-bottom-color: #3b82f6; }
+  .tab-count {
+    font-size: 10px;
+    background: #ef4444;
+    color: white;
+    border-radius: 10px;
+    padding: 1px 5px;
+    min-width: 18px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* 內容區 */
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* 自選股 — 增大字 */
+  .stock-grid { display: flex; flex-direction: column; gap: 10px; }
+  .stock-card {
+    background: #161b27;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    cursor: pointer;
+    transition: border-color 0.1s;
+  }
+  .stock-card:hover { border-color: #334155; }
+  .stock-card.alerted { border-left: 3px solid #ef4444; }
+  .sc-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .sc-sym { font-size: 16px; font-weight: 800; color: #f1f5f9; }
+  .sc-name { font-size: 12px; color: #475569; }
+  .sc-price { font-size: 24px; font-weight: 800; line-height: 1; }
+  .sc-chg { font-size: 13px; margin-top: 4px; }
+  .sc-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 4px; }
+  .badge-red { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+  .badge-amber { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+  .badge-purple { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.2); }
+  .badge-green { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+
+  /* 警示面板 */
+  .alert-list { display: flex; flex-direction: column; gap: 10px; }
+  .alert-card {
+    background: #161b27;
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .alert-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .alert-sym { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .alert-msg { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+  .alert-type { font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-top: 8px; display: inline-block; }
+
+  /* 日期面板 */
+  .date-list { display: flex; flex-direction: column; gap: 10px; }
+  .date-card {
+    background: #161b27;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .day-pill {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 8px;
+    text-align: center;
+    flex-shrink: 0;
+    min-width: 60px;
+  }
+  .day-1 { background: rgba(239,68,68,0.2); color: #f87171; }
+  .day-3 { background: rgba(245,158,11,0.2); color: #fbbf24; }
+  .day-5 { background: rgba(100,116,139,0.15); color: #94a3b8; }
+  .event-badge { font-size: 12px; padding: 3px 8px; border-radius: 5px; flex-shrink: 0; }
+  .div-tag { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .earn-tag { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .date-info-sym { font-size: 15px; font-weight: 700; }
+  .date-info-desc { font-size: 12px; color: #64748b; margin-top: 3px; }
+
+  /* 規則面板 */
+  .rules-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .btn-add {
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #3b82f6;
+    background: rgba(59,130,246,0.1);
+    color: #60a5fa;
+    cursor: pointer;
+  }
+  .rule-card {
+    background: #161b27;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .rule-card:last-child { margin-bottom: 0; }
+  .toggle {
+    width: 36px; height: 20px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .toggle.on { background: #3b82f6; }
+  .toggle.off { background: #334155; }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: white;
+    transition: left 0.15s;
+  }
+  .toggle.on::after { right: 2px; left: auto; }
+  .toggle.off::after { left: 2px; }
+  .rule-info { flex: 1; }
+  .rule-name { font-size: 14px; font-weight: 600; }
+  .rule-cond { font-size: 12px; color: #64748b; margin-top: 3px; }
+  .rule-btns { display: flex; gap: 6px; }
+  .btn-edit { font-size: 11px; padding: 4px 10px; border-radius: 5px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; }
+  .btn-del { font-size: 11px; padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(239,68,68,0.3); background: transparent; color: #f87171; cursor: pointer; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="preview-label">🎨 方案三：區塊分頁式 — 頂部摘要恆顯示，下方 Tab 切換各區塊，內容大字舒適捲動</div>
+
+<!-- 頂部摘要 — 點擊切換頁籤 -->
+<div class="summary-bar">
+  <div class="summary-cell active" onclick="switchTab('quotes')">
+    <div class="summary-num neutral">5</div>
+    <div class="summary-label">自選股</div>
+    <div class="summary-sub up">↑ 3 檔上漲</div>
+  </div>
+  <div class="summary-cell" onclick="switchTab('alerts')">
+    <div class="summary-num warn">3</div>
+    <div class="summary-label">今日警示</div>
+    <div class="summary-sub" style="color:#fbbf24">外資 / RSI / 突破</div>
+  </div>
+  <div class="summary-cell" onclick="switchTab('dates')">
+    <div class="summary-num" style="color:#60a5fa">4</div>
+    <div class="summary-label">近 7 日事件</div>
+    <div class="summary-sub" style="color:#64748b">除息 2 · 法說 1 · 財報 1</div>
+  </div>
+  <div class="summary-cell" onclick="switchTab('rules')">
+    <div class="summary-num" style="color:#a78bfa">3</div>
+    <div class="summary-label">自訂規則</div>
+    <div class="summary-sub" style="color:#64748b">啟用 2 / 停用 1</div>
+  </div>
+</div>
+
+<!-- Tab 導航 -->
+<div class="tab-nav">
+  <div class="tab-btn active" id="tab-quotes" onclick="switchTab('quotes')">
+    📊 自選股報價
+  </div>
+  <div class="tab-btn" id="tab-alerts" onclick="switchTab('alerts')">
+    🔔 今日警示 <span class="tab-count">3</span>
+  </div>
+  <div class="tab-btn" id="tab-dates" onclick="switchTab('dates')">
+    📅 重要日期
+  </div>
+  <div class="tab-btn" id="tab-rules" onclick="switchTab('rules')">
+    ⚙️ 警示規則
+  </div>
+</div>
+
+<!-- 內容 -->
+<div class="tab-content">
+
+  <!-- 自選股 -->
+  <div class="tab-panel active" id="panel-quotes">
+    <div class="stock-grid">
+
+      <div class="stock-card alerted">
+        <div>
+          <div class="sc-top"><span class="sc-sym">2330</span><span class="sc-name">台積電</span></div>
+          <div class="sc-badges">
+            <span class="badge badge-red">外資連買5日</span>
+            <span class="badge badge-amber">成交量 2.3x</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="sc-price up">1,045</div>
+          <div class="sc-chg up">▲ +15 (+1.46%)</div>
+        </div>
+      </div>
+
+      <div class="stock-card alerted">
+        <div>
+          <div class="sc-top"><span class="sc-sym">2317</span><span class="sc-name">鴻海精密</span></div>
+          <div class="sc-badges">
+            <span class="badge badge-blue">RSI 28 超賣</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="sc-price down">188</div>
+          <div class="sc-chg down">▼ -2 (-1.05%)</div>
+        </div>
+      </div>
+
+      <div class="stock-card alerted">
+        <div>
+          <div class="sc-top"><span class="sc-sym">2454</span><span class="sc-name">聯發科</span></div>
+          <div class="sc-badges">
+            <span class="badge badge-red">突破 MA20</span>
+            <span class="badge badge-purple">信託連買3日</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="sc-price up">1,320</div>
+          <div class="sc-chg up">▲ +30 (+2.32%)</div>
+        </div>
+      </div>
+
+      <div class="stock-card">
+        <div>
+          <div class="sc-top"><span class="sc-sym">0050</span><span class="sc-name">元大台灣50</span></div>
+          <div class="sc-badges"></div>
+        </div>
+        <div style="text-align:right">
+          <div class="sc-price up">198.5</div>
+          <div class="sc-chg up">▲ +1.5 (+0.76%)</div>
+        </div>
+      </div>
+
+      <div class="stock-card">
+        <div>
+          <div class="sc-top"><span class="sc-sym">2881</span><span class="sc-name">富邦金控</span></div>
+          <div class="sc-badges">
+            <span class="badge badge-green">除息 明天</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="sc-price down">82.3</div>
+          <div class="sc-chg down">▼ -0.7 (-0.84%)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 警示 -->
+  <div class="tab-panel" id="panel-alerts">
+    <div class="alert-list">
+
+      <div class="alert-card">
+        <div class="alert-icon">🔴</div>
+        <div>
+          <div class="alert-sym">2330 台積電</div>
+          <div class="alert-msg">外資連續買超已達第 5 日，合計淨買入 8.2 億元。<br>觸發規則：外資連買天數 ≥ 3</div>
+          <span class="alert-type badge-red" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.25)">外資動向</span>
+        </div>
+      </div>
+
+      <div class="alert-card" style="border-color:rgba(245,158,11,0.2)">
+        <div class="alert-icon">🟡</div>
+        <div>
+          <div class="alert-sym">2317 鴻海</div>
+          <div class="alert-msg">RSI(14) 跌破超賣區間（目前 RSI = 28.4 &lt; 30）。<br>觸發規則：RSI 反彈買點</div>
+          <span class="alert-type" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block;margin-top:8px">RSI 超賣</span>
+        </div>
+      </div>
+
+      <div class="alert-card" style="border-color:rgba(59,130,246,0.2)">
+        <div class="alert-icon">🔵</div>
+        <div>
+          <div class="alert-sym">2454 聯發科</div>
+          <div class="alert-msg">收盤價突破 MA20，偏離幅度 +1.7%（收 1,320 > MA20 1,298）<br>觸發規則：外資強攻策略</div>
+          <span class="alert-type" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block;margin-top:8px">突破訊號</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 日期 -->
+  <div class="tab-panel" id="panel-dates">
+    <div class="date-list">
+
+      <div class="date-card">
+        <div class="day-pill day-1">明天<br><span style="font-size:10px;font-weight:400">6/7</span></div>
+        <span class="event-badge div-tag">除息日</span>
+        <div>
+          <div class="date-info-sym">2881 富邦金控</div>
+          <div class="date-info-desc">現金股利 2.5 元，殖利率 3.04%，填息預估 27 天</div>
+        </div>
+      </div>
+
+      <div class="date-card">
+        <div class="day-pill day-3">3天後<br><span style="font-size:10px;font-weight:400">6/9</span></div>
+        <span class="event-badge earn-tag">法說會</span>
+        <div>
+          <div class="date-info-sym">2330 台積電</div>
+          <div class="date-info-desc">Q2 2026 法人說明會，預計公佈 Q3 展望</div>
+        </div>
+      </div>
+
+      <div class="date-card">
+        <div class="day-pill day-5">5天後<br><span style="font-size:10px;font-weight:400">6/11</span></div>
+        <span class="event-badge div-tag">除息日</span>
+        <div>
+          <div class="date-info-sym">0050 元大台灣50</div>
+          <div class="date-info-desc">現金股利 1.8 元，殖利率 0.91%</div>
+        </div>
+      </div>
+
+      <div class="date-card">
+        <div class="day-pill day-5">7天後<br><span style="font-size:10px;font-weight:400">6/13</span></div>
+        <span class="event-badge earn-tag">財報</span>
+        <div>
+          <div class="date-info-sym">2454 聯發科</div>
+          <div class="date-info-desc">Q2 2026 月營收公告（預估 YoY +18%）</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 規則 -->
+  <div class="tab-panel" id="panel-rules">
+    <div class="rules-header">
+      <div style="font-size:13px;color:#94a3b8">管理你的自訂警示條件，觸發時會在「今日警示」出現</div>
+      <button class="btn-add">＋ 新增規則</button>
+    </div>
+
+    <div class="rule-card">
+      <div class="toggle on"></div>
+      <div class="rule-info">
+        <div class="rule-name">外資強攻策略</div>
+        <div class="rule-cond">外資連買天數 ≥ 3 AND 成交量比 ≥ 2.0</div>
+      </div>
+      <div class="rule-btns">
+        <button class="btn-edit">編輯</button>
+        <button class="btn-del">刪除</button>
+      </div>
+    </div>
+
+    <div class="rule-card">
+      <div class="toggle on"></div>
+      <div class="rule-info">
+        <div class="rule-name">RSI 反彈買點</div>
+        <div class="rule-cond">RSI(14) ≤ 30</div>
+      </div>
+      <div class="rule-btns">
+        <button class="btn-edit">編輯</button>
+        <button class="btn-del">刪除</button>
+      </div>
+    </div>
+
+    <div class="rule-card" style="opacity:0.6">
+      <div class="toggle off"></div>
+      <div class="rule-info">
+        <div class="rule-name" style="color:#475569">高成交量預警</div>
+        <div class="rule-cond">成交量比 ≥ 3.0（已停用）</div>
+      </div>
+      <div class="rule-btns">
+        <button class="btn-edit">編輯</button>
+        <button class="btn-del">刪除</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.summary-cell').forEach(c => c.classList.remove('active'));
+
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+
+  const map = { quotes: 0, alerts: 1, dates: 2, rules: 3 };
+  document.querySelectorAll('.summary-cell')[map[name]].classList.add('active');
+}
+</script>
+
+</body>
+</html>
