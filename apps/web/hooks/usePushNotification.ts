@@ -60,8 +60,13 @@ async function saveSubscriptionToServer(
         auth:     keys.auth,
       }),
     });
+    if (!res.ok && res.status !== 201) {
+      const body = await res.text().catch(() => "");
+      console.error("[push] 後端 /push/subscribe 回傳", res.status, body);
+    }
     return res.ok || res.status === 201;
-  } catch {
+  } catch (e) {
+    console.error("[push] fetch /push/subscribe 例外:", e);
     return false;
   }
 }
@@ -127,46 +132,54 @@ export function usePushNotification(): UsePushNotificationReturn {
 
     try {
       // 1. 取得 VAPID 公鑰
+      console.log("[push] step1: 取得 VAPID 公鑰...");
       const vapidKey = await getVapidPublicKey();
+      console.log("[push] step1 結果:", vapidKey ? `公鑰長度 ${vapidKey.length}` : "null（未啟用）");
       if (!vapidKey) {
-        console.warn("[push] VAPID 公鑰未設定或後端尚未就緒");
         throw new Error("VAPID_NOT_READY");
       }
 
       // 2. 請求通知權限
+      console.log("[push] step2: 請求通知權限...");
       const perm = await Notification.requestPermission();
+      console.log("[push] step2 結果:", perm);
       setPermission(perm as PushPermission);
       if (perm !== "granted") return false;
 
-      // 3. 註冊 Service Worker（若尚未註冊）
+      // 3. 註冊 Service Worker
+      console.log("[push] step3: 註冊 Service Worker...");
       let reg = swRegRef.current;
       if (!reg) {
         reg = await navigator.serviceWorker.register(SW_PATH, { scope: "/" });
         await navigator.serviceWorker.ready;
         swRegRef.current = reg;
       }
+      console.log("[push] step3 完成, scope:", reg.scope);
 
       // 4. 建立 Push 訂閱
+      console.log("[push] step4: pushManager.subscribe...");
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly:      true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey).buffer as ArrayBuffer,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as unknown as ArrayBuffer,
       });
+      console.log("[push] step4 完成, endpoint:", sub.endpoint.slice(-30));
 
       // 5. 送後端儲存
+      console.log("[push] step5: 儲存訂閱到後端, userId:", userId.slice(0, 8));
       const ok = await saveSubscriptionToServer(userId, sub);
+      console.log("[push] step5 結果:", ok ? "成功" : "失敗（後端回傳非 2xx）");
       if (ok) {
         setIsSubscribed(true);
         return true;
       } else {
-        // 後端儲存失敗時反訂閱，避免不一致
         await sub.unsubscribe();
         return false;
       }
     } catch (err) {
       if (err instanceof Error && err.message === "VAPID_NOT_READY") {
-        throw err;   // 讓上層顯示更精確的訊息
+        throw err;
       }
-      console.error("[push] 訂閱失敗:", err);
+      console.error("[push] 訂閱失敗（step 詳情看上方）:", err);
       return false;
     } finally {
       setIsLoading(false);
