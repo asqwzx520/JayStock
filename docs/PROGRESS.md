@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-06  
-> **當前版本：** commit `234cf4f`（籌碼 Tab 全面翻新：6 區塊垂直滾動 + 7 項加權評分 + 券商分點分類 + 首頁 280px 自選股側欄）  
+> **更新日期：** 2026-06-07  
+> **當前版本：** commit `2eb7d7f`（Web Push Notification：VAPID + Service Worker + Supabase 持久化，端對端測試通過）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -232,13 +232,13 @@
 | 功能項目 | StockPulse | TradingView | 富途牛牛 | 籌碼K線 | 差距評估 |
 |---------|:----------:|:-----------:|:-------:|:------:|---------|
 | 設價提醒（突破 / 跌破）Toast | ✅ | ✅ | ✅ | ✅ | 基本齊平 |
-| **Web Push Notification（背景通知）** | ❌ | ✅ | ✅ | ❌ | **關閉瀏覽器就失效，實用性大打折扣** |
+| **Web Push Notification（背景通知）** | ✅ | ✅ | ✅ | ❌ | **已完成（`2eb7d7f`）：VAPID + SW + Supabase 持久化** |
 | **Email / Line 推播** | △ Email 架構已建 | ✅ | ✅ | ✅ | Email 待驗證，無 Line |
 | **技術指標觸發警報（如 RSI < 30）** | ❌ | ✅✅ | ✅ | △ | 進階需求 |
 | **法人異常大量買超警報** | ❌ | ❌ | △ | ✅ | 台股籌碼用戶需求 |
 | **財報公告 / 除權息提醒** | ❌ | ✅ | ✅ | △ | 散戶基本需求 |
 
-**評分：1/6 ★★☆☆☆** — 只有基本 Toast，關閉瀏覽器就失效。Web Push 是最小改動、最大效益的補強。
+**評分：3/6 ★★★☆☆** — Web Push 已完成（VAPID + Supabase 持久化）；Email 架構已建待驗證；Line 未做。
 
 ---
 
@@ -271,12 +271,12 @@
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
-| 通知 & 提醒 | 1 | 6 | ★★☆☆☆ | Web Push Notification |
+| 通知 & 提醒 | 3 | 6 | ★★★☆☆ | Web Push ✅ 已完成；Email 待驗證；Line 未做 |
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **37** | **60** | **約 75/100** | |
+| **加總** | **39** | **60** | **約 77/100** | |
 
-> **結論（2026-06-06 更新）：** 回測引擎（`19eb219`）確認已上線，AI 選股 & 策略面向從 3/7 → 6/7；籌碼翻新 3/9 → 5/9。整體競品評分 72 → 75 分。  
-> 下一個最高影響力補強：**Web Push 通知**（設價提醒背景推播，留存率關鍵）。
+> **結論（2026-06-07 更新）：** Web Push Notification 完整上線（`e59edd8`～`2eb7d7f`），通知面向從 1/6 → 3/6。修復 slowapi+Pydantic 422 bug、require_user 同時支援 UUID v4 與 Google numeric ID。整體評分 75 → 77 分。  
+> 下一個建議：**SMTP 盤前 AI 推播驗證**（30 分鐘）或 **鍵盤快捷鍵**（UX 質感提升）。
 
 ---
 
@@ -320,11 +320,12 @@
 ### ~~第 6 步：回測引擎（頂尖版）~~ ✅ 已完成（`19eb219`，2026-06-05）
 > 6 種策略 + 11 項指標 + 4 分頁結果面板（績效摘要/資金曲線/交易明細/月份熱力圖），全免費部署。
 
-### 第 7 步：Web Push Notification ⬅️ 下一個目標
+### ~~第 7 步：Web Push Notification~~ ✅ 已完成（`2eb7d7f`，2026-06-07）
 - Service Worker (`/sw.js`) + VAPID 金鑰 + Push API
 - 設價提醒觸發時，即使瀏覽器關閉也能收到系統推播
 - 後端：`push_service.py`（pywebpush 發送）+ `/api/v1/push/subscribe` Supabase 持久化
-- 前端：`usePushNotification` hook + 設定頁訂閱按鈕
+- 前端：`usePushNotification` hook + Header 📶 訂閱按鈕
+- **端對端測試通過**：訂閱 → Supabase 儲存 → VAPID 推播 → 裝置收到通知
 
 ### 第 8 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
@@ -333,10 +334,11 @@
 
 ---
 
-## ✅ 近期完成（2026-06-06）
+## ✅ 近期完成（2026-06-07）
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `e59edd8`～`2eb7d7f` | **Web Push Notification**：Service Worker + VAPID + pywebpush；`push_service.py`（Supabase 持久化 + in-memory fallback）；`/api/v1/push/subscribe|status|test` 端點；`usePushNotification` hook；Header 📶 訂閱按鈕；修復 slowapi+Pydantic 422（改用 `request.json()`）；修復 require_user 支援 Google numeric ID；Supabase `push_subscriptions` 表建立；**端對端測試通過** | ✅ Live |
 | `234cf4f` | **籌碼 Tab 全面翻新**：6 區塊垂直滾動（評分環形圖 / 法人流量 / 累積持倉 / 外資持股% / 券商分點 / 融資融券）；7 項加權評分（滿分 100）；券商分點分 foreign/trust/daytrade 三類 + 隔日沖偵測（已知名單 + 算法）；`/chips/{symbol}/brokers?days=5/10/20` 新端點；TTL 300s 快取 | ✅ Live |
 | `19eb219` | **回測引擎（頂尖版）**：6 種策略（MA黃金交叉/RSI均值回歸/MACD/KD/布林/自訂）；11 項績效指標（CAGR/Sharpe/Sortino/Calmar/MaxDD/勝率/盈虧比等）；台股交易成本（買0.1425%，賣0.1425%+0.3%稅）；benchmark自動選0050.TW/SPY；yfinance最多20年日K，24h TTL；4 分頁結果（績效摘要/資金曲線+交易標記/交易明細可排序/月份報酬熱力圖）| ✅ Live |
 | `234cf4f` | **首頁 Tab 280px 自選股側欄**：LeftPanel WatchlistSidebar 內嵌首頁，支援多群組；TickerTape 純大盤指數（移除自選股）；HomeDashboard 移除重複 WatchlistBlock | ✅ Live |
@@ -382,4 +384,4 @@
 
 ---
 
-*最後更新：2026-06-06 by Claude*
+*最後更新：2026-06-07 by Claude*

@@ -186,11 +186,12 @@
 
 ---
 
-### [ ] 13. Web Push 通知（價格警報推送）⏸️ 暫緩
-- 到價警報目前只在開網頁時有效，需要 Service Worker + VAPID
-- 讓用戶手機直接收推播
-- 難度：高
-- **優先度：最低（P3）— 暫不實作，待其他功能穩定後再評估**
+### [x] 13. Web Push 通知（價格警報推送）✅ 已完成（`2eb7d7f`，2026-06-07）
+- Service Worker (`/sw.js`) + VAPID 金鑰對 + pywebpush
+- 訂閱端點持久化至 Supabase `push_subscriptions` 表（in-memory fallback）
+- `usePushNotification` hook + Header 📶 訂閱按鈕
+- 設價提醒觸發 → 自動 Web Push，即使瀏覽器關閉也能收到系統通知
+- **端對端測試通過**：`sent: 1` 確認
 
 ### [x] 14. 多股比較走勢圖
 - 同時顯示 2~4 支股票的正規化報酬走勢（起始日 = 100），做相對強弱比較
