@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getDashboardSummary,
+  getAiWatchlistSummary,
   alertRulesApi,
   watchlistApi,
   getUserId,
@@ -769,6 +770,11 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
   const [error, setError]         = useState<string | null>(null);
   const [rules, setRules]         = useState<AlertRule[]>([]);
 
+  // AI 每日自選股摘要
+  const [aiSummary, setAiSummary]         = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError]     = useState<string | null>(null);
+
   const userId = typeof window !== "undefined" ? getUserId() : "";
 
   // ── 載入自訂規則 ───────────────────────────────────────────────────────────
@@ -822,6 +828,22 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
 
     loadRules();
   }, [loadDashboard, loadRules, userId]);
+
+  // ── AI 每日自選股摘要 ──────────────────────────────────────────────────────
+  const fetchAiSummary = useCallback(async () => {
+    if (symbols.length === 0 || aiSummaryLoading) return;
+    setAiSummaryLoading(true);
+    setAiSummaryError(null);
+    setAiSummary(null);
+    try {
+      const res = await getAiWatchlistSummary(symbols, userId);
+      setAiSummary(res.summary);
+    } catch {
+      setAiSummaryError("AI 摘要暫時無法使用，請稍後再試。");
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  }, [symbols, userId, aiSummaryLoading]);
 
   // ── 自訂規則 CRUD handlers ─────────────────────────────────────────────────
   const handleAddRule = async (payload: CreateAlertRulePayload) => {
@@ -878,8 +900,8 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
     >
       <div className="max-w-3xl mx-auto space-y-3">
 
-        {/* 頂列：標題 + 刷新 */}
-        <div className="flex items-center justify-between">
+        {/* 頂列：標題 + 按鈕 */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
               我的首頁
@@ -893,15 +915,61 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
               </p>
             )}
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-opacity disabled:opacity-40"
-            style={{ background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-          >
-            {loading ? "載入中…" : "🔄 刷新"}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* 🤖 AI 每日摘要按鈕 */}
+            {symbols.length > 0 && (
+              <button
+                onClick={fetchAiSummary}
+                disabled={aiSummaryLoading}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium transition-opacity disabled:opacity-40"
+                style={{
+                  background: aiSummary ? "rgba(59,130,246,0.1)" : "var(--bg-surface)",
+                  color:      aiSummary ? "var(--color-brand)" : "var(--text-secondary)",
+                  border:     `1px solid ${aiSummary ? "rgba(59,130,246,0.35)" : "var(--border)"}`,
+                }}
+              >
+                {aiSummaryLoading ? "⟳ 分析中…" : "🤖 AI 摘要"}
+              </button>
+            )}
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-opacity disabled:opacity-40"
+              style={{ background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+            >
+              {loading ? "載入中…" : "🔄 刷新"}
+            </button>
+          </div>
         </div>
+
+        {/* AI 每日自選股摘要結果 */}
+        {(aiSummary || aiSummaryError) && (
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background:  aiSummaryError ? "rgba(239,68,68,0.06)" : "rgba(59,130,246,0.06)",
+              border:      `1px solid ${aiSummaryError ? "rgba(239,68,68,0.2)" : "rgba(59,130,246,0.18)"}`,
+            }}
+          >
+            {!aiSummaryError && (
+              <div className="flex items-center gap-1.5 mb-2 text-xs font-bold tracking-wider"
+                   style={{ color: "var(--color-brand)" }}>
+                🤖 AI 每日自選股摘要
+              </div>
+            )}
+            <p className="text-sm leading-relaxed"
+               style={{ color: aiSummaryError ? "var(--color-down)" : "var(--text-primary)" }}>
+              {aiSummaryError ?? aiSummary}
+            </p>
+            <button
+              onClick={() => { setAiSummary(null); setAiSummaryError(null); }}
+              className="mt-2 text-xs opacity-40 hover:opacity-70"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              關閉
+            </button>
+          </div>
+        )}
 
         {/* 錯誤提示 */}
         {error && (

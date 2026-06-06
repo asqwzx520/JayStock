@@ -82,6 +82,7 @@ import {
   getChips,
   getMargin,
   getFundamental,
+  getStockVerdict,
   INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
@@ -148,6 +149,10 @@ export default function Home() {
 
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
+
+  // AI 一句話評價
+  const [verdict, setVerdict]             = useState<string | null>(null);
+  const [verdictLoading, setVerdictLoading] = useState(false);
 
   // 繪圖工具
   const [activeTool, setActiveTool]   = useState<DrawingTool>("cursor");
@@ -224,7 +229,21 @@ export default function Home() {
   useEffect(() => {
     setFundamental(null);
     getFundamental(symbol).then(setFundamental).catch(() => {});
+    setVerdict(null);   // 換股時清除舊評價
   }, [symbol]);
+
+  async function fetchVerdict() {
+    if (verdictLoading) return;
+    setVerdictLoading(true);
+    try {
+      const res = await getStockVerdict(symbol);
+      setVerdict(res.verdict);
+    } catch {
+      setVerdict("暫時無法取得 AI 評價，請稍後再試。");
+    } finally {
+      setVerdictLoading(false);
+    }
+  }
 
   function handleSelectStock(sym: string, name?: string) {
     setSymbol(sym);
@@ -365,6 +384,26 @@ export default function Home() {
                     onClearAll={() => setDrawingClearKey((k) => k + 1)}
                   />
                   <IndicatorSelector active={indicators} onChange={setIndicators} />
+                  {/* 🤖 AI 一句話評價按鈕 */}
+                  <button
+                    onClick={fetchVerdict}
+                    disabled={verdictLoading}
+                    title="AI 一句話評價"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
+                    style={{
+                      background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
+                      border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
+                      color:       verdict ? "var(--color-brand)" : "var(--text-secondary)",
+                      opacity:     verdictLoading ? 0.6 : 1,
+                    }}
+                  >
+                    {verdictLoading ? (
+                      <span className="animate-spin text-[12px]">⟳</span>
+                    ) : (
+                      "🤖"
+                    )}
+                    <span className="hidden sm:inline">AI 評價</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -408,6 +447,29 @@ export default function Home() {
               {fundamental.sector && (
                 <FundItem label="產業" value={fundamental.sector} />
               )}
+            </div>
+          )}
+
+          {/* ── AI 一句話評價帶（走勢圖 tab 顯示評價後才出現）── */}
+          {viewTab === "kline" && verdict && (
+            <div
+              className="shrink-0 flex items-start gap-2 px-4 py-2 border-b"
+              style={{
+                background:   "rgba(59,130,246,0.06)",
+                borderColor:  "rgba(59,130,246,0.2)",
+                fontSize:     "12px",
+              }}
+            >
+              <span style={{ color: "var(--color-brand)", fontSize: "14px", flexShrink: 0 }}>🤖</span>
+              <span style={{ color: "var(--text-primary)", lineHeight: 1.6 }}>{verdict}</span>
+              <button
+                onClick={() => setVerdict(null)}
+                className="ml-auto shrink-0 opacity-40 hover:opacity-80 text-xs"
+                style={{ color: "var(--text-secondary)" }}
+                title="關閉"
+              >
+                ✕
+              </button>
             </div>
           )}
 

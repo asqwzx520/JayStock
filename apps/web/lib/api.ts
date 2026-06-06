@@ -1199,3 +1199,62 @@ export function getPushStatus(userId: string): Promise<PushStatusResponse> {
     headers: { "X-User-ID": userId },
   }).then((r) => r.json());
 }
+
+// ── AI 功能（Verdict / Compare Analysis / Watchlist Summary）─────────────────
+
+export interface StockVerdictResponse {
+  symbol:  string;
+  verdict: string;
+  meta: {
+    price:      number;
+    change_pct: number;
+    trend:      string;
+    rsi14:      number | null;
+  };
+}
+
+export interface CompareAnalysisResponse {
+  symbols:  string[];
+  period:   string;
+  analysis: string;
+  data:     string[];
+}
+
+export interface AiWatchlistSummaryResponse {
+  summary:    string;
+  symbols:    string[];
+  stock_data: string[];
+}
+
+export function getStockVerdict(symbol: string): Promise<StockVerdictResponse> {
+  return fetcher<StockVerdictResponse>(`/api/v1/ai-analysis/${encodeURIComponent(symbol)}/verdict`);
+}
+
+export async function getCompareAnalysis(
+  symbols: string[],
+  period = "1y",
+): Promise<CompareAnalysisResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/ai-analysis/compare`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ symbols, period }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: /ai-analysis/compare`);
+  return res.json();
+}
+
+export async function getAiWatchlistSummary(
+  symbols: string[],
+  userId?: string,
+): Promise<AiWatchlistSummaryResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/dashboard/ai-summary`, {
+    method:  "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(userId ? { "X-User-ID": userId } : {}),
+    },
+    body: JSON.stringify({ symbols }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: /dashboard/ai-summary`);
+  return res.json();
+}

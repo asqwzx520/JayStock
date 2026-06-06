@@ -1,10 +1,10 @@
 """
 AI 技術分析解讀 API
 
-GET /api/v1/ai-analysis/{symbol}
+GET  /api/v1/ai-analysis/{symbol}          — 完整技術分析段落（150-180 字）
+GET  /api/v1/ai-analysis/{symbol}/verdict  — 一句話 AI 評價（30-50 字）
+POST /api/v1/ai-analysis/compare           — 多股比較 AI 分析（按鈕觸發）
 
-結合 RSI / MACD / MA 排列 / 成交量 / 法人籌碼，
-呼叫 Gemini 生成 150-180 字繁體中文技術分析段落。
 快取 TTL：15 分鐘（盤中多次點擊不重複消耗 API quota）
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 from app.core.rate_limit import limiter
 from app.core.cache import ttl_cache
 from app.core.validators import validate_symbol
@@ -194,4 +195,236 @@ async def get_ai_analysis(request: Request, symbol: str):
         data = await loop.run_in_executor(None, _generate_analysis_sync, sym)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"無法生成 AI 分析：{exc}")
+    return data
+
+
+# ── Stock Verdict ─────────────────────────────────────────────────────────────
+
+@ttl_cache(ttl=900)   # 15 minutes
+def _generate_verdict_sync(symbol: str) -> dict[str, Any]:
+    """
+    一句話 AI 評價（30-50 字）：趨勢方向 + 關鍵訊號 + 短線建議
+    比完整分析更快，適合放在 K 線圖旁快速瀏覽。
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    from app.core.config import settings  # type: ignore
+
+    yf_sym = _yf_symbol(symbol)
+    df = yf.download(yf_sym, period="1mo", auto_adjust=True, progress=False, threads=False)
+    if df.empty:
+        raise ValueError(f"無法取得 {symbol} 資料")
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df.columns = [c.lower() for c in df.columns]
+
+    close   = df["close"].dropna()
+    price   = float(close.iloc[-1])
+    prev_cl = float(close.iloc[-2]) if len(close) > 1 else price
+    chg_pct = (price - prev_cl) / prev_cl * 100 if prev_cl > 0 else 0.0
+
+    # 快速指標：MA5/MA10、RSI
+    ma5  = float(close.rolling(5).mean().iloc[-1])  if len(close) >= 5  else None
+    ma10 = float(close.rolling(10).mean().iloc[-1]) if len(close) >= 10 else None
+    trend = (
+        "多頭排列" if ma5 and ma10 and ma5 > ma10
+        else "空頭排列" if ma5 and ma10 and ma5 < ma10
+        else "盤整"
+    )
+
+    rsi_v: float | None = None
+    try:
+        import pandas_ta as ta  # noqa
+        rsi_s = df.ta.rsi(length=14)
+        if rsi_s is not None and not rsi_s.empty:
+            rsi_v = float(rsi_s.iloc[-1])
+    except Exception:
+        pass
+
+    # 規則式 fallback verdict
+    if rsi_v and rsi_v > 70:
+        signal = "RSI 進入超買，留意回撤風險"
+    elif rsi_v and rsi_v < 30:
+        signal = "RSI 超賣，可留意低接機會"
+    elif chg_pct > 2:
+        signal = "今日強力上漲，動能充足"
+    elif chg_pct < -2:
+        signal = "今日明顯下挫，注意支撐"
+    else:
+        signal = "盤面平穩，等待突破方向"
+
+    fallback = (
+        f"{symbol} 現價 {price:.0f} 元（{chg_pct:+.1f}%），"
+        f"均線{trend}，{signal}。僅供參考。"
+    )
+
+    text: str = fallback
+    if settings.gemini_api_key:
+        try:
+            import google.generativeai as genai  # type: ignore
+            genai.configure(api_key=settings.gemini_api_key)
+            model  = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"你是台股技術分析師，請用繁體中文對以下股票給一句話評價（30-50 字），"
+                f"包含：① 趨勢方向 ② 關鍵信號 ③ 短線操作建議。語氣直接，不需客套話。\n\n"
+                f"股票：{symbol} | 現價 {price:.2f} 元 | 漲跌 {chg_pct:+.2f}%\n"
+                f"均線：{trend} | RSI(14)：{f'{rsi_v:.1f}' if rsi_v else '無資料'}\n\n"
+                f"直接輸出一句話（不加引號）："
+            )
+            resp = model.generate_content(prompt)
+            t    = resp.text.strip()
+            if t:
+                text = t
+        except Exception as exc:
+            logger.warning("Gemini verdict failed for %s: %s", symbol, exc)
+
+    return {
+        "symbol":  symbol,
+        "verdict": text,
+        "meta": {
+            "price":      round(price, 2),
+            "change_pct": round(chg_pct, 2),
+            "trend":      trend,
+            "rsi14":      round(rsi_v, 1) if rsi_v is not None else None,
+        },
+    }
+
+
+@router.get("/ai-analysis/{symbol}/verdict")
+@limiter.limit("15/minute")
+async def get_stock_verdict(request: Request, symbol: str):
+    """
+    個股 AI 一句話評價（30-50 字）
+    GET /api/v1/ai-analysis/2330/verdict
+    """
+    sym  = validate_symbol(symbol)
+    loop = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(None, _generate_verdict_sync, sym)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"無法生成 AI 評價：{exc}")
+    return data
+
+
+# ── Compare Analysis ──────────────────────────────────────────────────────────
+
+class CompareAnalysisRequest(BaseModel):
+    symbols: list[str] = Field(..., min_length=2, max_length=4)
+    period:  str        = Field(default="1y")
+
+
+@ttl_cache(ttl=900)   # 15 minutes
+def _generate_compare_analysis_sync(symbols_key: str, period: str) -> dict[str, Any]:
+    """
+    多股比較 AI 分析：比較各股在指定期間的報酬、波動、相關性，並給出結論。
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    from app.core.config import settings  # type: ignore
+
+    symbols   = [s.strip() for s in symbols_key.split(",")]
+    period_map = {
+        "1m": "1mo", "3m": "3mo", "6m": "6mo",
+        "1y": "1y",  "3y": "3y",  "5y": "5y",
+    }
+    yf_period = period_map.get(period, "1y")
+
+    summaries: list[str] = []
+    for sym in symbols:
+        yf_sym = _yf_symbol(sym)
+        try:
+            df = yf.download(yf_sym, period=yf_period, auto_adjust=True, progress=False, threads=False)
+            if df.empty:
+                continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df.columns = [c.lower() for c in df.columns]
+            close = df["close"].dropna()
+            if len(close) < 2:
+                continue
+            total_ret = (float(close.iloc[-1]) / float(close.iloc[0]) - 1) * 100
+            volatility = float(close.pct_change().std() * (252 ** 0.5) * 100)
+            summaries.append(
+                f"{sym}：區間報酬 {total_ret:+.1f}%，年化波動 {volatility:.1f}%"
+            )
+        except Exception:
+            continue
+
+    if not summaries:
+        raise ValueError("無法取得任何股票資料")
+
+    data_str = "\n".join(summaries)
+    period_label = {
+        "1m": "1 個月", "3m": "3 個月", "6m": "6 個月",
+        "1y": "1 年", "3y": "3 年", "5y": "5 年",
+    }.get(period, period)
+
+    fallback = (
+        f"在 {period_label} 期間，{', '.join(symbols)} 的表現如下：\n{data_str}。\n"
+        f"以上比較僅供參考，不構成投資建議。"
+    )
+
+    text: str = fallback
+    if settings.gemini_api_key:
+        try:
+            import google.generativeai as genai  # type: ignore
+            genai.configure(api_key=settings.gemini_api_key)
+            model  = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"你是專業的股票分析師，請用繁體中文（150-200 字）分析以下多支股票在 {period_label} 的表現比較，"
+                f"涵蓋：① 報酬排名點評 ② 風險（波動）比較 ③ 各股主要驅動因素（若知道）④ 投資組合搭配建議。"
+                f"語氣專業直接，結尾加「以上分析僅供參考，不構成投資建議。」\n\n"
+                f"數據：\n{data_str}\n\n"
+                f"直接輸出段落分析："
+            )
+            resp = model.generate_content(prompt)
+            t    = resp.text.strip()
+            if t:
+                text = t
+        except Exception as exc:
+            logger.warning("Gemini compare analysis failed for %s: %s", symbols_key, exc)
+
+    return {
+        "symbols":  symbols,
+        "period":   period,
+        "analysis": text,
+        "data":     summaries,
+    }
+
+
+@router.post("/ai-analysis/compare")
+@limiter.limit("5/minute")
+async def get_compare_analysis(request: Request, body: CompareAnalysisRequest):
+    """
+    多股比較 AI 分析（按鈕觸發，15 分鐘快取）
+    POST /api/v1/ai-analysis/compare
+    Body: {"symbols": ["2330", "2317", "AAPL"], "period": "1y"}
+    """
+    validated: list[str] = []
+    for s in body.symbols[:4]:
+        try:
+            validated.append(validate_symbol(s.strip()))
+        except Exception:
+            pass
+    if len(validated) < 2:
+        raise HTTPException(status_code=400, detail="至少需要 2 支有效股票代號")
+
+    if body.period not in ("1m", "3m", "6m", "1y", "3y", "5y"):
+        period = "1y"
+    else:
+        period = body.period
+
+    symbols_key = ",".join(validated)
+    loop        = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(
+            None, _generate_compare_analysis_sync, symbols_key, period
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"無法生成比較分析：{exc}")
     return data

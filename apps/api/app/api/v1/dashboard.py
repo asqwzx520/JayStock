@@ -28,8 +28,9 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import BaseModel, Field
 from app.core.rate_limit import limiter
-from app.core.validators import validate_symbols, require_user
+from app.core.validators import validate_symbols, validate_symbol, require_user
 from app.core.cache import ttl_cache
 
 logger = logging.getLogger(__name__)
@@ -387,3 +388,116 @@ async def get_dashboard_summary(
         "data":       data,
         "updated_at": time.time(),
     }
+
+
+# ─── AI 每日自選股摘要 ────────────────────────────────────────────────────────
+
+class AiWatchlistSummaryRequest(BaseModel):
+    symbols: list[str] = Field(..., min_length=1, max_length=30)
+
+
+@ttl_cache(ttl=1800)   # 30 minutes
+def _ai_watchlist_summary_sync(symbols_key: str) -> dict:
+    """
+    對自選股組合用 Gemini 生成整體市場洞察與操作建議。
+    symbols_key：逗號分隔的股票代號（已排序，用於快取）
+    """
+    import yfinance as yf
+    import pandas as pd
+    from app.core.config import settings  # type: ignore
+
+    symbols = [s.strip() for s in symbols_key.split(",")]
+
+    stock_lines: list[str] = []
+    for sym in symbols[:20]:   # 最多 20 支避免 token 過多
+        yf_sym = f"{sym}.TW" if sym.isdigit() else sym
+        try:
+            df = yf.download(yf_sym, period="5d", auto_adjust=True, progress=False, threads=False)
+            if df.empty:
+                continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df.columns = [c.lower() for c in df.columns]
+            close   = df["close"].dropna()
+            if len(close) < 2:
+                continue
+            price   = float(close.iloc[-1])
+            prev_p  = float(close.iloc[-2])
+            chg_pct = (price - prev_p) / prev_p * 100 if prev_p > 0 else 0.0
+            w_chg   = (price / float(close.iloc[0]) - 1) * 100 if float(close.iloc[0]) > 0 else 0.0
+            stock_lines.append(
+                f"{sym}：{price:.0f} 元 今日 {chg_pct:+.1f}% 週漲跌 {w_chg:+.1f}%"
+            )
+        except Exception:
+            continue
+
+    if not stock_lines:
+        return {"summary": "無法取得自選股資料，請稍後再試。", "symbols": symbols}
+
+    data_str = "\n".join(stock_lines)
+
+    fallback = (
+        f"您的自選股今日表現：\n{data_str}\n\n"
+        "以上數據僅供參考，不構成投資建議。"
+    )
+
+    text: str = fallback
+    if settings.gemini_api_key:
+        try:
+            import google.generativeai as genai  # type: ignore
+            genai.configure(api_key=settings.gemini_api_key)
+            model  = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"你是專業的台股投資分析師，請根據以下用戶自選股今日表現，"
+                f"用繁體中文（150-200 字）撰寫整體市場洞察，涵蓋：\n"
+                f"① 整體漲跌氛圍（多頭/空頭/分歧）\n"
+                f"② 值得關注的個股（表現最強/最弱）\n"
+                f"③ 短線操作提示\n"
+                f"語氣像是每日早報簡報，專業但易懂。"
+                f"結尾加「以上分析僅供參考，不構成投資建議。」\n\n"
+                f"自選股資料：\n{data_str}\n\n"
+                f"直接輸出分析段落："
+            )
+            resp = model.generate_content(prompt)
+            t    = resp.text.strip()
+            if t:
+                text = t
+        except Exception as exc:
+            logger.warning("Gemini watchlist summary failed: %s", exc)
+
+    return {
+        "summary":     text,
+        "symbols":     symbols,
+        "stock_data":  stock_lines,
+    }
+
+
+@router.post("/dashboard/ai-summary")
+@limiter.limit("5/minute")
+async def get_ai_watchlist_summary(
+    request:   Request,
+    body:      AiWatchlistSummaryRequest,
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """
+    AI 每日自選股整體摘要（按鈕觸發，30 分鐘快取）
+    POST /api/v1/dashboard/ai-summary
+    Body: {"symbols": ["2330", "2317", "0050"]}
+    """
+    validated: list[str] = []
+    for s in body.symbols[:20]:
+        try:
+            validated.append(validate_symbol(s.strip()))
+        except Exception:
+            pass
+
+    if not validated:
+        raise HTTPException(status_code=400, detail="沒有有效的股票代號")
+
+    symbols_key = ",".join(sorted(set(validated)))   # 排序去重，穩定快取 key
+    loop        = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(None, _ai_watchlist_summary_sync, symbols_key)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"無法生成 AI 摘要：{exc}")
+    return data
