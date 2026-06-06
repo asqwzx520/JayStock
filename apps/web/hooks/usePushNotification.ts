@@ -129,8 +129,8 @@ export function usePushNotification(): UsePushNotificationReturn {
       // 1. 取得 VAPID 公鑰
       const vapidKey = await getVapidPublicKey();
       if (!vapidKey) {
-        console.warn("[push] VAPID 公鑰未設定，Push 功能未啟用");
-        return false;
+        console.warn("[push] VAPID 公鑰未設定或後端尚未就緒");
+        throw new Error("VAPID_NOT_READY");
       }
 
       // 2. 請求通知權限
@@ -163,6 +163,9 @@ export function usePushNotification(): UsePushNotificationReturn {
         return false;
       }
     } catch (err) {
+      if (err instanceof Error && err.message === "VAPID_NOT_READY") {
+        throw err;   // 讓上層顯示更精確的訊息
+      }
       console.error("[push] 訂閱失敗:", err);
       return false;
     } finally {

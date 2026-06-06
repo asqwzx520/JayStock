@@ -29,17 +29,25 @@ function PushSubscribeButton() {
     }
     if (isSubscribed) {
       const ok = await unsubscribe(userId);
-      setTooltip(ok ? "已取消推播通知" : "取消失敗，請重試");
+      setTooltip(ok ? "已關閉背景推播" : "取消失敗，請重試");
     } else {
       if (permission === "denied") {
-        setTooltip("推播已被封鎖，請在瀏覽器設定中允許");
-        setTimeout(() => setTooltip(""), 3000);
+        setTooltip("瀏覽器封鎖通知，請點網址列🔒解除");
+        setTimeout(() => setTooltip(""), 3500);
         return;
       }
-      const ok = await subscribe(userId);
-      setTooltip(ok ? "✅ 推播通知已啟用" : "啟用失敗，請重試");
+      try {
+        const ok = await subscribe(userId);
+        setTooltip(ok ? "✅ 背景推播已啟用！" : "啟用失敗，請稍後再試");
+      } catch (err) {
+        if (err instanceof Error && err.message === "VAPID_NOT_READY") {
+          setTooltip("後端部署中，請等幾分鐘再試");
+        } else {
+          setTooltip("啟用失敗，請稍後再試");
+        }
+      }
     }
-    setTimeout(() => setTooltip(""), 2500);
+    setTimeout(() => setTooltip(""), 3000);
   }
 
   const active = isSubscribed;
@@ -60,11 +68,14 @@ function PushSubscribeButton() {
           opacity:    isLoading ? 0.5 : 1,
         }}
       >
-        {/* Bell icon */}
+        {/* Broadcast / Push icon（區別於到價通知鈴鐺）*/}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          {active && <circle cx="18" cy="6" r="4" fill="var(--color-brand)" stroke="none"/>}
+          {/* 手機 */}
+          <rect x="7" y="2" width="10" height="16" rx="2"/>
+          <line x1="12" y1="18" x2="12" y2="20"/>
+          {/* 訊號弧線 */}
+          <path d="M4 6.5 A9 9 0 0 1 20 6.5" opacity={active ? "1" : "0.4"}/>
+          <path d="M6.5 9.5 A6 6 0 0 1 17.5 9.5" opacity={active ? "1" : "0.4"}/>
         </svg>
       </button>
       {tooltip && (
