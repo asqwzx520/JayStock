@@ -9,10 +9,10 @@ GET    /api/v1/push/status            → 查詢當前用戶的訂閱數量
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Body, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
@@ -58,7 +58,6 @@ async def get_vapid_public_key():
 @limiter.limit("10/minute")
 async def subscribe_push(
     request: Request,
-    body: Annotated[PushSubscribeBody, Body()],
     x_user_id: Optional[str] = Header(default=None),
 ):
     """儲存瀏覽器 Push 訂閱（upsert by endpoint）"""
@@ -66,6 +65,15 @@ async def subscribe_push(
 
     if not settings.vapid_public_key:
         raise HTTPException(status_code=503, detail="Web Push 未啟用（VAPID 未設定）")
+
+    # 手動解析 body —— 繞過 slowapi decorator 導致 Pydantic body 被誤判為 query param 的問題
+    try:
+        raw = await request.json()
+        body = PushSubscribeBody(**raw)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception:
+        raise HTTPException(status_code=400, detail="body 格式錯誤，需為 JSON")
 
     logger.info(
         "[push] subscribe uid=%s endpoint_len=%d p256dh_len=%d auth_len=%d",
@@ -80,11 +88,19 @@ async def subscribe_push(
 @limiter.limit("10/minute")
 async def unsubscribe_push(
     request: Request,
-    body: Annotated[PushUnsubscribeBody, Body()],
     x_user_id: Optional[str] = Header(default=None),
 ):
     """移除指定端點的訂閱"""
     uid = require_user(x_user_id)
+
+    try:
+        raw = await request.json()
+        body = PushUnsubscribeBody(**raw)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception:
+        raise HTTPException(status_code=400, detail="body 格式錯誤，需為 JSON")
+
     delete_subscription(uid, body.endpoint)
     logger.info("[push] 訂閱已移除 uid=%s", uid[:8])
 
