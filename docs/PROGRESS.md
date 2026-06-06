@@ -327,7 +327,24 @@
 - 前端：`usePushNotification` hook + Header 📶 訂閱按鈕
 - **端對端測試通過**：訂閱 → Supabase 儲存 → VAPID 推播 → 裝置收到通知
 
-### 第 8 步：正式網域 + Cloudflare（上線）
+### 第 8 步：多股比較走勢圖（頂尖版）⬅️ 下一個目標
+
+> 設計規格已確認（2026-06-07 grill-me）：
+
+| 面向 | 決策 |
+|------|------|
+| 比較基準 | 正規化報酬（起始=100） |
+| 股票數量 | 最多 4 支（主 + 3 對比） |
+| 時間區間 | 1M / 3M / 6M / YTD / 1Y / 3Y + 自訂日期輸入框 |
+| 圖表風格 | 粗實線 + 半透明漸層填充（15-20% 透明度） |
+| 標註 | Crosshair 同步 Tooltip + 終點標籤 + 0% 基準線 + 高低點 ▲▼ |
+| 入口 | K 線圖 Toolbar「比較」按鈕切換模式（不新增 Tab） |
+| 加入方式 | Inline 搜尋框（圖表頂部，即時搜尋） |
+| AI 整合 | 比較圖下方「🤖 AI 分析」按鈕（按了才呼叫 Gemini，快取 15 分鐘） |
+
+實作順序：① 比較圖（後端 API + 前端圖表）→ ② AI 比較分析 → ③ 個股 AI 評價 → ④ 首頁 AI 自選股摘要
+
+### 第 9 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
 - Cloudflare DNS + SSL + CDN，取代 Render 預設網址
 - 更新 NextAuth `AUTH_URL` + CORS_ORIGINS
