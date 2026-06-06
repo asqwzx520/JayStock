@@ -9,9 +9,9 @@ GET    /api/v1/push/status            → 查詢當前用戶的訂閱數量
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -58,7 +58,7 @@ async def get_vapid_public_key():
 @limiter.limit("10/minute")
 async def subscribe_push(
     request: Request,
-    body: PushSubscribeBody,
+    body: Annotated[PushSubscribeBody, Body()],
     x_user_id: Optional[str] = Header(default=None),
 ):
     """儲存瀏覽器 Push 訂閱（upsert by endpoint）"""
@@ -80,7 +80,7 @@ async def subscribe_push(
 @limiter.limit("10/minute")
 async def unsubscribe_push(
     request: Request,
-    body: PushUnsubscribeBody,
+    body: Annotated[PushUnsubscribeBody, Body()],
     x_user_id: Optional[str] = Header(default=None),
 ):
     """移除指定端點的訂閱"""
