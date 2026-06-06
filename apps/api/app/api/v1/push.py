@@ -30,13 +30,14 @@ router = APIRouter()
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class PushSubscribeBody(BaseModel):
-    endpoint: str  = Field(..., min_length=10, max_length=2048)
-    p256dh:   str  = Field(..., min_length=10, max_length=512)
-    auth:     str  = Field(..., min_length=4,  max_length=256)
+    # 放寬長度限制，瀏覽器實作可能產生較長的值
+    endpoint: str  = Field(..., min_length=1)
+    p256dh:   str  = Field(..., min_length=1)
+    auth:     str  = Field(..., min_length=1)
 
 
 class PushUnsubscribeBody(BaseModel):
-    endpoint: str = Field(..., min_length=10, max_length=2048)
+    endpoint: str = Field(..., min_length=1)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -66,6 +67,10 @@ async def subscribe_push(
     if not settings.vapid_public_key:
         raise HTTPException(status_code=503, detail="Web Push 未啟用（VAPID 未設定）")
 
+    logger.info(
+        "[push] subscribe uid=%s endpoint_len=%d p256dh_len=%d auth_len=%d",
+        uid[:8], len(body.endpoint), len(body.p256dh), len(body.auth),
+    )
     save_subscription(uid, body.endpoint, body.p256dh, body.auth)
     logger.info("[push] 訂閱已儲存 uid=%s ep=...%s", uid[:8], body.endpoint[-20:])
     return {"ok": True}
