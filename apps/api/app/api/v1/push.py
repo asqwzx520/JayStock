@@ -116,3 +116,20 @@ async def push_status(
         "enabled": bool(settings.vapid_public_key),
         "subscribed_count": len(subs),
     }
+
+
+@router.post("/push/test", status_code=200)
+async def test_push(
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """開發用：立即送一條測試推播給當前用戶（驗證 VAPID + Service Worker 是否正常）"""
+    uid = require_user(x_user_id)
+    from app.services.push_service import send_push_to_user
+    sent = await send_push_to_user(
+        user_id=uid,
+        title="🔔 JayStock 推播測試",
+        body="如果你看到這條通知，Web Push 已正常運作！",
+        url="/",
+        tag="push-test",
+    )
+    return {"sent": sent, "uid_prefix": uid[:8]}
