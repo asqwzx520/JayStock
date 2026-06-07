@@ -189,7 +189,7 @@ function WatchlistBlock({
             <button
               key={sym}
               onClick={() => onSelectStock(sym)}
-              className="w-full px-4 py-2.5 flex items-center gap-2 text-left transition-colors hover:bg-[var(--bg-elevated)]"
+              className="w-full px-4 py-2.5 flex items-center gap-2 text-left stock-row-shimmer"
             >
               {/* 代號 + 名稱 */}
               <div className="w-20 shrink-0">
@@ -270,7 +270,7 @@ function AlertsBlock({
             <button
               key={symbol}
               onClick={() => onSelectStock(symbol)}
-              className="w-full px-4 py-2.5 flex items-start gap-3 text-left hover:bg-[var(--bg-elevated)] transition-colors"
+              className="w-full px-4 py-2.5 flex items-start gap-3 text-left stock-row-shimmer"
             >
               <div className="shrink-0 w-14">
                 <span className="num text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -1053,7 +1053,7 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
                     <button
                       key={pick.symbol}
                       onClick={() => onSelectStock(pick.symbol)}
-                      className="w-full text-left px-4 py-3 transition-colors hover:bg-white/5 flex gap-3 items-start"
+                      className="w-full text-left px-4 py-3 stock-row-shimmer flex gap-3 items-start"
                     >
                       {/* 排名 */}
                       <span

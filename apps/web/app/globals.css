@@ -248,6 +248,87 @@ body {
 .flash-up   { animation: price-flash-up   0.4s ease; }
 .flash-down { animation: price-flash-down 0.4s ease; }
 
+/* ── Stock Row Shimmer Hover Effect ──────────────────────────────────────────
+   藍紫光從左到右掃過，觸發一次後保留淡底色，離開 0.2s 淡出
+   ─────────────────────────────────────────────────────────────────────────── */
+@keyframes shimmer-sweep {
+  0%   { background-position: -120% center; }
+  100% { background-position: 220% center; }
+}
+
+/* div / button 元素用 ::before 實現（不影響子元素 z 軸）*/
+.stock-row-shimmer {
+  position: relative;
+  isolation: isolate;   /* 建立 stacking context，讓 z-index:-1 相對於此元素 */
+}
+
+.stock-row-shimmer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;          /* 在子元素內容下方 */
+  pointer-events: none;
+  background-size: 250% 100%;
+  background-position: -120% center;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.stock-row-shimmer:hover::before {
+  background-color: rgba(99, 102, 241, 0.08);
+  background-image: linear-gradient(
+    90deg,
+    transparent    20%,
+    rgba(99, 102, 241, 0.2)  43%,
+    rgba(139, 92, 246, 0.32) 50%,
+    rgba(99, 102, 241, 0.2)  57%,
+    transparent    80%
+  );
+  animation: shimmer-sweep 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* <tr> 表格列用 background 直接動畫（pseudo-element 在 table row 不可靠）*/
+@keyframes tr-shimmer {
+  0%   { background-position: -120% center; }
+  100% { background-position: 220% center; }
+}
+
+.tr-shimmer-active {
+  background-image: linear-gradient(
+    90deg,
+    transparent    20%,
+    rgba(99, 102, 241, 0.18) 43%,
+    rgba(139, 92, 246, 0.25) 50%,
+    rgba(99, 102, 241, 0.18) 57%,
+    transparent    80%
+  );
+  background-size: 250% 100%;
+  animation: tr-shimmer 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* 淺色主題：shimmer 更淡 */
+[data-theme="light"] .stock-row-shimmer:hover::before {
+  background-color: rgba(99, 102, 241, 0.04);
+  background-image: linear-gradient(
+    90deg,
+    transparent              20%,
+    rgba(99, 102, 241, 0.09) 43%,
+    rgba(139, 92, 246, 0.13) 50%,
+    rgba(99, 102, 241, 0.09) 57%,
+    transparent              80%
+  );
+}
+[data-theme="light"] .tr-shimmer-active {
+  background-image: linear-gradient(
+    90deg,
+    transparent              20%,
+    rgba(99, 102, 241, 0.08) 43%,
+    rgba(139, 92, 246, 0.12) 50%,
+    rgba(99, 102, 241, 0.08) 57%,
+    transparent              80%
+  );
+}
+
 /* 淺色主題不套 glow（視力舒適優先）*/
 [data-theme="light"] .glow-up,
 [data-theme="light"] .glow-down,

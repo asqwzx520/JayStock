@@ -514,7 +514,7 @@ export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = f
                     {(dragHandle) => (
                       <div>
                         {/* Main row */}
-                        <div className="flex items-center group"
+                        <div className="flex items-center group stock-row-shimmer"
                           style={{ borderLeft: isActive ? "2px solid var(--color-brand)" : "2px solid transparent" }}>
 
                           {/* Drag handle（排序模式時顯示） */}

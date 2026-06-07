@@ -108,7 +108,7 @@ export default function HotRanking({ onSelectSymbol }: Props) {
             <button
               key={s.symbol}
               onClick={() => onSelectSymbol?.(s.symbol)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 hover:opacity-80 transition-opacity text-left"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left stock-row-shimmer"
               style={{ borderBottom: "1px solid var(--border-subtle)" }}
             >
               {/* Rank */}

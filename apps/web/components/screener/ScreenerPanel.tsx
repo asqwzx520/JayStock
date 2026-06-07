@@ -367,15 +367,17 @@ function ResultRow({
 
   return (
     <tr
-      className="cursor-pointer transition-colors border-b"
-      style={{ borderColor: "var(--border)" }}
+      className="cursor-pointer border-b"
+      style={{ borderColor: "var(--border)", transition: "background-color 0.2s ease" }}
       onClick={onSelect}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = "var(--bg-elevated)")
-      }
-      onMouseLeave={(e) =>
-        (e.currentTarget.style.background = "transparent")
-      }
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+        e.currentTarget.classList.add("tr-shimmer-active");
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = "";
+        e.currentTarget.classList.remove("tr-shimmer-active");
+      }}
     >
       {/* 評分 */}
       <td className="px-3 py-2">
