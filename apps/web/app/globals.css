@@ -184,6 +184,83 @@ body {
 .bg-down   { background-color: var(--color-down-subtle); }
 
 /* ============================================================
+   GLOW 衝擊版 — 方案 A
+   text-shadow / box-shadow 發光效果，只在深色主題生效
+   ============================================================ */
+[data-theme="dark"] .glow-up,
+:root .glow-up {
+  color: var(--color-up);
+  text-shadow:
+    0 0 8px  rgba(239, 68, 68, 0.7),
+    0 0 20px rgba(239, 68, 68, 0.4),
+    0 0 40px rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="dark"] .glow-down,
+:root .glow-down {
+  color: var(--color-down);
+  text-shadow:
+    0 0 8px  rgba(34, 197, 94, 0.7),
+    0 0 20px rgba(34, 197, 94, 0.4),
+    0 0 40px rgba(34, 197, 94, 0.2);
+}
+
+[data-theme="dark"] .glow-brand,
+:root .glow-brand {
+  color: var(--color-brand);
+  text-shadow:
+    0 0 8px  rgba(59, 130, 246, 0.7),
+    0 0 20px rgba(59, 130, 246, 0.4);
+}
+
+/* Chip badge glow — 法人三色 */
+[data-theme="dark"] .chip-foreign,
+:root .chip-foreign {
+  color: var(--color-foreign);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25), inset 0 0 6px rgba(245, 158, 11, 0.05);
+}
+[data-theme="dark"] .chip-trust,
+:root .chip-trust {
+  color: var(--color-trust);
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.25), inset 0 0 6px rgba(139, 92, 246, 0.05);
+}
+[data-theme="dark"] .chip-dealer,
+:root .chip-dealer {
+  color: var(--color-dealer);
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.25), inset 0 0 6px rgba(6, 182, 212, 0.05);
+}
+
+/* Price flash animation — 報價更新閃爍 */
+@keyframes price-flash-up {
+  0%   { background: rgba(239, 68, 68, 0.25); }
+  100% { background: transparent; }
+}
+@keyframes price-flash-down {
+  0%   { background: rgba(34, 197, 94, 0.25); }
+  100% { background: transparent; }
+}
+.flash-up   { animation: price-flash-up   0.4s ease; }
+.flash-down { animation: price-flash-down 0.4s ease; }
+
+/* 淺色主題不套 glow（視力舒適優先）*/
+[data-theme="light"] .glow-up,
+[data-theme="light"] .glow-down,
+[data-theme="light"] .glow-brand {
+  text-shadow: none;
+}
+[data-theme="light"] .chip-foreign,
+[data-theme="light"] .chip-trust,
+[data-theme="light"] .chip-dealer {
+  box-shadow: none;
+}
+
+/* ============================================================
    RESPONSIVE — 行動版覆蓋
    RWD 佈局：
      < 768px  (mobile)  — 單欄 + 底部 Tab Bar

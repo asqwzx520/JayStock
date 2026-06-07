@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>StockPulse 視覺方案預覽</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #060a12; color: #e4eeff; font-family: "Noto Sans TC", "Inter", sans-serif; }
+
+/* ── Tab 切換 ── */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #1a2333; padding: 0 24px; position: sticky; top: 0; background: #060a12; z-index: 99; }
+.tab { padding: 16px 28px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4a5c7a;
+  border-bottom: 2px solid transparent; transition: all .2s; letter-spacing: .04em; }
+.tab:hover { color: #7b91b8; }
+.tab.active { color: #e4eeff; border-bottom-color: #3B82F6; }
+.badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 99px;
+  font-size: 10px; font-weight: 700; background: #1a2a4a; color: #3B82F6; }
+
+.panel { display: none; padding: 40px 32px; max-width: 1200px; margin: 0 auto; }
+.panel.active { display: block; }
+
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: #3B82F6; margin-bottom: 8px; }
+.section-desc { font-size: 14px; color: #7b91b8; margin-bottom: 32px; line-height: 1.7; }
+.demo-label { font-size: 11px; color: #4a5c7a; letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 12px; font-weight: 600; }
+
+/* ───────────────────────────────────────────────
+   方案 A：Glow 加強
+─────────────────────────────────────────────── */
+
+/* A — Header */
+.a-header {
+  display: flex; align-items: center; gap: 0;
+  background: #0a0e17; border-bottom: 1px solid #1a2333;
+  height: 52px; padding: 0 16px;
+}
+.a-logo { font-size: 13px; font-weight: 700; letter-spacing: .1em; color: #e4eeff;
+  margin-right: 24px; display: flex; align-items: center; gap: 8px; }
+.a-logo-dot { width: 7px; height: 7px; border-radius: 50%; background: #3B82F6;
+  box-shadow: 0 0 8px #3B82F6, 0 0 16px #3B82F6aa; animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+.a-ticker { display: flex; align-items: center; gap: 20px; flex: 1; }
+.a-tick { display: flex; align-items: center; gap: 6px; }
+.a-tick-name { font-size: 11px; color: #4a5c7a; }
+.a-tick-val { font-family: "JetBrains Mono", monospace; font-size: 13px; font-weight: 700; }
+.a-tick-val.up { color: #EF4444; text-shadow: 0 0 12px rgba(239,68,68,.6); }
+.a-tick-val.down { color: #22C55E; text-shadow: 0 0 12px rgba(34,197,94,.6); }
+.a-tick-pct { font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.a-tick-pct.up { color: rgba(239,68,68,.8); }
+.a-tick-pct.down { color: rgba(34,197,94,.8); }
+
+/* A — Stock price card */
+.a-price-card {
+  background: #0d1220; border: 1px solid #1a2333; border-radius: 6px;
+  padding: 20px 24px; width: 280px; position: relative; overflow: hidden;
+}
+.a-price-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(239,68,68,.6), transparent);
+}
+.a-stock-sym { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #7b91b8; }
+.a-stock-name { font-size: 15px; font-weight: 700; color: #e4eeff; margin: 2px 0 12px; }
+.a-stock-price {
+  font-family: "JetBrains Mono", monospace; font-size: 36px; font-weight: 700;
+  color: #EF4444;
+  text-shadow: 0 0 20px rgba(239,68,68,.5), 0 0 40px rgba(239,68,68,.2);
+  letter-spacing: -1px;
+}
+.a-stock-chg { font-family: "JetBrains Mono", monospace; font-size: 13px;
+  color: rgba(239,68,68,.8); margin-top: 4px; }
+
+/* A — Chip bar */
+.a-chips { display: flex; gap: 8px; margin-top: 16px; }
+.a-chip { padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  font-family: "JetBrains Mono", monospace; border: 1px solid; }
+.a-chip.foreign { color: #F59E0B; border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.06);
+  box-shadow: 0 0 8px rgba(245,158,11,.2); }
+.a-chip.trust { color: #8B5CF6; border-color: rgba(139,92,246,.3); background: rgba(139,92,246,.06);
+  box-shadow: 0 0 8px rgba(139,92,246,.2); }
+.a-chip.dealer { color: #06B6D4; border-color: rgba(6,182,212,.3); background: rgba(6,182,212,.06);
+  box-shadow: 0 0 8px rgba(6,182,212,.2); }
+
+/* A — Indicator row */
+.a-indicators { display: flex; gap: 16px; margin-top: 16px; }
+.a-ind { text-align: center; }
+.a-ind-label { font-size: 9px; color: #4a5c7a; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
+.a-ind-val { font-family: "JetBrains Mono", monospace; font-size: 14px; font-weight: 700; }
+.a-ind-val.neutral { color: #e4eeff; }
+.a-ind-val.hot { color: #F59E0B; text-shadow: 0 0 10px rgba(245,158,11,.5); }
+
+/* ───────────────────────────────────────────────
+   方案 B：Glassmorphism
+─────────────────────────────────────────────── */
+.b-bg {
+  background: linear-gradient(135deg, #0a0e17 0%, #0d1628 50%, #0a1420 100%);
+  border-radius: 12px; padding: 32px; position: relative; overflow: hidden;
+}
+.b-bg::before {
+  content: '';position:absolute;width:300px;height:300px;
+  background:radial-gradient(circle, rgba(59,130,246,.15) 0%, transparent 70%);
+  top: -50px; left: -50px; pointer-events: none;
+}
+.b-bg::after {
+  content: '';position:absolute;width:200px;height:200px;
+  background:radial-gradient(circle, rgba(139,92,246,.1) 0%, transparent 70%);
+  bottom: 0; right: 60px; pointer-events: none;
+}
+.b-card {
+  background: rgba(255,255,255,.04); backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 12px;
+  padding: 20px 24px; position: relative; z-index: 1;
+}
+.b-card + .b-card { margin-top: 12px; }
+.b-card-title { font-size: 10px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: rgba(255,255,255,.3); margin-bottom: 12px; }
+.b-price { font-family: "JetBrains Mono", monospace; font-size: 32px; font-weight: 700;
+  color: #fff; letter-spacing: -1px; }
+.b-chg { font-family: "JetBrains Mono", monospace; font-size: 13px;
+  color: #EF4444; margin-top: 4px; }
+.b-row { display: flex; gap: 12px; }
+.b-row .b-card { flex: 1; }
+.b-metric-val { font-family: "JetBrains Mono", monospace; font-size: 20px;
+  font-weight: 700; color: #e4eeff; }
+.b-metric-label { font-size: 11px; color: rgba(255,255,255,.3); margin-top: 4px; }
+.b-nav {
+  display: flex; gap: 2px; margin-bottom: 16px; position: relative; z-index:1;
+  background: rgba(255,255,255,.03); border-radius: 8px; padding: 4px;
+  width: fit-content;
+}
+.b-nav-item { padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,.4); cursor: pointer; transition: all .2s; }
+.b-nav-item.active {
+  background: rgba(255,255,255,.1); color: #e4eeff;
+  backdrop-filter: blur(10px);
+}
+.b-heatmap { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; position:relative;z-index:1;}
+.b-heat-cell {
+  background: rgba(255,255,255,.04); backdrop-filter:blur(10px);
+  border: 1px solid rgba(255,255,255,.06); border-radius: 8px;
+  padding: 12px 8px; text-align: center;
+}
+.b-heat-cell.up { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.15); }
+.b-heat-cell.down { background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.15); }
+.b-heat-name { font-size: 12px; font-weight: 700; color: rgba(255,255,255,.7); }
+.b-heat-pct { font-family: "JetBrains Mono", monospace; font-size: 11px; margin-top: 3px; }
+.b-heat-cell.up .b-heat-pct { color: #EF4444; }
+.b-heat-cell.down .b-heat-pct { color: #22C55E; }
+
+/* ───────────────────────────────────────────────
+   方案 C：Header 動感
+─────────────────────────────────────────────── */
+.c-header {
+  background: linear-gradient(180deg, #0d1628 0%, #0a0e17 100%);
+  border-bottom: 1px solid #1a2333;
+}
+.c-top-bar {
+  display: flex; align-items: center; padding: 0 20px; height: 52px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.c-logo { font-size: 14px; font-weight: 800; letter-spacing: .08em; margin-right: 28px;
+  background: linear-gradient(135deg, #60a5fa, #818cf8); -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; }
+.c-ticker-wrap { flex: 1; overflow: hidden; }
+.c-ticker-track {
+  display: flex; gap: 36px;
+  animation: ticker-scroll 20s linear infinite;
+  white-space: nowrap;
+}
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.c-tick-item { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.c-tick-sym { font-size: 12px; font-weight: 700; color: #7b91b8; }
+.c-tick-price { font-family: "JetBrains Mono", monospace; font-size: 13px; font-weight: 700; }
+.c-tick-price.up { color: #EF4444; }
+.c-tick-price.dn { color: #22C55E; }
+.c-tick-arrow { font-size: 10px; }
+.c-tick-arrow.up { color: #EF4444; }
+.c-tick-arrow.dn { color: #22C55E; }
+
+/* C — Nav tabs */
+.c-nav { display: flex; padding: 0 20px; height: 40px; align-items: flex-end; gap: 4px; }
+.c-tab { padding: 6px 16px; font-size: 13px; font-weight: 600; color: #4a5c7a;
+  border-radius: 6px 6px 0 0; cursor: pointer; transition: all .2s;
+  border: 1px solid transparent; border-bottom: none; position: relative; }
+.c-tab.active {
+  color: #e4eeff; background: #0d1220;
+  border-color: #1a2333; border-bottom-color: #0d1220;
+}
+.c-tab.active::after {
+  content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #3B82F6, #8B5CF6);
+}
+
+/* C — Price with animation */
+.c-price-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 6px; background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+}
+.c-price-num { font-family: "JetBrains Mono", monospace; font-size: 28px; font-weight: 700;
+  color: #EF4444; }
+.c-price-chg { font-family: "JetBrains Mono", monospace; font-size: 12px;
+  color: rgba(239,68,68,.7); }
+.c-flash { animation: flash-up .4s ease; }
+@keyframes flash-up {
+  0% { background: rgba(239,68,68,.4); }
+  100% { background: transparent; }
+}
+
+/* C — Status dots */
+.c-status-row { display: flex; gap: 16px; align-items: center; padding: 8px 20px;
+  border-top: 1px solid rgba(255,255,255,.04); }
+.c-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.c-status-dot.live { background: #22C55E; box-shadow: 0 0 6px #22C55E; animation: pulse-dot 2s infinite; }
+.c-status-dot.delay { background: #F59E0B; }
+.c-status-text { font-size: 11px; color: #4a5c7a; }
+
+/* ───────────────────────────────────────────────
+   方案 D：整體密度重設計
+─────────────────────────────────────────────── */
+.d-layout { display: grid; grid-template-columns: 200px 1fr 260px; gap: 0;
+  height: 580px; border: 1px solid #1a2333; border-radius: 10px; overflow: hidden; }
+.d-sidebar { background: #0d1220; border-right: 1px solid #1a2333;
+  display: flex; flex-direction: column; }
+.d-sidebar-hd { padding: 12px 16px; font-size: 9px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: #3B82F6; border-bottom: 1px solid #1a2333; }
+.d-stock-item { display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.03);
+  cursor: pointer; transition: background .15s; }
+.d-stock-item:hover { background: rgba(59,130,246,.05); }
+.d-stock-item.active { background: rgba(59,130,246,.08); border-left: 2px solid #3B82F6; }
+.d-stock-sym { font-family: "JetBrains Mono", monospace; font-size: 13px;
+  font-weight: 700; color: #e4eeff; }
+.d-stock-name { font-size: 10px; color: #4a5c7a; margin-top: 1px; }
+.d-stock-pct { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 700; }
+.d-stock-pct.up { color: #EF4444; }
+.d-stock-pct.dn { color: #22C55E; }
+
+.d-main { background: #0a0e17; display: flex; flex-direction: column; }
+.d-main-top { padding: 16px 20px; border-bottom: 1px solid #1a2333;
+  display: flex; align-items: flex-start; justify-content: space-between; }
+.d-stock-info { }
+.d-name-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.d-sym-big { font-family: "JetBrains Mono", monospace; font-size: 13px;
+  font-weight: 700; color: #3B82F6; }
+.d-name-big { font-size: 18px; font-weight: 800; color: #e4eeff; }
+.d-price-row { display: flex; align-items: baseline; gap: 12px; }
+.d-price-big { font-family: "JetBrains Mono", monospace; font-size: 40px;
+  font-weight: 700; color: #EF4444; letter-spacing: -2px; line-height: 1; }
+.d-chg-badge { padding: 4px 10px; border-radius: 4px; background: rgba(239,68,68,.1);
+  border: 1px solid rgba(239,68,68,.2); }
+.d-chg-text { font-family: "JetBrains Mono", monospace; font-size: 13px; color: #EF4444; }
+
+.d-chip-row { display: flex; gap: 6px; margin-top: 10px; }
+.d-chip { padding: 3px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.d-chip.f { background: rgba(245,158,11,.1); color: #F59E0B; border: 1px solid rgba(245,158,11,.2); }
+.d-chip.t { background: rgba(139,92,246,.1); color: #8B5CF6; border: 1px solid rgba(139,92,246,.2); }
+.d-chip.d { background: rgba(6,182,212,.1); color: #06B6D4; border: 1px solid rgba(6,182,212,.2); }
+
+/* D chart area mock */
+.d-chart-mock { flex: 1; position: relative; overflow: hidden; }
+.d-chart-bg { position: absolute; inset: 0; }
+.d-chart-line { position: absolute; bottom: 40px; left: 0; right: 0; }
+.d-period-bar { display: flex; gap: 2px; padding: 8px 16px; border-top: 1px solid #1a2333; }
+.d-period { padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  color: #4a5c7a; cursor: pointer; font-family: "JetBrains Mono", monospace; }
+.d-period.active { background: rgba(59,130,246,.12); color: #3B82F6; }
+
+.d-right { background: #0d1220; border-left: 1px solid #1a2333;
+  overflow-y: auto; display: flex; flex-direction: column; }
+.d-right-sec { padding: 16px; border-bottom: 1px solid #1a2333; }
+.d-right-hd { font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: #4a5c7a; margin-bottom: 12px; }
+.d-stat-row { display: flex; justify-content: space-between; padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,.03); font-size: 12px; }
+.d-stat-key { color: #4a5c7a; }
+.d-stat-val { font-family: "JetBrains Mono", monospace; color: #e4eeff; }
+.d-stat-val.up { color: #EF4444; }
+.d-heatmap { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; }
+.d-hcell { border-radius: 4px; padding: 8px 4px; text-align: center; font-size: 10px; font-weight: 700; }
+.d-hcell.pos { background: rgba(239,68,68,.15); color: #EF4444; }
+.d-hcell.neg { background: rgba(34,197,94,.15); color: #22C55E; }
+.d-hcell span { display: block; font-family: "JetBrains Mono", monospace; font-size: 9px;
+  font-weight: 400; opacity: .7; margin-top: 2px; }
+
+/* ── shared layout ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.demo-box { border: 1px solid #1a2333; border-radius: 8px; overflow: hidden; }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="show('a')">A. Glow 加強 <span class="badge">推薦</span></div>
+  <div class="tab" onclick="show('b')">B. Glassmorphism</div>
+  <div class="tab" onclick="show('c')">C. Header 動感</div>
+  <div class="tab" onclick="show('d')">D. 密度重設計</div>
+</div>
+
+<!-- ══════════════════ 方案 A ══════════════════ -->
+<div class="panel active" id="panel-a">
+  <div class="section-title">方案 A — Glow 加強</div>
+  <div class="section-desc">
+    最小改動，最大衝擊。數字用 text-shadow 發光，法人籌碼 badge 有光暈，上漲紅 / 下跌綠更顯眼。<br>
+    只需改 globals.css 幾行，不動任何元件。
+  </div>
+
+  <!-- Header -->
+  <div class="demo-label">頂部 Header — ticker 數字發光版</div>
+  <div class="demo-box" style="margin-bottom:24px">
+    <div class="a-header">
+      <div class="a-logo"><div class="a-logo-dot"></div>JAYSTOCK</div>
+      <div class="a-ticker">
+        <div class="a-tick">
+          <span class="a-tick-name">台加權</span>
+          <span class="a-tick-val up">45,070</span>
+          <span class="a-tick-pct up">▲1.60%</span>
+        </div>
+        <div class="a-tick">
+          <span class="a-tick-name">那指</span>
+          <span class="a-tick-val up">25,709</span>
+          <span class="a-tick-pct up">▲4.18%</span>
+        </div>
+        <div class="a-tick">
+          <span class="a-tick-name">道瓊</span>
+          <span class="a-tick-val down">42,540</span>
+          <span class="a-tick-pct down">▼0.23%</span>
+        </div>
+        <div class="a-tick">
+          <span class="a-tick-name">黃金</span>
+          <span class="a-tick-val up">3,310</span>
+          <span class="a-tick-pct up">▲0.85%</span>
+        </div>
+        <div class="a-tick">
+          <span class="a-tick-name">美元/台幣</span>
+          <span class="a-tick-val down">30.21</span>
+          <span class="a-tick-pct down">▼0.12%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Price Card + Chips -->
+  <div class="demo-label">個股價格卡 + 法人籌碼 badge 發光</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:24px">
+    <div class="a-price-card">
+      <div class="a-stock-sym">2330</div>
+      <div class="a-stock-name">台積電</div>
+      <div class="a-stock-price">935.00</div>
+      <div class="a-stock-chg">▲ +19.50 (+2.14%)</div>
+      <div class="a-chips">
+        <div class="a-chip foreign">外資 +12.3億</div>
+        <div class="a-chip trust">投信 +3.1億</div>
+        <div class="a-chip dealer">自營 -0.8億</div>
+      </div>
+      <div class="a-indicators">
+        <div class="a-ind">
+          <div class="a-ind-label">RSI</div>
+          <div class="a-ind-val hot">57.3</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">KD-K</div>
+          <div class="a-ind-val neutral">72.4</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">MACD</div>
+          <div class="a-ind-val hot">+2.31</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">量比</div>
+          <div class="a-ind-val hot">1.84×</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-price-card" style="border-top-color: rgba(34,197,94,.6)">
+      <div class="a-stock-sym">2317</div>
+      <div class="a-stock-name">鴻海</div>
+      <div class="a-stock-price" style="color:#22C55E;text-shadow:0 0 20px rgba(34,197,94,.5)">182.50</div>
+      <div class="a-stock-chg" style="color:rgba(34,197,94,.8)">▼ -1.50 (-0.82%)</div>
+      <div class="a-chips">
+        <div class="a-chip foreign" style="color:#4a5c7a;border-color:#1a2333;background:transparent;box-shadow:none">外資 -5.2億</div>
+        <div class="a-chip dealer">自營 +1.1億</div>
+      </div>
+      <div class="a-indicators">
+        <div class="a-ind">
+          <div class="a-ind-label">RSI</div>
+          <div class="a-ind-val neutral">38.1</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">KD-K</div>
+          <div class="a-ind-val neutral">28.7</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">MACD</div>
+          <div class="a-ind-val neutral">-1.20</div>
+        </div>
+        <div class="a-ind">
+          <div class="a-ind-label">量比</div>
+          <div class="a-ind-val neutral">0.76×</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ 方案 B ══════════════════ -->
+<div class="panel" id="panel-b">
+  <div class="section-title">方案 B — Glassmorphism</div>
+  <div class="section-desc">
+    面板加入 backdrop-filter: blur() + 半透明背景，背景加入深色漸層光球。<br>
+    整體感覺更有「深度」，像 Notion / Linear 那種現代感。改動中等，需要調整 panel 元件。
+  </div>
+
+  <div class="b-bg">
+    <div class="b-nav">
+      <div class="b-nav-item active">走勢圖</div>
+      <div class="b-nav-item">籌碼</div>
+      <div class="b-nav-item">大盤</div>
+      <div class="b-nav-item">選股</div>
+    </div>
+
+    <div class="b-card" style="margin-bottom:12px">
+      <div class="b-card-title">台積電 2330</div>
+      <div class="b-price">935.00</div>
+      <div class="b-chg">▲ +19.50 (+2.14%)</div>
+    </div>
+
+    <div class="b-row">
+      <div class="b-card">
+        <div class="b-card-title">外資</div>
+        <div class="b-metric-val" style="color:#F59E0B">+12.3億</div>
+        <div class="b-metric-label">連買 5 日</div>
+      </div>
+      <div class="b-card">
+        <div class="b-card-title">投信</div>
+        <div class="b-metric-val" style="color:#8B5CF6">+3.1億</div>
+        <div class="b-metric-label">連買 3 日</div>
+      </div>
+      <div class="b-card">
+        <div class="b-card-title">RSI(14)</div>
+        <div class="b-metric-val">57.3</div>
+        <div class="b-metric-label">未過熱</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="b-card-title" style="margin-bottom:10px;padding-left:4px">類股熱力圖</div>
+      <div class="b-heatmap">
+        <div class="b-heat-cell up"><div class="b-heat-name">半導體</div><div class="b-heat-pct">+2.3%</div></div>
+        <div class="b-heat-cell up"><div class="b-heat-name">航運</div><div class="b-heat-pct">+1.8%</div></div>
+        <div class="b-heat-cell up"><div class="b-heat-name">電子</div><div class="b-heat-pct">+1.1%</div></div>
+        <div class="b-heat-cell down"><div class="b-heat-name">金融</div><div class="b-heat-pct">-0.8%</div></div>
+        <div class="b-heat-cell down"><div class="b-heat-name">傳產</div><div class="b-heat-pct">-0.4%</div></div>
+        <div class="b-heat-cell up"><div class="b-heat-name">生醫</div><div class="b-heat-pct">+0.6%</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ 方案 C ══════════════════ -->
+<div class="panel" id="panel-c">
+  <div class="section-title">方案 C — Header 動感</div>
+  <div class="section-desc">
+    Header 加入跑馬燈 ticker（自動捲動）+ 漸層 logo + tab active 下劃線動畫 + 即時狀態 dot。<br>
+    第一眼就有「市場活著」的感覺。改動集中在 Header 元件。
+  </div>
+
+  <div class="demo-box" style="margin-bottom: 32px">
+    <div class="c-header">
+      <div class="c-top-bar">
+        <div class="c-logo">JAYSTOCK</div>
+        <div class="c-ticker-wrap">
+          <div class="c-ticker-track">
+            <!-- 重複兩次產生無限卷動效果 -->
+            <div class="c-tick-item"><span class="c-tick-sym">台加權</span><span class="c-tick-price up">45,070</span><span class="c-tick-arrow up">▲1.60%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">那斯達克</span><span class="c-tick-price up">25,709</span><span class="c-tick-arrow up">▲4.18%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">道瓊</span><span class="c-tick-price dn">42,540</span><span class="c-tick-arrow dn">▼0.23%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">S&P500</span><span class="c-tick-price up">7,383</span><span class="c-tick-arrow up">▲2.64%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">黃金</span><span class="c-tick-price up">3,310</span><span class="c-tick-arrow up">▲0.85%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">美元/台幣</span><span class="c-tick-price dn">30.21</span><span class="c-tick-arrow dn">▼0.12%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">WTI油</span><span class="c-tick-price dn">72.4</span><span class="c-tick-arrow dn">▼1.32%</span></div>
+            <!-- 重複 -->
+            <div class="c-tick-item"><span class="c-tick-sym">台加權</span><span class="c-tick-price up">45,070</span><span class="c-tick-arrow up">▲1.60%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">那斯達克</span><span class="c-tick-price up">25,709</span><span class="c-tick-arrow up">▲4.18%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">道瓊</span><span class="c-tick-price dn">42,540</span><span class="c-tick-arrow dn">▼0.23%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">S&P500</span><span class="c-tick-price up">7,383</span><span class="c-tick-arrow up">▲2.64%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">黃金</span><span class="c-tick-price up">3,310</span><span class="c-tick-arrow up">▲0.85%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">美元/台幣</span><span class="c-tick-price dn">30.21</span><span class="c-tick-arrow dn">▼0.12%</span></div>
+            <div class="c-tick-item"><span class="c-tick-sym">WTI油</span><span class="c-tick-price dn">72.4</span><span class="c-tick-arrow dn">▼1.32%</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="c-nav">
+        <div class="c-tab active">走勢圖</div>
+        <div class="c-tab">籌碼</div>
+        <div class="c-tab">大盤</div>
+        <div class="c-tab">排行</div>
+        <div class="c-tab">選股</div>
+        <div class="c-tab">新聞</div>
+        <div class="c-tab">回測</div>
+        <div class="c-tab">分析</div>
+        <div class="c-tab">比較</div>
+      </div>
+      <div class="c-status-row">
+        <div class="c-status-dot live"></div>
+        <div class="c-status-text">即時報價 · 延遲 &lt;15s</div>
+        <div style="width:1px;height:12px;background:#1a2333;margin:0 4px"></div>
+        <div class="c-status-dot" style="background:#3B82F6;box-shadow:0 0 6px #3B82F6"></div>
+        <div class="c-status-text">WebSocket 已連線</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">個股價格區塊 — 即時閃爍效果</div>
+  <div style="display:flex;align-items:center;gap:20px;padding:20px;background:#0d1220;border-radius:8px;border:1px solid #1a2333">
+    <div>
+      <div style="font-size:12px;color:#4a5c7a;margin-bottom:4px">2330 台積電</div>
+      <div class="c-price-badge" id="price-demo">
+        <div class="c-price-num">935.00</div>
+        <div class="c-price-chg">▲ +19.50 (+2.14%)</div>
+      </div>
+    </div>
+    <button onclick="flashPrice()" style="padding:8px 16px;background:#1a2333;border:1px solid #243044;border-radius:6px;color:#7b91b8;font-size:12px;cursor:pointer">
+      ▶ 模擬報價更新
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════ 方案 D ══════════════════ -->
+<div class="panel" id="panel-d">
+  <div class="section-title">方案 D — 整體密度重設計</div>
+  <div class="section-desc">
+    重新設計三欄佈局的間距、字級、卡片層次。左側 watchlist 更緊湊，中間圖表區更寬敞，右側資訊欄更清晰。<br>
+    改動較大，但效果最完整。
+  </div>
+
+  <div class="d-layout">
+    <!-- 左側 watchlist -->
+    <div class="d-sidebar">
+      <div class="d-sidebar-hd">自選股</div>
+      <div class="d-stock-item active">
+        <div><div class="d-stock-sym">2330</div><div class="d-stock-name">台積電</div></div>
+        <div class="d-stock-pct up">+2.14%</div>
+      </div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">2382</div><div class="d-stock-name">廣達</div></div>
+        <div class="d-stock-pct up">+3.21%</div>
+      </div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">2454</div><div class="d-stock-name">聯發科</div></div>
+        <div class="d-stock-pct up">+1.38%</div>
+      </div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">2317</div><div class="d-stock-name">鴻海</div></div>
+        <div class="d-stock-pct dn">-0.77%</div>
+      </div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">6669</div><div class="d-stock-name">緯穎科技</div></div>
+        <div class="d-stock-pct up">+4.50%</div>
+      </div>
+      <div class="d-sidebar-hd" style="margin-top:8px">AI 精選</div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">3034</div><div class="d-stock-name">聯詠</div></div>
+        <div class="d-stock-pct up">+2.89%</div>
+      </div>
+      <div class="d-stock-item">
+        <div><div class="d-stock-sym">2379</div><div class="d-stock-name">瑞昱</div></div>
+        <div class="d-stock-pct up">+1.65%</div>
+      </div>
+    </div>
+
+    <!-- 中間主區 -->
+    <div class="d-main">
+      <div class="d-main-top">
+        <div class="d-stock-info">
+          <div class="d-name-row">
+            <span class="d-sym-big">2330</span>
+            <span class="d-name-big">台積電</span>
+          </div>
+          <div class="d-price-row">
+            <div class="d-price-big">935.00</div>
+            <div class="d-chg-badge"><div class="d-chg-text">▲ +19.50 (+2.14%)</div></div>
+          </div>
+          <div class="d-chip-row">
+            <div class="d-chip f">外資 連買5日</div>
+            <div class="d-chip t">投信 +3.1億</div>
+            <div class="d-chip d">自營 -0.8億</div>
+          </div>
+        </div>
+      </div>
+      <div class="d-chart-mock">
+        <!-- SVG mock chart -->
+        <svg width="100%" height="100%" viewBox="0 0 800 300" preserveAspectRatio="none" style="position:absolute;inset:0">
+          <defs>
+            <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#EF4444" stop-opacity=".25"/>
+              <stop offset="100%" stop-color="#EF4444" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M0,250 C50,245 80,230 130,200 C180,170 210,185 260,160 C310,135 340,100 390,85 C440,70 470,95 510,78 C550,62 590,45 630,38 C670,30 720,48 780,40 L780,300 L0,300 Z" fill="url(#cg)" opacity=".6"/>
+          <path d="M0,250 C50,245 80,230 130,200 C180,170 210,185 260,160 C310,135 340,100 390,85 C440,70 470,95 510,78 C550,62 590,45 630,38 C670,30 720,48 780,40" fill="none" stroke="#EF4444" stroke-width="1.5" opacity=".9"/>
+          <!-- MA lines -->
+          <path d="M0,260 C60,255 120,240 200,215 C280,190 340,175 420,155 C500,135 580,110 780,90" fill="none" stroke="#3B82F6" stroke-width="1" opacity=".5"/>
+          <path d="M0,270 C80,265 160,252 260,230 C360,208 440,190 540,170 C640,150 720,130 780,118" fill="none" stroke="#F59E0B" stroke-width="1" opacity=".4"/>
+        </svg>
+      </div>
+      <div class="d-period-bar">
+        <div class="d-period">1分</div>
+        <div class="d-period">5分</div>
+        <div class="d-period">15分</div>
+        <div class="d-period">60分</div>
+        <div class="d-period active">日K</div>
+        <div class="d-period">週K</div>
+        <div class="d-period">月K</div>
+      </div>
+    </div>
+
+    <!-- 右側資訊欄 -->
+    <div class="d-right">
+      <div class="d-right-sec">
+        <div class="d-right-hd">今日行情</div>
+        <div class="d-stat-row"><span class="d-stat-key">開盤</span><span class="d-stat-val">918.00</span></div>
+        <div class="d-stat-row"><span class="d-stat-key">最高</span><span class="d-stat-val up">936.00</span></div>
+        <div class="d-stat-row"><span class="d-stat-key">最低</span><span class="d-stat-val">916.00</span></div>
+        <div class="d-stat-row"><span class="d-stat-key">成交量</span><span class="d-stat-val">42,318 張</span></div>
+        <div class="d-stat-row"><span class="d-stat-key">RSI(14)</span><span class="d-stat-val">57.3</span></div>
+        <div class="d-stat-row"><span class="d-stat-key">KD-K</span><span class="d-stat-val">72.4</span></div>
+      </div>
+      <div class="d-right-sec">
+        <div class="d-right-hd">法人籌碼</div>
+        <div class="d-stat-row"><span class="d-stat-key" style="color:#F59E0B">外資</span><span class="d-stat-val up">連買 5 日</span></div>
+        <div class="d-stat-row"><span class="d-stat-key" style="color:#8B5CF6">投信</span><span class="d-stat-val up">+3.1億</span></div>
+        <div class="d-stat-row"><span class="d-stat-key" style="color:#06B6D4">自營</span><span class="d-stat-val">-0.8億</span></div>
+      </div>
+      <div class="d-right-sec">
+        <div class="d-right-hd">類股熱力圖</div>
+        <div class="d-heatmap">
+          <div class="d-hcell pos">半導<span>+2.3%</span></div>
+          <div class="d-hcell pos">航運<span>+1.8%</span></div>
+          <div class="d-hcell pos">電子<span>+1.1%</span></div>
+          <div class="d-hcell neg">金融<span>-0.8%</span></div>
+          <div class="d-hcell neg">傳產<span>-0.4%</span></div>
+          <div class="d-hcell pos">生醫<span>+0.6%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+function flashPrice() {
+  const el = document.getElementById('price-demo');
+  el.classList.remove('c-flash');
+  void el.offsetWidth;
+  el.classList.add('c-flash');
+}
+</script>
+</body>
+</html>

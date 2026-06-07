@@ -335,16 +335,29 @@ function TickerTape() {
 
   // 複製兩份讓捲動無縫
   const all = [...items, ...items];
+  const duration = Math.max(items.length * 6, 36);
 
   return (
     <div
       className="shrink-0 overflow-hidden relative"
       style={{
-        height: "26px",
-        background: "var(--bg-surface)",
+        height: "34px",
+        background: "linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-surface) 100%)",
         borderBottom: "1px solid var(--border)",
       }}
     >
+      {/* 左右漸層遮罩 */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, bottom: 0, width: "60px", zIndex: 2,
+        background: "linear-gradient(90deg, var(--bg-surface), transparent)",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        position: "absolute", top: 0, right: 0, bottom: 0, width: "60px", zIndex: 2,
+        background: "linear-gradient(270deg, var(--bg-surface), transparent)",
+        pointerEvents: "none",
+      }} />
+
       <style>{`
         @keyframes ticker-scroll {
           0%   { transform: translateX(0); }
@@ -352,38 +365,64 @@ function TickerTape() {
         }
         .ticker-inner {
           display: inline-flex;
-          animation: ticker-scroll ${Math.max(items.length * 5, 30)}s linear infinite;
+          animation: ticker-scroll ${duration}s linear infinite;
           white-space: nowrap;
+          height: 34px;
+          align-items: center;
         }
         .ticker-inner:hover { animation-play-state: paused; }
       `}</style>
-      <div className="ticker-inner" style={{ height: "26px", alignItems: "center" }}>
+      <div className="ticker-inner">
         {all.map((item, i) => {
           const isUp   = item.change != null && item.change > 0;
           const isDown = item.change != null && item.change < 0;
-          const color  = isUp ? "var(--color-up)" : isDown ? "var(--color-down)" : "var(--text-secondary)";
+          const upColor   = "var(--color-up)";
+          const downColor = "var(--color-down)";
+          const color  = isUp ? upColor : isDown ? downColor : "var(--text-secondary)";
           const arrow  = isUp ? "▲" : isDown ? "▼" : "";
+          const glowStyle = isUp
+            ? { textShadow: "0 0 8px rgba(239,68,68,0.6), 0 0 20px rgba(239,68,68,0.3)" }
+            : isDown
+            ? { textShadow: "0 0 8px rgba(34,197,94,0.6), 0 0 20px rgba(34,197,94,0.3)" }
+            : {};
           return (
             <span
               key={`${item.key}-${i}`}
               className="inline-flex items-center gap-2"
               style={{
-                padding: "0 18px",
-                height: "26px",
+                padding: "0 20px",
+                height: "34px",
                 borderRight: "1px solid var(--border)",
-                fontSize: "11px",
+                fontSize: "12px",
+                gap: "8px",
               }}
             >
-              <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.05em" }}>
+              <span style={{
+                color: "var(--text-tertiary)",
+                fontFamily: "var(--font-mono)",
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+                fontSize: "11px",
+              }}>
                 {item.label}
               </span>
               {item.price !== "--" && (
-                <span className="num" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                <span className="num" style={{
+                  color: color,
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  ...glowStyle,
+                }}>
                   {item.price}
                 </span>
               )}
               {item.changePct != null && (
-                <span className="num" style={{ color }}>
+                <span className="num" style={{
+                  color,
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  ...glowStyle,
+                }}>
                   {arrow}{Math.abs(item.changePct).toFixed(2)}%
                 </span>
               )}
@@ -498,7 +537,7 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
           borderColor: "var(--border)",
         }}
       >
-        {/* Logo — Terminal 風格 */}
+        {/* Logo — 漸層發光版 */}
         <div className="flex items-center gap-2 shrink-0">
           <span
             style={{
@@ -506,7 +545,11 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
               fontWeight: 800,
               fontSize: "14px",
               letterSpacing: "2px",
-              color: "var(--color-brand)",
+              background: "linear-gradient(135deg, #60a5fa 0%, #818cf8 50%, #a78bfa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              filter: "drop-shadow(0 0 6px rgba(99,102,241,0.5))",
             }}
           >
             JAYSTOCK
@@ -517,7 +560,7 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
               height: "6px",
               borderRadius: "50%",
               background: "var(--color-down)",
-              boxShadow: "0 0 6px var(--color-down)",
+              boxShadow: "0 0 8px var(--color-down), 0 0 16px rgba(34,197,94,0.4)",
               animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite",
             }}
             title="市場資料更新中"
