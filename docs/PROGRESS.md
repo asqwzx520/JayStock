@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-08（Hover Shimmer + Feature B 技術指標警報 + Feature C 財報/除權息月曆）  
-> **當前版本：** commit `671967b`（財報/除權息月曆：月曆 Tab、30天事件格、exdiv/earnings/agm 三型別）  
+> **更新日期：** 2026-06-08（Hover Shimmer + Feature B 警報 + Feature C 月曆 + Feature A K線型態辨識）  
+> **當前版本：** commit `8eeca87`（K線型態辨識：13種型態手寫辨識，K線疊圖 + 分析面板技術Tab）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -21,7 +21,7 @@
 | M6 效能優化 + 上線 | SEO + Sentry + 部署 | 95% | ✅ 已部署 |
 | M7 即時行情 | WebSocket + 設價提醒 | 90% | ✅ 完成（新增）|
 
-**整體 PRD 功能完成度：約 96%**
+**整體 PRD 功能完成度：約 97%**
 
 ---
 
@@ -152,10 +152,10 @@
 | **多圖版型（2分割 / 4分割）** | ❌ | ✅✅ | ✅ | ❌ | 進階缺口 |
 | **Pine Script / 自訂指標** | ❌ | ✅✅ | ❌ | ❌ | 長期路線 |
 | **多股比較折線** | ✅ | ✅ | ✅ | ❌ | **已完成**（`CompareChart.tsx`，4支，正規化報酬，AI分析）|
-| **K 線型態辨識（錘頭 / 吞噬 / 十字星）** | ❌ | ✅ | ✅ | ✅ | 中優先 |
+| **K 線型態辨識（錘頭 / 吞噬 / 十字星）** | ✅ **已完成** | ✅ | ✅ | ✅ | **已完成（`8eeca87`）：13種型態，K線疊圖＋分析面板** |
 | **量價背離自動提示** | ❌ | ✅ | ✅ | ✅ | 中優先 |
 
-**評分：5/11 ★★★☆☆** — 基礎技術分析完整，缺繪圖工具是最大硬傷。
+**評分：6/11 ★★★★☆** — K線型態辨識 ✅；繪圖工具 ✅；缺多圖版型與量價背離提示。
 
 ---
 
@@ -272,12 +272,13 @@
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
-| 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅（`439564d`）；財報月曆 ✅（`671967b`）；Line 未做 |
+| K 線圖表技術分析 | **8** | 11 | ★★★★☆ | K線型態 ✅（`8eeca87`，13種）；缺多圖版型/量價背離 |
+| 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅；財報月曆 ✅；Line 未做 |
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **44** | **60** | **約 87/100** | |
+| **加總** | **46** | **60** | **約 90/100** | |
 
-> **結論（2026-06-08 更新）：** 財報/除權息月曆完成（`671967b`），通知評分 5/6 → 6/6（滿分）；整體評分 85 → 87 分。  
-> 下一個建議：**Feature A（K線型態辨識）** 或 **鍵盤快捷鍵**。
+> **結論（2026-06-08 更新）：** K線型態辨識完成（`8eeca87`），13種型態手寫辨識，圖表疊圖+分析面板雙呈現；K線圖表評分 7→8；整體評分 87 → 90 分。  
+> 下一個建議：**鍵盤快捷鍵**（TradingView 必備 UX）或 **選股一鍵加自選股** 或 **正式網域**。
 
 ---
 
@@ -364,10 +365,13 @@
 - 前端：`CalendarView.tsx`（5×7 月曆格、點格展開詳情、底部事件列表、三色事件 chip）
 - 前端：`useTabConfig.ts` 加 "月曆" Tab，`page.tsx` × 2 lazy-load
 
-### 第 12 步：K 線型態辨識（Feature A）
-- 疊圖：錘頭/流星/吞噬/十字星/上升三法/跳空/頭肩頂底/雙重頂底（全部型態）
-- 顯示：K 線圖疊加（圖示 + tooltip）+ 分析面板技術面 Tab 獨立區塊
-- 後端：pandas_ta CDL 函數
+### ~~第 12 步：K 線型態辨識（Feature A）~~ ✅ 已完成（`8eeca87`，2026-06-08）
+- 後端：`patterns.py`，純手寫辨識，13種型態，TTL=5分鐘，無 ta-lib 依賴
+  - 十字星 / 錘頭 / 上吊線 / 倒錘頭 / 流星 / 看漲吞噬 / 看跌吞噬 / 啟明星 / 黃昏之星 / 三白兵 / 三黑鴉 / 向上跳空 / 向下跳空
+  - 趨勢輔助（5日收盤）區分錘頭vs上吊線、倒錘頭vs流星
+- 前端：`KLineChart.tsx` — `createSeriesMarkers()`（LW-Charts v5 plugin），多頭▲綠/空頭▼紅/中性●灰
+- 前端：`AnalysisPanel.tsx` — `PatternSection`，最近10個型態，方向badge+日期+描述，技術面Tab最上方
+- 前端：`page.tsx` × 2 — symbol 變動時 fetch，傳 `patternMarkers` 給 KLineChart
 
 ### 第 13 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
@@ -380,6 +384,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `8eeca87` | **K線型態辨識（Feature A）**：後端 `patterns.py` 純手寫13種型態（十字星/錘頭/上吊線/倒錘頭/流星/看漲吞噬/看跌吞噬/啟明星/黃昏之星/三白兵/三黑鴉/向上跳空/向下跳空），趨勢輔助區分多頭vs空頭型態；前端 `createSeriesMarkers()`（LW-Charts v5 plugin），多頭▲/空頭▼/中性●；`AnalysisPanel.tsx` `PatternSection`（最近10個，方向badge+日期+描述）；`page.tsx` × 2 整合 | ✅ Live |
 | `671967b` | **財報/除權息月曆（Feature C）**：後端 `calendar.py` 新 endpoint `GET /api/v1/calendar?symbols=...`，30天視窗，平行查詢，6h TTL快取，支援 exdiv/earnings/agm；前端 `CalendarView.tsx`（5×7月曆格，今天日期圓形藍色標示，事件 chip 三色：🟡除息/🔵財報/🟢股東會，點格展開詳情面板，底部事件清單含「N天後」badge，shimmer hover 效果，自選股空時引導提示）；`useTabConfig.ts` 新增"月曆"Tab；`page.tsx` × 2 lazy-load | ✅ Live |
 | `439564d` | **技術指標觸發警報系統（Feature B）**：後端 `alert_rules.py` ALLOWED_FIELDS 7→14（KD-K/MACD柱/MA5/MA60/外資連賣/投信連賣）、條件上限3→10；後端 `dashboard.py` 新增 stoch_k/macd_hist/above_ma5/above_ma60 計算（6mo yfinance）；前端 `AlertModal.tsx`（新）完整 CRUD Modal；前端 `DrawingToolbar.tsx` 🔔 按鈕；`page.tsx` × 2 整合；`api.ts` ALERT_RULE_FIELDS 擴充至 13 個含提示 | ✅ Live |
 | `30341cf` | **股票列 Hover Shimmer 效果（全站）**：`globals.css` 新增 `@keyframes shimmer-sweep`、`.stock-row-shimmer`（`::before` pseudo-element，`isolation: isolate` stacking context，藍紫漸層左→右掃，保留底色，0.2s 淡出）、`.tr-shimmer-active`（table row 用 background 動畫）；覆蓋 LeftPanel/HotRanking/HomeDashboard 3個按鈕/ScreenerPanel | ✅ Live |
@@ -435,9 +440,10 @@
 | `GET /api/v1/peer-comparison/{symbol}` | 同業比較表 | ✅ 正常 |
 | `GET /api/v1/monthly-revenue/{symbol}` | 月營收走勢 | ✅ 正常 |
 | `GET /api/v1/foreign-holding/{symbol}` | 外資持股比例走勢 | ✅ 正常 |
-| `GET /api/v1/calendar` | 自選股未來 30 天事件月曆 | ✅ 正常（本次新增）|
+| `GET /api/v1/calendar` | 自選股未來 30 天事件月曆 | ✅ 正常 |
+| `GET /api/v1/patterns/{symbol}` | K 線型態辨識（13種，近 90 日）| ✅ 正常（本次新增）|
 | `WS /ws/quotes` | 即時行情 WebSocket | ✅ 正常 |
 
 ---
 
-*最後更新：2026-06-08 by Claude（Feature C 財報/除權息月曆完成，commit `671967b`）*
+*最後更新：2026-06-08 by Claude（Feature A K線型態辨識完成，commit `8eeca87`；整體評分 90/100）*
