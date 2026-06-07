@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-07（補充 Valuation Band / 月營收 / Web Push 前端實作細節，確認三功能全棧完成）  
-> **當前版本：** commit `2eb7d7f`（Web Push Notification：VAPID + Service Worker + Supabase 持久化，端對端測試通過）  
+> **更新日期：** 2026-06-08（Hover Shimmer 互動效果 + Feature B 技術指標警報系統）  
+> **當前版本：** commit `439564d`（技術指標觸發警報：KD/MACD/MA5/60/連賣天數 + AlertModal + 🔔 工具列按鈕）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -21,7 +21,7 @@
 | M6 效能優化 + 上線 | SEO + Sentry + 部署 | 95% | ✅ 已部署 |
 | M7 即時行情 | WebSocket + 設價提醒 | 90% | ✅ 完成（新增）|
 
-**整體 PRD 功能完成度：約 93%**
+**整體 PRD 功能完成度：約 95%**
 
 ---
 
@@ -234,11 +234,11 @@
 | 設價提醒（突破 / 跌破）Toast | ✅ | ✅ | ✅ | ✅ | 基本齊平 |
 | **Web Push Notification（背景通知）** | ✅ | ✅ | ✅ | ❌ | **已完成（`2eb7d7f`）：VAPID + SW + Supabase 持久化** |
 | **Email / Line 推播** | ✅ Email（Resend API，`1361516`）| ✅ | ✅ | ✅ | Line 未做 |
-| **技術指標觸發警報（如 RSI < 30）** | ❌ | ✅✅ | ✅ | △ | 進階需求 |
-| **法人異常大量買超警報** | ❌ | ❌ | △ | ✅ | 台股籌碼用戶需求 |
-| **財報公告 / 除權息提醒** | ❌ | ✅ | ✅ | △ | 散戶基本需求 |
+| **技術指標觸發警報（如 RSI < 30）** | ✅ **已完成** | ✅✅ | ✅ | △ | **已完成（`439564d`）：13 種指標，10 條件 AND/OR，AlertModal + 🔔 工具列** |
+| **法人異常大量買超警報** | △ 部分 | ❌ | △ | ✅ | 外資/投信連買連賣天數已納入警報條件 |
+| **財報公告 / 除權息提醒** | △ 首頁顯示 | ✅ | ✅ | △ | HomeDashboard 已顯示 7 日內事件，但無主動推播 |
 
-**評分：3/6 ★★★☆☆** — Web Push 已完成（VAPID + Supabase 持久化）；Email 架構已建待驗證；Line 未做。
+**評分：5/6 ★★★★★** — Web Push ✅；技術指標警報 ✅（13指標/10條件）；Line 未做。
 
 ---
 
@@ -255,10 +255,11 @@
 | CSV / JSON 匯出 | ✅ | △ | △ | ❌ | 輕微優勢 |
 | 主 Tab 導航清晰度 | ✅ 已改 | ✅ | ✅ | ✅ | 已修（181be18）|
 | Header 登入按鈕位置 | ✅ 已修 | ✅ | ✅ | ✅ | 已修（181be18）|
+| **股票列 Hover 互動效果** | ✅ 已完成 | ✅ | ✅ | ✅ | **藍紫 shimmer 光掃效果，全站所有股票列（`30341cf`）** |
 | Sentry 錯誤監控 | ✅ | — | — | — | 工程品質領先 |
 | GitHub Actions CI/CD | ✅ | — | — | — | 工程品質領先 |
 
-**評分：6/11 ★★★★☆** — 工程品質不錯，行動版 RWD 已補強；Skeleton 載入動畫與鍵盤快捷鍵仍待做。
+**評分：8/12 ★★★★☆** — 工程品質不錯，Hover 互動效果 ✅；鍵盤快捷鍵仍待做。
 
 ---
 
@@ -271,12 +272,12 @@
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
-| 通知 & 提醒 | 3 | 6 | ★★★☆☆ | Web Push ✅ 已完成；Email 待驗證；Line 未做 |
+| 通知 & 提醒 | 5 | 6 | ★★★★★ | 技術指標警報 ✅ 已完成（`439564d`）；Line 未做 |
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **39** | **60** | **約 77/100** | |
+| **加總** | **43** | **60** | **約 85/100** | |
 
-> **結論（2026-06-07 更新）：** 盤前 AI Email 推播完整上線（`1361516`，Resend API），Email 面向從「待驗證」→ ✅；通知評分 3/6 → 4/6。整體評分 77 → 78 分。  
-> 下一個建議：**SMTP → Email 發信端對端驗證**（Render 重啟後打 `/digest/send` 確認收信）或 **鍵盤快捷鍵**（UX 質感提升）。
+> **結論（2026-06-08 更新）：** 技術指標警報系統完成（`439564d`），通知評分 3/6 → 5/6（+2）；Hover Shimmer 效果全面上線（`30341cf`），UX 品質提升。整體評分 77 → 85 分。  
+> 下一個建議：**Feature C（財報/除權息月曆）** 或 **Feature A（K線型態辨識）**。
 
 ---
 
@@ -346,17 +347,40 @@
 
 檔案：`apps/web/components/chart/CompareChart.tsx`
 
-### 第 9 步：正式網域 + Cloudflare（上線）
+### ~~第 9 步（原 B）：技術指標觸發警報~~ ✅ 已完成（`439564d`，2026-06-08）
+- 後端：`alert_rules.py` ALLOWED_FIELDS 7→14 個（KD-K、MACD柱狀、MA5/MA60、外資/投信連賣天數）
+- 後端：條件上限 3→10，`dashboard.py` 計算 `stoch_k`/`macd_hist`/`above_ma5`/`above_ma60`（6個月 yfinance）
+- 前端：`ALERT_RULE_FIELDS` 擴充 13 個欄位含提示說明
+- 前端：`AlertModal.tsx`（新）浮動 Modal：列表/新增/編輯/刪除規則
+- 前端：`DrawingToolbar.tsx` 加 🔔 按鈕，`page.tsx` × 2 整合
+
+### ~~第 10 步（Hover）：股票列互動效果~~ ✅ 已完成（`30341cf`，2026-06-08）
+- `globals.css`：`.stock-row-shimmer`（`::before` pseudo-element，`isolation: isolate`，藍紫光掃）
+- 覆蓋：LeftPanel 自選股 / HotRanking 排行 / HomeDashboard 自選/警示/AI精選 / ScreenerPanel 結果表格
+
+### 第 11 步：財報 / 除權息月曆（Feature C）
+- 30 天月曆格子：除息/除權、財報公告、股東會、法說會
+- 僅顯示自選股相關事件
+- 資料來源：yfinance + 現有 UpcomingDates API
+
+### 第 12 步：K 線型態辨識（Feature A）
+- 疊圖：錘頭/流星/吞噬/十字星/上升三法/跳空/頭肩頂底/雙重頂底（全部型態）
+- 顯示：K 線圖疊加（圖示 + tooltip）+ 分析面板技術面 Tab 獨立區塊
+- 後端：pandas_ta CDL 函數
+
+### 第 13 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
 - Cloudflare DNS + SSL + CDN，取代 Render 預設網址
 - 更新 NextAuth `AUTH_URL` + CORS_ORIGINS
 
 ---
 
-## ✅ 近期完成（2026-06-07）
+## ✅ 近期完成（2026-06-08）
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `439564d` | **技術指標觸發警報系統（Feature B）**：後端 `alert_rules.py` ALLOWED_FIELDS 7→14（KD-K/MACD柱/MA5/MA60/外資連賣/投信連賣）、條件上限3→10；後端 `dashboard.py` 新增 stoch_k/macd_hist/above_ma5/above_ma60 計算（6mo yfinance）；前端 `AlertModal.tsx`（新）完整 CRUD Modal；前端 `DrawingToolbar.tsx` 🔔 按鈕；`page.tsx` × 2 整合；`api.ts` ALERT_RULE_FIELDS 擴充至 13 個含提示 | ✅ Live |
+| `30341cf` | **股票列 Hover Shimmer 效果（全站）**：`globals.css` 新增 `@keyframes shimmer-sweep`、`.stock-row-shimmer`（`::before` pseudo-element，`isolation: isolate` stacking context，藍紫漸層左→右掃，保留底色，0.2s 淡出）、`.tr-shimmer-active`（table row 用 background 動畫）；覆蓋 LeftPanel/HotRanking/HomeDashboard 3個按鈕/ScreenerPanel | ✅ Live |
 | — | **多股比較走勢圖（全棧完成）**：`CompareChart.tsx`（lightweight-charts LineSeries×4，正規化報酬起始=100，1M/3M/6M/1Y/3Y/5Y，Inline 搜尋加入，符號 chip 可刪除，Legend 含累積報酬%）；AI 比較分析按鈕（≥2支時顯示，呼叫 Gemini，快取 15 分鐘）；已整合至 page.tsx 動態 import + ChartSkeleton | ✅ Live |
 | — | **Skeleton 載入動畫（全覆蓋）**：`components/ui/Skeleton.tsx`（`ChartSkeleton` 假K棒脈衝 / `DashboardSkeleton` 市場卡片 / `NewsListSkeleton` 新聞列 / `TableSkeleton` 選股表格 / `RightPanelSkeleton` 右側欄）；page.tsx 11 個動態 import 全部套用；KLine 行內載入改 ChartSkeleton | ✅ Live |
 | `cdd975f` | **AI 今日精選按鈕（取代 Email 推播）**：刪除 digest/email 整套（Render IP 被 Cloudflare 封）；新增 `GET /api/v1/recommendations`（screener Top5 + Gemini 理由，15min 快取）；HomeDashboard 加「✨ AI 今日精選」按鈕 → 展開卡片列表（排名+價格+AI理由+籌碼標籤，點擊跳 K 線） | ✅ Live |
@@ -395,8 +419,13 @@
 | `GET/POST /api/v1/watchlist` | 自選股 CRUD | ✅ 正常（Supabase 持久化）|
 | `POST /api/v1/feedback` | Beta 回饋 | ✅ 正常 |
 | `GET /api/v1/alerts` | 設價提醒通知 | ✅ 正常（Supabase + in-memory fallback）|
-| `GET /api/v1/digest/status` | Email 推播狀態查詢 | ✅ 正常 |
-| `POST /api/v1/digest/send` | 手動觸發 AI 選股 Email | ✅ 正常 |
+| `GET /api/v1/recommendations` | AI 今日精選 Top5（15min 快取） | ✅ 正常 |
+| `GET /api/v1/dashboard/summary` | 首頁儀錶板批次摘要 | ✅ 正常 |
+| `GET /api/v1/alert-rules` | 列出用戶自訂警示規則 | ✅ 正常 |
+| `POST /api/v1/alert-rules` | 新增警示規則（最多 10 條件） | ✅ 正常 |
+| `PUT /api/v1/alert-rules/{id}` | 更新警示規則 | ✅ 正常 |
+| `DELETE /api/v1/alert-rules/{id}` | 刪除警示規則 | ✅ 正常 |
+| `PATCH /api/v1/alert-rules/{id}/toggle` | 切換規則啟用狀態 | ✅ 正常 |
 | `GET /api/v1/fundamental/{symbol}` | P/E、EPS、殖利率、Beta、市值 | ✅ 正常 |
 | `GET /api/v1/dividends/{symbol}` | 股利歷史近 10 年 | ✅ 正常（本次新增）|
 | `GET /api/v1/financials/{symbol}` | 財務報表趨勢 10 年 | ✅ 正常 |
@@ -408,4 +437,4 @@
 
 ---
 
-*最後更新：2026-06-07 by Claude*
+*最後更新：2026-06-08 by Claude*
