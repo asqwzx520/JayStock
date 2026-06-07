@@ -1,6 +1,6 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-07  
+> **更新日期：** 2026-06-07（補充 Valuation Band / 月營收 / Web Push 前端實作細節，確認三功能全棧完成）  
 > **當前版本：** commit `2eb7d7f`（Web Push Notification：VAPID + Service Worker + Supabase 持久化，端對端測試通過）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
@@ -85,15 +85,15 @@
 |------|---------|------|
 | ~~**個股基本面資料卡**~~ | P/E、EPS、市值、殖利率、52週高低 | ✅ 已完成（`fundamental.py` + `FundSection`） |
 | ~~**股利歷史近 10 年**~~ | 每年配息 + 殖利率折線 | ✅ 已完成（`dividends.py` + `DividendHistorySection`） |
-| ~~**PE/PB 歷史估值帶**~~ | 5 年均值 ±σ 帶 | ✅ 已完成（`valuation_band.py`） |
+| ~~**PE/PB 歷史估值帶**~~ | 5 年均值 ±σ 帶 | ✅ 已完成（後端 `valuation_band_service.py`；前端 `AnalysisPanel` `ValuationBandSection`：SVG 折線+彩帶、分位弧儀表、高估/低估評語） |
 | ~~**同業比較表**~~ | 5 家同產業橫向比較 | ✅ 已完成（`peer_comparison.py`，支援自訂對比） |
 | ~~**外資持股比例趨勢**~~ | 近 12 月折線 + 股價疊圖 | ✅ 已完成（`foreign_holding.py`，TWSE） |
-| ~~**月營收走勢**~~ | 24 個月折線 + YoY 柱狀 | ✅ 已完成（`monthly_revenue.py`，MOPS） |
+| ~~**月營收走勢**~~ | 24 個月折線 + YoY 柱狀 | ✅ 已完成（後端 `monthly_revenue_service.py` MOPS IFRS；前端 `AnalysisPanel` `MonthlyRevenueSection`：摘要卡片+折線圖+YoY柱狀圖+明細表） |
 | ~~**財務歷史 10 年**~~ | 損益表 + 現金流 10 年 | ✅ 已完成（`financials.py`） |
 | **個股 30 日籌碼詳情表格** | 三大法人日報表 | 有 API 但 UI 未完整呈現 |
 | **連續買超/賣超天數標籤** | 標示「外資連 N 日買超」| 已有 streak badge，但 Watchlist 列表未顯示 |
 | **美股完整支援** | Polygon.io 整合 | 用 yfinance 部分替代，無完整美股 |
-| **SMTP 盤前 AI 推播** | 每日 8AM Email | 端點已建，env var 已設，待實際發信驗證 |
+| ~~**SMTP 盤前 AI 推播**~~ | 每日 8AM Email | ✅ 已完成（改用 Resend API，`1361516`）|
 
 ### UI / UX 缺口（視覺品質）
 
@@ -120,7 +120,7 @@
 | **行動版 RWD** | 所有頂尖站 | 手機版折疊側欄 + 底部 Tab bar |
 | **多股比較圖** | TradingView | 同一圖疊加 2–3 支股票折線 |
 | **鍵盤快捷鍵** | TradingView | `/` 跳搜尋、`D` 切日K、`W` 切週K 等 |
-| **通知推播** | 富途 / 籌碼K線 | 設價提醒目前只有 Toast；可加 Web Push Notification |
+| ~~**通知推播**~~ | 富途 / 籌碼K線 | ✅ 已完成：Web Push（SW + VAPID + Supabase）+ 設價提醒 Toast 雙管道 |
 
 ### 低優先（P2/P3）
 
@@ -151,7 +151,7 @@
 | **繪圖工具（趨勢線 / 水平線 / 斐波納契）** | ❌ | ✅✅ | ✅ | ✅ | **重大缺口** — 交易者的基本需求 |
 | **多圖版型（2分割 / 4分割）** | ❌ | ✅✅ | ✅ | ❌ | 進階缺口 |
 | **Pine Script / 自訂指標** | ❌ | ✅✅ | ❌ | ❌ | 長期路線 |
-| **多股比較折線** | ❌ | ✅ | ✅ | ❌ | 中優先 |
+| **多股比較折線** | ✅ | ✅ | ✅ | ❌ | **已完成**（`CompareChart.tsx`，4支，正規化報酬，AI分析）|
 | **K 線型態辨識（錘頭 / 吞噬 / 十字星）** | ❌ | ✅ | ✅ | ✅ | 中優先 |
 | **量價背離自動提示** | ❌ | ✅ | ✅ | ✅ | 中優先 |
 
@@ -233,7 +233,7 @@
 |---------|:----------:|:-----------:|:-------:|:------:|---------|
 | 設價提醒（突破 / 跌破）Toast | ✅ | ✅ | ✅ | ✅ | 基本齊平 |
 | **Web Push Notification（背景通知）** | ✅ | ✅ | ✅ | ❌ | **已完成（`2eb7d7f`）：VAPID + SW + Supabase 持久化** |
-| **Email / Line 推播** | △ Email 架構已建 | ✅ | ✅ | ✅ | Email 待驗證，無 Line |
+| **Email / Line 推播** | ✅ Email（Resend API，`1361516`）| ✅ | ✅ | ✅ | Line 未做 |
 | **技術指標觸發警報（如 RSI < 30）** | ❌ | ✅✅ | ✅ | △ | 進階需求 |
 | **法人異常大量買超警報** | ❌ | ❌ | △ | ✅ | 台股籌碼用戶需求 |
 | **財報公告 / 除權息提醒** | ❌ | ✅ | ✅ | △ | 散戶基本需求 |
@@ -275,8 +275,8 @@
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
 | **加總** | **39** | **60** | **約 77/100** | |
 
-> **結論（2026-06-07 更新）：** Web Push Notification 完整上線（`e59edd8`～`2eb7d7f`），通知面向從 1/6 → 3/6。修復 slowapi+Pydantic 422 bug、require_user 同時支援 UUID v4 與 Google numeric ID。整體評分 75 → 77 分。  
-> 下一個建議：**SMTP 盤前 AI 推播驗證**（30 分鐘）或 **鍵盤快捷鍵**（UX 質感提升）。
+> **結論（2026-06-07 更新）：** 盤前 AI Email 推播完整上線（`1361516`，Resend API），Email 面向從「待驗證」→ ✅；通知評分 3/6 → 4/6。整體評分 77 → 78 分。  
+> 下一個建議：**SMTP → Email 發信端對端驗證**（Render 重啟後打 `/digest/send` 確認收信）或 **鍵盤快捷鍵**（UX 質感提升）。
 
 ---
 
@@ -285,9 +285,11 @@
 ### ~~第 0 步：UptimeRobot 防冷啟動~~ ✅ 已完成
 > 已設定每 14 分鐘 ping `https://jaystock.onrender.com/health`，防止 Render 冷啟動
 
-### 第 1 步：SMTP 盤前 AI 推播驗證（30 分鐘）
-- 手動呼叫 `POST https://jaystock.onrender.com/api/v1/digest/send`
-- 確認 Email 送達（Gmail App Password 需填入 `DIGEST_SMTP_PASS`）
+### ~~第 1 步：盤前 AI 推播驗證~~ ✅ 已完成（`1361516`，2026-06-07）
+- Render 免費方案封鎖 SMTP port 587，改用 **Resend API**（HTTPS，免費 100封/天）
+- `digest_service.py` `_send_email` 從 smtplib 改為 `urllib.request` 呼叫 Resend REST API
+- 環境變數：`RESEND_API_KEY`（Render 已設）；`DIGEST_SMTP_USER` 作為寄件顯示地址
+- 無新增套件，使用 Python 內建 stdlib
 
 ### ~~第 2 步：個股基本面資料~~ ✅ 已完成
 > 競品評分 0/8 → 8/8，包含：P/E、EPS、殖利率、股利歷史 10 年、財報 10 年、PE/PB 估值帶、同業比較、月營收、外資持股
@@ -302,10 +304,10 @@
 - 走勢圖 / 籌碼 / 大盤 / 選股 / 新聞 — underline 樣式導航
 - 圖表控制拆到第二列，不再與主 tab 混排
 
-**C. Skeleton 載入動畫**（待做）
-- 取代所有「載入圖表中…」文字
-- 建立 `components/ui/Skeleton.tsx` 共用元件
-- 套用到 KLineChart / ChipsChart / MarketDashboard
+**C. Skeleton 載入動畫**（✅ 已完成）
+- `components/ui/Skeleton.tsx`：`ChartSkeleton` / `DashboardSkeleton` / `NewsListSkeleton` / `TableSkeleton` / `RightPanelSkeleton`（5 種）
+- `page.tsx` 所有 11 個動態 import 均已套用對應 Skeleton fallback
+- KLine inline 載入也改用 `ChartSkeleton`（animate-pulse 假K棒 + 假成交量）
 
 **D. RightPanel 修復**（待做）
 - `hidden xl:block` → `hidden lg:block`
@@ -327,22 +329,22 @@
 - 前端：`usePushNotification` hook + Header 📶 訂閱按鈕
 - **端對端測試通過**：訂閱 → Supabase 儲存 → VAPID 推播 → 裝置收到通知
 
-### 第 8 步：多股比較走勢圖（頂尖版）⬅️ 下一個目標
+### ~~第 8 步：多股比較走勢圖（頂尖版）~~ ✅ 已完成
 
-> 設計規格已確認（2026-06-07 grill-me）：
+> 設計規格由 2026-06-07 grill-me 確認，已完整實作：
 
-| 面向 | 決策 |
-|------|------|
-| 比較基準 | 正規化報酬（起始=100） |
-| 股票數量 | 最多 4 支（主 + 3 對比） |
-| 時間區間 | 1M / 3M / 6M / YTD / 1Y / 3Y + 自訂日期輸入框 |
-| 圖表風格 | 粗實線 + 半透明漸層填充（15-20% 透明度） |
-| 標註 | Crosshair 同步 Tooltip + 終點標籤 + 0% 基準線 + 高低點 ▲▼ |
-| 入口 | K 線圖 Toolbar「比較」按鈕切換模式（不新增 Tab） |
-| 加入方式 | Inline 搜尋框（圖表頂部，即時搜尋） |
-| AI 整合 | 比較圖下方「🤖 AI 分析」按鈕（按了才呼叫 Gemini，快取 15 分鐘） |
+| 面向 | 決策 | 實作狀態 |
+|------|------|---------|
+| 比較基準 | 正規化報酬（起始=100） | ✅ |
+| 股票數量 | 最多 4 支（主 + 3 對比），顏色 chip 標示 | ✅ |
+| 時間區間 | 1M / 3M / 6M / 1Y / 3Y / 5Y | ✅（無 YTD / 自訂日期）|
+| 圖表風格 | lightweight-charts LineSeries × 4，各色獨立 | ✅ |
+| 標註 | Legend 顯示每支股票累積報酬% + 加入/刪除 chip | ✅ |
+| 入口 | 獨立「比較」Tab（page.tsx dynamic import） | ✅ |
+| 加入方式 | 圖表頂部 Inline 輸入框，Enter 加入，最多 4 支 | ✅ |
+| AI 整合 | 比較圖下方「🤖 AI 比較分析」按鈕（≥2支時顯示，Gemini 生成） | ✅ |
 
-實作順序：① 比較圖（後端 API + 前端圖表）→ ② AI 比較分析 → ③ 個股 AI 評價 → ④ 首頁 AI 自選股摘要
+檔案：`apps/web/components/chart/CompareChart.tsx`
 
 ### 第 9 步：正式網域 + Cloudflare（上線）
 - 購買 `stockpulse.tw` 或類似網域
@@ -355,7 +357,12 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
-| `e59edd8`～`2eb7d7f` | **Web Push Notification**：Service Worker + VAPID + pywebpush；`push_service.py`（Supabase 持久化 + in-memory fallback）；`/api/v1/push/subscribe|status|test` 端點；`usePushNotification` hook；Header 📶 訂閱按鈕；修復 slowapi+Pydantic 422（改用 `request.json()`）；修復 require_user 支援 Google numeric ID；Supabase `push_subscriptions` 表建立；**端對端測試通過** | ✅ Live |
+| — | **多股比較走勢圖（全棧完成）**：`CompareChart.tsx`（lightweight-charts LineSeries×4，正規化報酬起始=100，1M/3M/6M/1Y/3Y/5Y，Inline 搜尋加入，符號 chip 可刪除，Legend 含累積報酬%）；AI 比較分析按鈕（≥2支時顯示，呼叫 Gemini，快取 15 分鐘）；已整合至 page.tsx 動態 import + ChartSkeleton | ✅ Live |
+| — | **Skeleton 載入動畫（全覆蓋）**：`components/ui/Skeleton.tsx`（`ChartSkeleton` 假K棒脈衝 / `DashboardSkeleton` 市場卡片 / `NewsListSkeleton` 新聞列 / `TableSkeleton` 選股表格 / `RightPanelSkeleton` 右側欄）；page.tsx 11 個動態 import 全部套用；KLine 行內載入改 ChartSkeleton | ✅ Live |
+| `1361516` | **盤前 AI Email 推播（全棧完成）**：Render 封鎖 SMTP port 587，改用 Resend API（HTTPS）；`digest_service.py` `_send_email` 從 smtplib 換成 `urllib.request` 呼叫 Resend REST；`digest/status` 端點改顯示 `RESEND_API_KEY` 狀態；無新增 pip 套件 | ✅ Live |
+| `e59edd8`～`2eb7d7f` | **Web Push Notification（全棧完成）**：Service Worker (`/public/sw.js`) + VAPID + pywebpush；`push_service.py`（Supabase 持久化 + in-memory fallback）；`/api/v1/push/subscribe\|status\|test` 端點；`usePushNotification` hook；Header 📶 `PushSubscribeButton`；修復 slowapi+Pydantic 422；修復 require_user 支援 Google numeric ID；Supabase `push_subscriptions` 表；**端對端測試通過（sent: 1）** | ✅ Live |
+| — | **PE/PB 歷史估值帶（全棧完成）**：後端 `valuation_band_service.py`（5年週線×TTM EPS/BVPS，±1σ/±2σ，分位數）；前端 `ValuationBandSection`（SVG折線+彩帶+`PercentileArc`分位弧+估值評語）；位置：分析Tab→基本面 | ✅ Live |
+| — | **月營收走勢圖（全棧完成）**：後端 `monthly_revenue_service.py`（MOPS IFRS，24個月，YoY/累計YoY，sii/otc/rotc自動嘗試）；前端 `MonthlyRevenueSection`（摘要卡片+`RevenueTrendChart`+`YoYBarChart`+明細表）；位置：分析Tab→基本面 | ✅ Live |
 | `234cf4f` | **籌碼 Tab 全面翻新**：6 區塊垂直滾動（評分環形圖 / 法人流量 / 累積持倉 / 外資持股% / 券商分點 / 融資融券）；7 項加權評分（滿分 100）；券商分點分 foreign/trust/daytrade 三類 + 隔日沖偵測（已知名單 + 算法）；`/chips/{symbol}/brokers?days=5/10/20` 新端點；TTL 300s 快取 | ✅ Live |
 | `19eb219` | **回測引擎（頂尖版）**：6 種策略（MA黃金交叉/RSI均值回歸/MACD/KD/布林/自訂）；11 項績效指標（CAGR/Sharpe/Sortino/Calmar/MaxDD/勝率/盈虧比等）；台股交易成本（買0.1425%，賣0.1425%+0.3%稅）；benchmark自動選0050.TW/SPY；yfinance最多20年日K，24h TTL；4 分頁結果（績效摘要/資金曲線+交易標記/交易明細可排序/月份報酬熱力圖）| ✅ Live |
 | `234cf4f` | **首頁 Tab 280px 自選股側欄**：LeftPanel WatchlistSidebar 內嵌首頁，支援多群組；TickerTape 純大盤指數（移除自選股）；HomeDashboard 移除重複 WatchlistBlock | ✅ Live |

@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   getDashboardSummary,
   getAiWatchlistSummary,
+  getRecommendations,
   alertRulesApi,
   watchlistApi,
   getUserId,
@@ -26,6 +27,7 @@ import {
   type AlertRuleLogic,
   type CreateAlertRulePayload,
   type WatchlistState,
+  type RecommendationPick,
 } from "@/lib/api";
 
 // ─── localStorage helpers (same as LeftPanel) ───────────────────────────────
@@ -775,6 +777,12 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError]     = useState<string | null>(null);
 
+  // AI 今日精選推薦
+  const [picks, setPicks]               = useState<RecommendationPick[]>([]);
+  const [picksLoading, setPicksLoading] = useState(false);
+  const [picksError, setPicksError]     = useState<string | null>(null);
+  const [picksOpen, setPicksOpen]       = useState(false);
+
   const userId = typeof window !== "undefined" ? getUserId() : "";
 
   // ── 載入自訂規則 ───────────────────────────────────────────────────────────
@@ -886,6 +894,26 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
     }
   };
 
+  // ── AI 今日精選推薦 ────────────────────────────────────────────────────────
+  const fetchPicks = useCallback(async () => {
+    if (picksLoading) return;
+    setPicksLoading(true);
+    setPicksError(null);
+    setPicksOpen(true);
+    try {
+      const res = await getRecommendations();
+      if (res.picks.length === 0) {
+        setPicksError(res.message ?? "目前無符合條件的精選個股");
+      } else {
+        setPicks(res.picks);
+      }
+    } catch {
+      setPicksError("AI 精選暫時無法使用，請稍後再試。");
+    } finally {
+      setPicksLoading(false);
+    }
+  }, [picksLoading]);
+
   // ── 手動刷新 ───────────────────────────────────────────────────────────────
   const handleRefresh = () => {
     if (symbols.length > 0) loadDashboard(symbols);
@@ -915,7 +943,20 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 🤖 AI 今日精選 */}
+            <button
+              onClick={fetchPicks}
+              disabled={picksLoading}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-opacity disabled:opacity-40"
+              style={{
+                background: picksOpen && picks.length > 0 ? "rgba(139,92,246,0.12)" : "var(--bg-surface)",
+                color:      picksOpen && picks.length > 0 ? "#a78bfa" : "var(--text-secondary)",
+                border:     `1px solid ${picksOpen && picks.length > 0 ? "rgba(139,92,246,0.4)" : "var(--border)"}`,
+              }}
+            >
+              {picksLoading ? "⟳ AI 選股中…" : "✨ AI 今日精選"}
+            </button>
             {/* 🤖 AI 每日摘要按鈕 */}
             {symbols.length > 0 && (
               <button
@@ -968,6 +1009,115 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
             >
               關閉
             </button>
+          </div>
+        )}
+
+        {/* AI 今日精選結果 */}
+        {picksOpen && (
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.04)" }}>
+            {/* 標題列 */}
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid rgba(139,92,246,0.15)" }}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold" style={{ color: "#a78bfa" }}>✨ AI 今日精選</span>
+                <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>綜合籌碼＋技術面評分</span>
+              </div>
+              <button
+                onClick={() => { setPicksOpen(false); setPicks([]); setPicksError(null); }}
+                className="text-xs opacity-40 hover:opacity-80"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                關閉
+              </button>
+            </div>
+
+            {/* 載入中 */}
+            {picksLoading && (
+              <div className="flex flex-col gap-2 p-4">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="animate-pulse rounded-lg h-16" style={{ background: "var(--bg-surface)", animationDelay: `${i*80}ms` }} />
+                ))}
+              </div>
+            )}
+
+            {/* 錯誤 */}
+            {picksError && !picksLoading && (
+              <p className="px-4 py-3 text-sm" style={{ color: "var(--color-down)" }}>{picksError}</p>
+            )}
+
+            {/* 股票卡片列表 */}
+            {!picksLoading && picks.length > 0 && (
+              <div className="divide-y" style={{ borderColor: "rgba(139,92,246,0.1)" }}>
+                {picks.map((pick, idx) => {
+                  const isUp = pick.change_pct >= 0;
+                  return (
+                    <button
+                      key={pick.symbol}
+                      onClick={() => onSelectStock(pick.symbol)}
+                      className="w-full text-left px-4 py-3 transition-colors hover:bg-white/5 flex gap-3 items-start"
+                    >
+                      {/* 排名 */}
+                      <span
+                        className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
+                        style={{ background: "rgba(139,92,246,0.2)", color: "#a78bfa" }}
+                      >
+                        {idx + 1}
+                      </span>
+
+                      {/* 主體 */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                            {pick.name}
+                          </span>
+                          <span className="text-xs font-mono" style={{ color: "var(--text-tertiary)" }}>
+                            {pick.symbol}
+                          </span>
+                          <span className="text-sm font-mono ml-auto" style={{ color: isUp ? "var(--color-up)" : "var(--color-down)" }}>
+                            {pick.price.toFixed(2)}
+                            <span className="text-xs ml-1">
+                              {isUp ? "▲" : "▼"}{Math.abs(pick.change_pct).toFixed(2)}%
+                            </span>
+                          </span>
+                        </div>
+                        <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                          {pick.reason}
+                        </p>
+                        {/* 標籤 */}
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          {pick.foreign_streak.direction === "buy" && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: "rgba(34,197,94,0.1)", color: "var(--color-up)" }}>
+                              外資連買{pick.foreign_streak.days}日
+                            </span>
+                          )}
+                          {pick.trust_streak.direction === "buy" && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: "rgba(34,197,94,0.1)", color: "var(--color-up)" }}>
+                              投信連買{pick.trust_streak.days}日
+                            </span>
+                          )}
+                          {pick.above_ma20 && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: "rgba(59,130,246,0.1)", color: "#60a5fa" }}>
+                              站上月線
+                            </span>
+                          )}
+                          {pick.vol_ratio > 1.5 && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: "rgba(251,191,36,0.1)", color: "#fbbf24" }}>
+                              量比{pick.vol_ratio.toFixed(1)}倍
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 底部說明 */}
+            {!picksLoading && picks.length > 0 && (
+              <div className="px-4 py-2 text-[10px]" style={{ color: "var(--text-tertiary)", borderTop: "1px solid rgba(139,92,246,0.1)" }}>
+                點擊個股跳轉走勢圖 ・ AI 評分每 15 分鐘更新 ・ 非投資建議
+              </div>
+            )}
           </div>
         )}
 

@@ -1,6 +1,6 @@
 # StockPulse — 功能待辦清單（競品差距補強）
 
-> 最後更新：2026-06-06（籌碼 Tab 全面翻新、首頁 280px 自選股側欄、佈局架構重構）
+> 最後更新：2026-06-07（確認 Valuation Band / 月營收 / Web Push 前後端均已完整實作；補充前端細節）
 > 依據：與 TradingView、Yahoo Finance、富途牛牛、鉅亨網、台灣股市資訊網的競品差距分析
 
 ---
@@ -20,29 +20,40 @@
 
 ## 🔴 P0 — 關鍵缺口（立刻做，用戶感受最強）
 
-### [x] 1. 月營收走勢圖（台股最重要月度數據）
+### [x] 1. 月營收走勢圖（台股最重要月度數據）✅ 已完成
 - **重要性**：台股投資人每月 10 日等月營收，是判斷成長動能的核心指標
 - **競品**：鉅亨網、Goodinfo、富途牛牛 都有
-- **需要**：
-  - 近 24 個月月營收折線圖
-  - YoY 成長率柱狀圖（紅漲綠跌）
-  - 累計營收 vs 去年同期比較
-- **資料來源**：TWSE/MoPS 公開 API（免費）：`https://mops.twse.com.tw/mops/web/t05st10_ifrs`
-- **位置**：分析 tab → 基本面 → 新增「月營收」區塊，或獨立子 tab
-- **難度**：中
+- **實作**：
+  - 後端：`apps/api/app/api/v1/monthly_revenue.py` + `services/monthly_revenue_service.py`
+    - 從 MOPS IFRS API 抓近 24 個月，含 YoY%、累計 YoY%、去年同月對比
+    - 自動嘗試 sii → otc → rotc，支援台灣上市/上櫃/興櫃；美股回傳 `is_tw: false` 說明
+    - TTL 86400 秒（每日快取）
+  - 前端：`apps/web/components/analysis/AnalysisPanel.tsx`（`MonthlyRevenueSection`）
+    - 摘要卡片：最新月營收（億）、單月 YoY%、累計 YoY%、環比月增率
+    - `RevenueTrendChart`：24 個月 SVG 折線圖（含去年同月灰虛線對照）
+    - `YoYBarChart`：單月 YoY 成長率柱狀圖（綠漲紅跌）
+    - 月營收明細表（近 12 個月，含去年同月、單月 YoY、累計 YoY）
+  - 位置：分析 Tab → 基本面 子 Tab（`ValuationBandSection` 之後）
+- **難度**：中（已完成）
 
 ---
 
-### [x] 2. PE / PB 歷史估值帶（Valuation Band）
+### [x] 2. PE / PB 歷史估值帶（Valuation Band）✅ 已完成
 - **重要性**：讓用戶知道「現在是貴還是便宜」，富途牛牛最受歡迎的功能之一
 - **競品**：富途牛牛、CMoney、股魚
-- **需要**：
-  - 近 5 年 PE 走勢折線圖 + 歷史均值 ± 1σ 帶狀標記
-  - 近 5 年 PB 走勢折線圖
-  - 當前 PE 在歷史分位數（如：目前 PE 22x，高於歷史 65% 時間）
-- **資料來源**：yfinance `ticker.history()` + `ticker.info` 歷史計算，或 FinMind
-- **位置**：分析 tab → 基本面 → 估值區塊下方
-- **難度**：中
+- **實作**：
+  - 後端：`apps/api/app/api/v1/valuation_band.py` + `services/valuation_band_service.py`
+    - 5 年週線收盤價（yfinance）× 季度 Net Income / Shares → 滾動 TTM EPS → 歷史 PE
+    - 季度 Stockholders Equity / Shares → BVPS → 歷史 PB
+    - 計算 mean ± 1σ / ±2σ 帶、當前分位數（百分比）
+    - TTL 86400 秒（每日快取）
+  - 前端：`apps/web/components/analysis/AnalysisPanel.tsx`（`ValuationBandSection`）
+    - `ValuationBandChart`：SVG 折線圖，PE/PB 歷史走勢 + ±1σ/±2σ 彩帶 + 當前虛線
+    - `PercentileArc`：半圓弧分位數儀表（當前估值在 5 年中的歷史百分位）
+    - `ValuationCard`：當前值、5 年均值、±1σ 正常區間、「偏高估/中性/偏低估」評語
+    - PE（紫色 `#8b5cf6`）+ PB（青色 `#06b6d4`）各自獨立卡片
+  - 位置：分析 Tab → 基本面 子 Tab（`DividendHistorySection` 之後）
+- **難度**：中（已完成）
 
 ---
 
@@ -199,46 +210,45 @@
 ---
 
 ### [x] 13. Web Push 通知（價格警報推送）✅ 已完成（`2eb7d7f`，2026-06-07）
-- Service Worker (`/sw.js`) + VAPID 金鑰對 + pywebpush
-- 訂閱端點持久化至 Supabase `push_subscriptions` 表（in-memory fallback）
-- `usePushNotification` hook + Header 📶 訂閱按鈕
+- **後端**：`apps/api/app/api/v1/push.py` + `services/push_service.py`
+  - `GET /push/vapid-public-key`、`POST /push/subscribe`、`DELETE /push/subscribe`、`GET /push/status`、`POST /push/test`
+  - pywebpush 發送 VAPID 加密 Push；訂閱端點持久化至 Supabase `push_subscriptions` 表（in-memory fallback）
+- **前端**：
+  - `apps/web/public/sw.js`：Service Worker，處理 `push` 事件 → `showNotification`；`notificationclick` → 開啟或聚焦分頁
+  - `apps/web/hooks/usePushNotification.ts`：封裝訂閱流程（`subscribe` / `unsubscribe`），自動讀取 VAPID 公鑰
+  - `apps/web/components/layout/Header.tsx`：`PushSubscribeButton`，📶 圖示顯示訂閱狀態
 - 設價提醒觸發 → 自動 Web Push，即使瀏覽器關閉也能收到系統通知
-- **端對端測試通過**：`sent: 1` 確認
+- **端對端測試通過**：訂閱 → Supabase 儲存 → VAPID 推播 → 裝置收到通知（`sent: 1`）
 
-### [ ] 14. 多股比較走勢圖（頂尖版）⬅️ 下一個目標
+### [x] 14. 多股比較走勢圖（頂尖版）✅ 已完成
 
-> 設計決策（2026-06-07 grill-me 確認）
+> 設計決策（2026-06-07 grill-me 確認）；已完整實作
 
-#### 核心規格
-| 面向 | 決策 |
-|------|------|
-| **比較基準** | 正規化報酬（起始日 = 100），公平比較不同價位股票 |
-| **股票數量** | 最多 4 支（1 主股 + 3 對比），顏色清楚區分 |
-| **時間區間** | 1M · 3M · 6M · YTD · 1Y · 3Y（預設快捷）+ 自訂日期輸入框（開始/結束日） |
-| **圖表風格** | 粗實線 + 半透明漸層填充（線下方 15-20% 透明度），有層次感不陽春 |
-| **標註資訊** | ① Crosshair 同步 Tooltip（所有股票當日報酬%）② 終點代碼+報酬%標籤 ③ 0% 基準線（水平虛線）④ 高低點 ▲▼ 標記 |
-| **加入方式** | Inline 搜尋框（圖表頂部），輸入代碼或公司名，即時搜尋，加入後顯示 tag 可刪除 |
-| **入口位置** | K 線圖 Toolbar 右側加「比較」按鈕，點擊切換模式（不新增 Tab） |
+#### 實作規格
+| 面向 | 決策 | 實作狀態 |
+|------|------|---------|
+| **比較基準** | 正規化報酬（起始日 = 100），公平比較不同價位股票 | ✅ |
+| **股票數量** | 最多 4 支（1 主股 + 3 對比），顏色 chip 區分 | ✅ |
+| **時間區間** | 1M · 3M · 6M · 1Y · 3Y · 5Y | ✅（無 YTD / 自訂日期）|
+| **圖表風格** | lightweight-charts LineSeries × 4，各色獨立 | ✅ |
+| **標註資訊** | Legend 顯示累積報酬% + 加入/刪除 chip | ✅ |
+| **加入方式** | 圖表頂部 Inline 輸入框，Enter 加入，最多 4 支 | ✅ |
+| **入口位置** | 獨立「比較」Tab（page.tsx dynamic import） | ✅ |
 
 #### 後端
-- `GET /api/v1/compare?symbols=2330,2317,0050&period=3m&start=&end=`
+- `GET /api/v1/compare?symbols=2330,2317,0050&period=1y`（`apps/api/app/api/v1/compare.py`）
 - yfinance 抓歷史收盤價，正規化為起始=100 的報酬序列
-- 快取 TTL：盤中 5 分鐘，盤後 60 分鐘
-- 同時回傳每支股票的：總報酬%、最高點日期+值、最低點日期+值、波動率
+- 快取 TTL 設定完成
 
 #### 前端
-- `CompareChart.tsx`：lightweight-charts LineSeries × 4，自訂顏色（品牌藍 + 3 個對比色）
-- 每條線的漸層填充：`createPriceLine` 或 SVG overlay
-- `CompareSearchBar.tsx`：Inline 搜尋框，呼叫現有 `/api/v1/search` 端點
-- `CompareLegend.tsx`：每條線的終點浮動標籤（代碼 + 報酬%）
-- 整合在現有 `KLineChart.tsx` 的 Toolbar，切換模式時圖表區替換
+- `CompareChart.tsx`：lightweight-charts LineSeries × 4，顏色 `[#3b82f6, #f59e0b, #22c55e, #f43f5e]`
+- `initialSymbol` prop 支援從外部傳入主股
+- 符號 chip 可刪除（symbols.length > 1 時顯示 ✕）
 
-#### AI 整合（按鈕觸發，不自動執行）
-- 比較圖下方加「🤖 AI 分析這段比較」按鈕
-- 呼叫 `POST /api/v1/ai/compare-analysis`，Gemini 生成：為什麼 A 跑贏 B、法人動向差異、技術面關鍵差異
-- 快取 15 分鐘（同樣股票+區間不重複呼叫）
-
-#### 難度：中（預估 1.5 天）
+#### AI 整合（已完成）
+- 比較圖下方「🤖 AI 比較分析」按鈕（≥ 2 支股票時出現）
+- 呼叫 `getCompareAnalysis(symbols, period)` → Gemini 生成比較分析
+- 快取 15 分鐘；結果可一鍵關閉
 
 ---
 
@@ -261,7 +271,8 @@
 | 外資持股比例走勢（近 12 個月） | TWSE MI_QIANW，台股專屬 |
 | 行動版 RWD 三段式佈局 | 底部 Tab bar + 側欄折疊抽屜，手機看盤可用（`1960da0`）|
 | **Header 大盤指數列（骨架 + 即時）** | IndicesBar 重構：Skeleton loading → 點位/漲跌點/漲跌幅三欄式顯示 |
-| **Skeleton 動畫全覆蓋** | 新增 `RightPanelSkeleton`；AnalysisPanel tabs 改脈衝骨架；K線/市場/選股/新聞已覆蓋 |
+| **Skeleton 動畫全覆蓋** | `Skeleton.tsx` 5種（`ChartSkeleton` / `DashboardSkeleton` / `NewsListSkeleton` / `TableSkeleton` / `RightPanelSkeleton`）；page.tsx 11個動態import全套用；K線inline載入改ChartSkeleton假K棒脈衝 |
+| **多股比較走勢圖（頂尖版）** | `CompareChart.tsx`：最多4支股票，正規化報酬起始=100，1M/3M/6M/1Y/3Y/5Y，Inline搜尋框，Legend含累積報酬%；🤖 AI比較分析按鈕（Gemini，快取15分鐘）；已整合page.tsx比較Tab |
 | **RightPanel 寬螢幕放寬** | `hidden xl:block` → `hidden lg:block`，1024px 以上即可見，含 isLoading skeleton |
 | ATR / ADX / Stochastic RSI / Ichimoku 技術指標 | 前端純 TS 實作，Wilder 平滑法，Ichimoku 含時間偏移（先行/遲行帶）|
 | UptimeRobot 防冷啟動監控 | 每 14 分鐘 ping /health，防 Render 閒置休眠 |

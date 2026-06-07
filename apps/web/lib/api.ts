@@ -1243,6 +1243,28 @@ export async function getCompareAnalysis(
   return res.json();
 }
 
+export interface RecommendationPick {
+  symbol: string;
+  name: string;
+  price: number;
+  change_pct: number;
+  score: number;
+  reason: string;
+  foreign_streak: { days: number; direction: string };
+  trust_streak: { days: number; direction: string };
+  above_ma20: boolean;
+  vol_ratio: number;
+}
+export interface RecommendationsResponse {
+  picks: RecommendationPick[];
+  message: string | null;
+}
+export async function getRecommendations(): Promise<RecommendationsResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/recommendations`);
+  if (!res.ok) throw new Error(`API ${res.status}: /recommendations`);
+  return res.json();
+}
+
 export async function getAiWatchlistSummary(
   symbols: string[],
   userId?: string,

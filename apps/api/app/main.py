@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, digest, fundamental, backtest, technical, financials, monthly_revenue, valuation_band, peer_comparison, foreign_holding, dividends, ai_analysis, compare, earnings, volume_profile, financial_alerts, dashboard, alert_rules, push
+from app.api.v1 import quotes, kline, chips, margin, market, screener, watchlist, feedback, alerts, ws, fundamental, backtest, technical, financials, monthly_revenue, valuation_band, peer_comparison, foreign_holding, dividends, ai_analysis, compare, earnings, volume_profile, financial_alerts, dashboard, alert_rules, push, recommendations
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ app.include_router(screener.router,  prefix="/api/v1", tags=["screener"])
 app.include_router(watchlist.router, prefix="/api/v1", tags=["watchlist"])
 app.include_router(feedback.router,  prefix="/api/v1", tags=["feedback"])
 app.include_router(alerts.router,    prefix="/api/v1", tags=["alerts"])
-app.include_router(digest.router,      prefix="/api/v1", tags=["digest"])
+app.include_router(recommendations.router, prefix="/api/v1", tags=["recommendations"])
 app.include_router(fundamental.router, prefix="/api/v1", tags=["fundamental"])
 app.include_router(backtest.router,   prefix="/api/v1", tags=["backtest"])
 app.include_router(technical.router,  prefix="/api/v1", tags=["technical"])
