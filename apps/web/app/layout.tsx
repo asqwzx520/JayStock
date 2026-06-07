@@ -102,7 +102,8 @@ export default async function RootLayout({
 
   return (
     <html lang="zh-TW" suppressHydrationWarning className="h-full antialiased">
-      <body className="h-full overflow-hidden">
+      {/* overflow-hidden / h-full is controlled per-route via data-layout */}
+      <body className="h-full">
         {/* 防 FOUC：在 React hydration 前讀 localStorage 並設 data-theme */}
         <script
           suppressHydrationWarning
