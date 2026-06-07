@@ -1145,14 +1145,24 @@ export interface CreateAlertRulePayload {
   is_active?: boolean;
 }
 
-export const ALERT_RULE_FIELDS: { value: string; label: string; unit: string }[] = [
-  { value: "rsi14",               label: "RSI",         unit: "" },
-  { value: "vol_ratio",           label: "量比",        unit: "x" },
-  { value: "change_pct",          label: "漲跌幅",      unit: "%" },
-  { value: "foreign_streak_days", label: "外資連買天數", unit: "日" },
-  { value: "trust_streak_days",   label: "投信連買天數", unit: "日" },
-  { value: "ma20_breakout",       label: "MA20突破",    unit: "" },
-  { value: "above_ma20",          label: "站上MA20",    unit: "" },
+export const ALERT_RULE_FIELDS: { value: string; label: string; unit: string; hint?: string }[] = [
+  // ── 基本技術 ──
+  { value: "rsi14",               label: "RSI(14)",     unit: "",  hint: "超賣<30 / 超買>70" },
+  { value: "vol_ratio",           label: "量比",        unit: "x", hint: "今日量 ÷ 20日均量" },
+  { value: "change_pct",          label: "漲跌幅",      unit: "%", hint: "當日漲跌 %" },
+  // ── 均線 ──
+  { value: "above_ma20",          label: "站上MA20",    unit: "",  hint: "1=是 0=否" },
+  { value: "ma20_breakout",       label: "突破MA20",    unit: "",  hint: "今天突破(1) 否(0)" },
+  { value: "above_ma5",           label: "站上MA5",     unit: "",  hint: "1=是 0=否" },
+  { value: "above_ma60",          label: "站上MA60",    unit: "",  hint: "1=是 0=否" },
+  // ── 震盪指標 ──
+  { value: "stoch_k",             label: "KD-K值",      unit: "",  hint: "0-100，超賣<20 超買>80" },
+  { value: "macd_hist",           label: "MACD柱",      unit: "",  hint: "正=多頭 負=空頭" },
+  // ── 籌碼 ──
+  { value: "foreign_streak_days", label: "外資連買",    unit: "日", hint: "外資連買天數" },
+  { value: "trust_streak_days",   label: "投信連買",    unit: "日", hint: "投信連買天數" },
+  { value: "foreign_sell_days",   label: "外資連賣",    unit: "日", hint: "外資連賣天數" },
+  { value: "trust_sell_days",     label: "投信連賣",    unit: "日", hint: "投信連賣天數" },
 ];
 
 export const alertRulesApi = {

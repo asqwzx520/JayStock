@@ -13,6 +13,7 @@ import IndicatorSelector  from "@/components/chart/IndicatorSelector";
 import PeriodSelector     from "@/components/chart/PeriodSelector";
 import ChartTypeSelector  from "@/components/chart/ChartTypeSelector";
 import DrawingToolbar     from "@/components/chart/DrawingToolbar";
+import AlertModal         from "@/components/ui/AlertModal";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
@@ -155,8 +156,9 @@ export default function Home() {
   const [verdictLoading, setVerdictLoading] = useState(false);
 
   // 繪圖工具
-  const [activeTool, setActiveTool]   = useState<DrawingTool>("cursor");
+  const [activeTool, setActiveTool]       = useState<DrawingTool>("cursor");
   const [drawingClearKey, setDrawingClearKey] = useState(0);
+  const [alertModalOpen, setAlertModalOpen]   = useState(false);
 
   // 自訂工作區 Modal
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -251,6 +253,7 @@ export default function Home() {
   }
 
   return (
+    <>
     <div className="flex flex-col h-full overflow-hidden">
       <Header
         onSelectStock={handleSelectStock}
@@ -382,6 +385,7 @@ export default function Home() {
                     active={activeTool}
                     onChange={setActiveTool}
                     onClearAll={() => setDrawingClearKey((k) => k + 1)}
+                    onAlertClick={() => setAlertModalOpen(true)}
                   />
                   <IndicatorSelector active={indicators} onChange={setIndicators} />
                   {/* 🤖 AI 一句話評價按鈕 */}
@@ -826,5 +830,15 @@ export default function Home() {
         </button>
       </nav>
     </div>
+
+    {/* 🔔 Alert Modal */}
+    {alertModalOpen && (
+      <AlertModal
+        symbol={symbol}
+        name={stockName}
+        onClose={() => setAlertModalOpen(false)}
+      />
+    )}
+    </>
   );
 }

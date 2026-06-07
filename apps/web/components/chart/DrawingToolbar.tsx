@@ -16,12 +16,13 @@ const TOOLS: { id: DrawingTool; icon: string; title: string }[] = [
 const DIVIDER_BEFORE: DrawingTool[] = ["fibonacci", "erase"];
 
 interface Props {
-  active: DrawingTool;
-  onChange: (t: DrawingTool) => void;
-  onClearAll: () => void;
+  active:         DrawingTool;
+  onChange:       (t: DrawingTool) => void;
+  onClearAll:     () => void;
+  onAlertClick?:  () => void;
 }
 
-export default function DrawingToolbar({ active, onChange, onClearAll }: Props) {
+export default function DrawingToolbar({ active, onChange, onClearAll, onAlertClick }: Props) {
   return (
     <div className="flex items-center gap-0.5 rounded p-0.5" style={{ background: "var(--bg-elevated)" }}>
       {TOOLS.map((t) => (
@@ -52,6 +53,20 @@ export default function DrawingToolbar({ active, onChange, onClearAll }: Props) 
       >
         清
       </button>
+      {/* 警報設定按鈕 */}
+      {onAlertClick && (
+        <>
+          <span className="w-px h-3.5 mx-0.5 shrink-0" style={{ background: "var(--border)" }} />
+          <button
+            onClick={onAlertClick}
+            title="設定技術指標警示"
+            className="px-2 h-6 flex items-center justify-center rounded text-xs transition-colors"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            🔔
+          </button>
+        </>
+      )}
     </div>
   );
 }

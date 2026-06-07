@@ -57,20 +57,21 @@ def _get_metrics_from_cache(symbol: str) -> dict | None:
 
 @ttl_cache(ttl=900)   # 15 分鐘
 def _compute_metrics_yf(symbol: str) -> dict | None:
-    """對不在 screener 股票池的股票用 yfinance 即時計算基本技術指標"""
+    """對不在 screener 股票池的股票用 yfinance 即時計算技術指標"""
     try:
         import yfinance as yf
-        import pandas as pd
 
         yf_sym = _yf_symbol(symbol)
-        hist = yf.Ticker(yf_sym).history(period="3mo")
+        hist = yf.Ticker(yf_sym).history(period="6mo")
         if hist is None or len(hist) < 5:
             return None
 
         closes  = hist["Close"].tolist()
+        highs   = hist["High"].tolist()
+        lows    = hist["Low"].tolist()
         volumes = hist["Volume"].tolist()
 
-        # RSI-14
+        # ── 基礎函式 ───────────────────────────────────────────────────────
         def _rsi(cls: list[float], period: int = 14) -> float:
             if len(cls) < period + 1:
                 return 50.0
@@ -84,8 +85,19 @@ def _compute_metrics_yf(symbol: str) -> dict | None:
                 al = (al * (period - 1) + losses[i]) / period
             return round(100.0 - 100.0 / (1.0 + ag / al), 2) if al else 100.0
 
-        def _ma(cls: list[float], n: int) -> float:
-            return sum(cls[-n:]) / n if len(cls) >= n else sum(cls) / len(cls)
+        def _ma(cls: list[float], n: int) -> float | None:
+            if len(cls) < n:
+                return None
+            return sum(cls[-n:]) / n
+
+        def _ema(data: list[float], period: int) -> float:
+            if not data:
+                return 0.0
+            k = 2.0 / (period + 1)
+            ema = data[0]
+            for p in data[1:]:
+                ema = p * k + ema * (1 - k)
+            return ema
 
         def _vol_ratio(vols: list, n: int = 20) -> float:
             if len(vols) < 2:
@@ -95,9 +107,51 @@ def _compute_metrics_yf(symbol: str) -> dict | None:
             return round(vols[-1] / avg, 2) if avg > 0 else 1.0
 
         price    = closes[-1]
-        prev     = closes[-2]
-        ma20     = _ma(closes, 20)
+        prev     = closes[-2] if len(closes) >= 2 else price
+
+        # ── MA ────────────────────────────────────────────────────────────
+        ma5  = _ma(closes, 5)
+        ma20 = _ma(closes, 20)
+        ma60 = _ma(closes, 60)
+
         ma20prev = _ma(closes[:-1], 20)
+        above_ma20 = (price > ma20)     if ma20     else False
+        above_ma5  = (price > ma5)      if ma5      else False
+        above_ma60 = (price > ma60)     if ma60     else False
+        ma20_breakout = (
+            price > ma20 and prev <= ma20prev
+            if (ma20 and ma20prev) else False
+        )
+
+        # ── Stochastic K（14 日）────────────────────────────────────────
+        def _stoch_k(h: list, l: list, c: list, period: int = 14) -> float:
+            if len(c) < period:
+                return 50.0
+            rh = max(h[-period:])
+            rl = min(l[-period:])
+            if rh == rl:
+                return 50.0
+            return round((c[-1] - rl) / (rh - rl) * 100, 2)
+
+        stoch_k = _stoch_k(highs, lows, closes)
+
+        # ── MACD 柱狀圖（12-26-9）────────────────────────────────────────
+        def _macd_hist(cls: list[float]) -> float:
+            if len(cls) < 35:
+                return 0.0
+            window = cls[-60:] if len(cls) >= 60 else cls
+            ema12 = _ema(window, 12)
+            ema26 = _ema(window, 26)
+            macd_line = ema12 - ema26
+            # 簡化 signal line = EMA9 of last 9 days' ema12-ema26
+            recent_macd = [
+                _ema(window[: max(1, len(window) - i)], 12) - _ema(window[: max(1, len(window) - i)], 26)
+                for i in range(8, -1, -1)
+            ]
+            signal = _ema(recent_macd, 9)
+            return round(macd_line - signal, 4)
+
+        macd_hist = _macd_hist(closes)
 
         return {
             "symbol":        symbol,
@@ -105,8 +159,15 @@ def _compute_metrics_yf(symbol: str) -> dict | None:
             "change_pct":    round((price - prev) / prev * 100, 2) if prev else 0.0,
             "rsi14":         _rsi(closes),
             "vol_ratio":     _vol_ratio(volumes),
-            "above_ma20":    price > ma20,
-            "ma20_breakout": price > ma20 and prev <= ma20prev,
+            # MA 多空
+            "above_ma20":    above_ma20,
+            "ma20_breakout": ma20_breakout,
+            "above_ma5":     above_ma5,
+            "above_ma60":    above_ma60,
+            # KD / MACD
+            "stoch_k":       stoch_k,
+            "macd_hist":     macd_hist,
+            # 籌碼（非 screener 來源，預設 0）
             "foreign_streak": {"days": 0, "direction": "flat"},
             "trust_streak":   {"days": 0, "direction": "flat"},
         }
@@ -266,16 +327,33 @@ def _evaluate_custom_rules(metrics: dict, rules: list[dict]) -> list[dict]:
     triggered: list[dict] = []
 
     # 可用欄位對應
-    def _field_value(field: str) -> float | bool | None:
+    def _field_value(field: str) -> float | None:
+        # ── 基本技術 ──────────────────────────────────────────────────────
         if field == "rsi14":         return metrics.get("rsi14")
         if field == "vol_ratio":     return metrics.get("vol_ratio")
         if field == "change_pct":    return metrics.get("change_pct")
         if field == "ma20_breakout": return 1.0 if metrics.get("ma20_breakout") else 0.0
-        if field == "above_ma20":    return 1.0 if metrics.get("above_ma20") else 0.0
+        if field == "above_ma20":    return 1.0 if metrics.get("above_ma20")    else 0.0
+        # ── 移動平均 ──────────────────────────────────────────────────────
+        if field == "above_ma5":     return 1.0 if metrics.get("above_ma5")     else 0.0
+        if field == "above_ma60":    return 1.0 if metrics.get("above_ma60")    else 0.0
+        # ── KD / MACD ─────────────────────────────────────────────────────
+        if field == "stoch_k":       return metrics.get("stoch_k")
+        if field == "macd_hist":     return metrics.get("macd_hist")
+        # ── 籌碼連買 ──────────────────────────────────────────────────────
         if field == "foreign_streak_days":
-            return float(metrics.get("foreign_streak", {}).get("days", 0))
+            fs = metrics.get("foreign_streak", {})
+            return float(fs.get("days", 0)) if fs.get("direction") == "buy" else 0.0
         if field == "trust_streak_days":
-            return float(metrics.get("trust_streak", {}).get("days", 0))
+            ts = metrics.get("trust_streak", {})
+            return float(ts.get("days", 0)) if ts.get("direction") == "buy" else 0.0
+        # ── 籌碼連賣 ──────────────────────────────────────────────────────
+        if field == "foreign_sell_days":
+            fs = metrics.get("foreign_streak", {})
+            return float(fs.get("days", 0)) if fs.get("direction") == "sell" else 0.0
+        if field == "trust_sell_days":
+            ts = metrics.get("trust_streak", {})
+            return float(ts.get("days", 0)) if ts.get("direction") == "sell" else 0.0
         return None
 
     def _eval_cond(cond: dict) -> bool:

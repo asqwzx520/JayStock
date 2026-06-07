@@ -485,7 +485,7 @@ function AlertRuleForm({
   };
   const removeCond = (i: number) => setConds((prev) => prev.filter((_, idx) => idx !== i));
   const addCond = () => {
-    if (conditions.length < 3) {
+    if (conditions.length < 10) {
       setConds((prev) => [...prev, { field: "vol_ratio", operator: ">", value: 2 }]);
     }
   };
@@ -556,7 +556,7 @@ function AlertRuleForm({
           ))}
         </div>
 
-        {conditions.length < 3 && (
+        {conditions.length < 10 && (
           <button
             onClick={addCond}
             className="mt-2 text-xs px-2 py-1 rounded"

@@ -121,9 +121,18 @@ def _mem_get(user_id: str) -> list[dict]:
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
 
 ALLOWED_FIELDS = {
+    # ── 基本技術 ──
     "rsi14", "vol_ratio", "change_pct",
     "ma20_breakout", "above_ma20",
+    # ── 移動平均 ──
+    "above_ma5", "above_ma60",
+    # ── KD（隨機指標）──
+    "stoch_k",
+    # ── MACD ──
+    "macd_hist",
+    # ── 籌碼 ──
     "foreign_streak_days", "trust_streak_days",
+    "foreign_sell_days",   "trust_sell_days",
 }
 ALLOWED_OPS = {">", "<", ">=", "<=", "=", "=="}
 
@@ -141,8 +150,8 @@ class Condition(BaseModel):
 
 
 class RuleCreate(BaseModel):
-    name:       str              = Field(..., min_length=1, max_length=50)
-    conditions: list[Condition]  = Field(..., min_length=1, max_length=3)
+    name:       str              = Field(..., min_length=1, max_length=60)
+    conditions: list[Condition]  = Field(..., min_length=1, max_length=10)
     logic:      str              = "AND"
     is_active:  bool             = True
 
