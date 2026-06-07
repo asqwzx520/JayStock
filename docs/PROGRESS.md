@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-08（Hover Shimmer 互動效果 + Feature B 技術指標警報系統）  
-> **當前版本：** commit `439564d`（技術指標觸發警報：KD/MACD/MA5/60/連賣天數 + AlertModal + 🔔 工具列按鈕）  
+> **更新日期：** 2026-06-08（Hover Shimmer + Feature B 技術指標警報 + Feature C 財報/除權息月曆）  
+> **當前版本：** commit `671967b`（財報/除權息月曆：月曆 Tab、30天事件格、exdiv/earnings/agm 三型別）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -21,7 +21,7 @@
 | M6 效能優化 + 上線 | SEO + Sentry + 部署 | 95% | ✅ 已部署 |
 | M7 即時行情 | WebSocket + 設價提醒 | 90% | ✅ 完成（新增）|
 
-**整體 PRD 功能完成度：約 95%**
+**整體 PRD 功能完成度：約 96%**
 
 ---
 
@@ -236,9 +236,9 @@
 | **Email / Line 推播** | ✅ Email（Resend API，`1361516`）| ✅ | ✅ | ✅ | Line 未做 |
 | **技術指標觸發警報（如 RSI < 30）** | ✅ **已完成** | ✅✅ | ✅ | △ | **已完成（`439564d`）：13 種指標，10 條件 AND/OR，AlertModal + 🔔 工具列** |
 | **法人異常大量買超警報** | △ 部分 | ❌ | △ | ✅ | 外資/投信連買連賣天數已納入警報條件 |
-| **財報公告 / 除權息提醒** | △ 首頁顯示 | ✅ | ✅ | △ | HomeDashboard 已顯示 7 日內事件，但無主動推播 |
+| **財報公告 / 除權息提醒** | ✅ 月曆 Tab | ✅ | ✅ | △ | **已完成（`671967b`）：月曆 Tab，30天視窗，三色事件格，點格展開詳情** |
 
-**評分：5/6 ★★★★★** — Web Push ✅；技術指標警報 ✅（13指標/10條件）；Line 未做。
+**評分：6/6 ★★★★★** — Web Push ✅；技術指標警報 ✅（13指標/10條件）；財報月曆 ✅；Line 未做。
 
 ---
 
@@ -272,12 +272,12 @@
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
-| 通知 & 提醒 | 5 | 6 | ★★★★★ | 技術指標警報 ✅ 已完成（`439564d`）；Line 未做 |
+| 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅（`439564d`）；財報月曆 ✅（`671967b`）；Line 未做 |
 | UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **43** | **60** | **約 85/100** | |
+| **加總** | **44** | **60** | **約 87/100** | |
 
-> **結論（2026-06-08 更新）：** 技術指標警報系統完成（`439564d`），通知評分 3/6 → 5/6（+2）；Hover Shimmer 效果全面上線（`30341cf`），UX 品質提升。整體評分 77 → 85 分。  
-> 下一個建議：**Feature C（財報/除權息月曆）** 或 **Feature A（K線型態辨識）**。
+> **結論（2026-06-08 更新）：** 財報/除權息月曆完成（`671967b`），通知評分 5/6 → 6/6（滿分）；整體評分 85 → 87 分。  
+> 下一個建議：**Feature A（K線型態辨識）** 或 **鍵盤快捷鍵**。
 
 ---
 
@@ -358,10 +358,11 @@
 - `globals.css`：`.stock-row-shimmer`（`::before` pseudo-element，`isolation: isolate`，藍紫光掃）
 - 覆蓋：LeftPanel 自選股 / HotRanking 排行 / HomeDashboard 自選/警示/AI精選 / ScreenerPanel 結果表格
 
-### 第 11 步：財報 / 除權息月曆（Feature C）
-- 30 天月曆格子：除息/除權、財報公告、股東會、法說會
-- 僅顯示自選股相關事件
-- 資料來源：yfinance + 現有 UpcomingDates API
+### ~~第 11 步：財報 / 除權息月曆（Feature C）~~ ✅ 已完成（`671967b`，2026-06-08）
+- 後端：`calendar.py`（`GET /api/v1/calendar?symbols=...`，30天視窗，exdiv/earnings/agm 三型別，6h TTL）
+- 後端：`main.py` 註冊 calendar router
+- 前端：`CalendarView.tsx`（5×7 月曆格、點格展開詳情、底部事件列表、三色事件 chip）
+- 前端：`useTabConfig.ts` 加 "月曆" Tab，`page.tsx` × 2 lazy-load
 
 ### 第 12 步：K 線型態辨識（Feature A）
 - 疊圖：錘頭/流星/吞噬/十字星/上升三法/跳空/頭肩頂底/雙重頂底（全部型態）
@@ -379,6 +380,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `671967b` | **財報/除權息月曆（Feature C）**：後端 `calendar.py` 新 endpoint `GET /api/v1/calendar?symbols=...`，30天視窗，平行查詢，6h TTL快取，支援 exdiv/earnings/agm；前端 `CalendarView.tsx`（5×7月曆格，今天日期圓形藍色標示，事件 chip 三色：🟡除息/🔵財報/🟢股東會，點格展開詳情面板，底部事件清單含「N天後」badge，shimmer hover 效果，自選股空時引導提示）；`useTabConfig.ts` 新增"月曆"Tab；`page.tsx` × 2 lazy-load | ✅ Live |
 | `439564d` | **技術指標觸發警報系統（Feature B）**：後端 `alert_rules.py` ALLOWED_FIELDS 7→14（KD-K/MACD柱/MA5/MA60/外資連賣/投信連賣）、條件上限3→10；後端 `dashboard.py` 新增 stoch_k/macd_hist/above_ma5/above_ma60 計算（6mo yfinance）；前端 `AlertModal.tsx`（新）完整 CRUD Modal；前端 `DrawingToolbar.tsx` 🔔 按鈕；`page.tsx` × 2 整合；`api.ts` ALERT_RULE_FIELDS 擴充至 13 個含提示 | ✅ Live |
 | `30341cf` | **股票列 Hover Shimmer 效果（全站）**：`globals.css` 新增 `@keyframes shimmer-sweep`、`.stock-row-shimmer`（`::before` pseudo-element，`isolation: isolate` stacking context，藍紫漸層左→右掃，保留底色，0.2s 淡出）、`.tr-shimmer-active`（table row 用 background 動畫）；覆蓋 LeftPanel/HotRanking/HomeDashboard 3個按鈕/ScreenerPanel | ✅ Live |
 | — | **多股比較走勢圖（全棧完成）**：`CompareChart.tsx`（lightweight-charts LineSeries×4，正規化報酬起始=100，1M/3M/6M/1Y/3Y/5Y，Inline 搜尋加入，符號 chip 可刪除，Legend 含累積報酬%）；AI 比較分析按鈕（≥2支時顯示，呼叫 Gemini，快取 15 分鐘）；已整合至 page.tsx 動態 import + ChartSkeleton | ✅ Live |
@@ -433,8 +435,9 @@
 | `GET /api/v1/peer-comparison/{symbol}` | 同業比較表 | ✅ 正常 |
 | `GET /api/v1/monthly-revenue/{symbol}` | 月營收走勢 | ✅ 正常 |
 | `GET /api/v1/foreign-holding/{symbol}` | 外資持股比例走勢 | ✅ 正常 |
+| `GET /api/v1/calendar` | 自選股未來 30 天事件月曆 | ✅ 正常（本次新增）|
 | `WS /ws/quotes` | 即時行情 WebSocket | ✅ 正常 |
 
 ---
 
-*最後更新：2026-06-08 by Claude*
+*最後更新：2026-06-08 by Claude（Feature C 財報/除權息月曆完成，commit `671967b`）*
