@@ -213,15 +213,13 @@ def _send_email(subject: str, html: str, recipients: list[str]) -> bool:
     import json
 
     api_key = os.environ.get("RESEND_API_KEY", "")
-    from_addr = os.environ.get("DIGEST_SMTP_USER", "StockPulse <onboarding@resend.dev>")
+    # onboarding@resend.dev 是 Resend 預驗證地址，無需自訂網域即可發信
+    # 若日後在 Resend 驗證自有網域，可改為環境變數 DIGEST_FROM_ADDR
+    from_addr = os.environ.get("DIGEST_FROM_ADDR", "StockPulse <onboarding@resend.dev>")
 
     if not api_key:
         logger.warning("RESEND_API_KEY not configured; skipping email send")
         return False
-
-    # 若 from_addr 只是 email 不含名稱，補上顯示名稱
-    if "<" not in from_addr:
-        from_addr = f"StockPulse <{from_addr}>"
 
     payload = json.dumps({
         "from":    from_addr,
