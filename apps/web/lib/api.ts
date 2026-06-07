@@ -1290,3 +1290,32 @@ export async function getAiWatchlistSummary(
   if (!res.ok) throw new Error(`API ${res.status}: /dashboard/ai-summary`);
   return res.json();
 }
+
+// ── Calendar API ──────────────────────────────────────────────────────────────
+
+export type CalendarEventType = "exdiv" | "earnings" | "agm";
+
+export interface CalendarEvent {
+  symbol:  string;
+  name:    string;
+  type:    CalendarEventType;
+  label:   string;        // "除息日" / "財報公布" / "股東常會"
+  date:    string;        // "YYYY-MM-DD"
+  value:   number | null; // 除息金額（如有）
+}
+
+export interface CalendarResponse {
+  window_days: number;
+  from_date:   string;
+  to_date:     string;
+  count:       number;
+  events:      CalendarEvent[];
+}
+
+export async function getCalendar(symbols: string[]): Promise<CalendarResponse> {
+  if (!symbols.length) return { window_days: 30, from_date: "", to_date: "", count: 0, events: [] };
+  const res = await fetch(`${API_BASE}/api/v1/calendar?symbols=${symbols.join(",")}`);
+  if (!res.ok) throw new Error(`API ${res.status}: /calendar`);
+  return res.json();
+}
+

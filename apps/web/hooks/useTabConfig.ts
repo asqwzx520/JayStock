@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 // ── Tab 定義 ──────────────────────────────────────────────────────────────────
 export type ViewTab =
   | "home" | "kline" | "chips" | "market" | "ranking"
-  | "screener" | "news" | "backtest" | "analysis" | "compare";
+  | "screener" | "news" | "backtest" | "analysis" | "compare" | "calendar";
 
 export interface TabDef {
   id: ViewTab;
@@ -24,6 +24,7 @@ export const DEFAULT_TABS: TabDef[] = [
   { id: "backtest", label: "回測",   visible: true },
   { id: "analysis", label: "分析",   visible: true },
   { id: "compare",  label: "比較",   visible: true },
+  { id: "calendar", label: "月曆",   visible: true },
 ];
 
 const LS_KEY = "jaystock_tab_config_v1";

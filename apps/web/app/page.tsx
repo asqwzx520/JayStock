@@ -57,6 +57,11 @@ const HomeDashboard = dynamic(
   { ssr: false, loading: () => <DashboardSkeleton /> }
 );
 
+const CalendarView = dynamic(
+  () => import("@/components/dashboard/CalendarView"),
+  { ssr: false, loading: () => <DashboardSkeleton /> }
+);
+
 const WatchlistSidebar = dynamic(
   () => import("@/components/layout/LeftPanel"),
   { ssr: false }
@@ -742,6 +747,11 @@ export default function Home() {
             {/* 多股比較 */}
             {viewTab === "compare" && (
               <CompareChart initialSymbol={symbol} />
+            )}
+
+            {/* 財報/除權息月曆 */}
+            {viewTab === "calendar" && (
+              <CalendarView />
             )}
 
           </div>
