@@ -285,11 +285,11 @@
 ### ~~第 0 步：UptimeRobot 防冷啟動~~ ✅ 已完成
 > 已設定每 14 分鐘 ping `https://jaystock.onrender.com/health`，防止 Render 冷啟動
 
-### ~~第 1 步：盤前 AI 推播驗證~~ ✅ 已完成（`1361516`，2026-06-07）
-- Render 免費方案封鎖 SMTP port 587，改用 **Resend API**（HTTPS，免費 100封/天）
-- `digest_service.py` `_send_email` 從 smtplib 改為 `urllib.request` 呼叫 Resend REST API
-- 環境變數：`RESEND_API_KEY`（Render 已設）；`DIGEST_SMTP_USER` 作為寄件顯示地址
-- 無新增套件，使用 Python 內建 stdlib
+### ~~第 1 步：盤前 AI 推播~~ → 改為網頁 AI 精選按鈕（`cdd975f`，2026-06-08）
+- Email 發信因 Render IP 被 Cloudflare 封鎖（SMTP port 587 + Resend API 403 1010），放棄 Email 路線
+- **改為首頁「✨ AI 今日精選」按鈕**：點擊呼叫 `GET /api/v1/recommendations`，即時顯示 Top5 + AI 理由卡片
+- 刪除：`digest.py`、`digest_service.py`、`daily_digest.py`、scheduler digest job
+- 刪除 Render 環境變數：`DIGEST_SMTP_USER/PASS/RECIPIENTS`、`RESEND_API_KEY`、`ADMIN_TOKEN`
 
 ### ~~第 2 步：個股基本面資料~~ ✅ 已完成
 > 競品評分 0/8 → 8/8，包含：P/E、EPS、殖利率、股利歷史 10 年、財報 10 年、PE/PB 估值帶、同業比較、月營收、外資持股
@@ -359,7 +359,7 @@
 |--------|------|------|
 | — | **多股比較走勢圖（全棧完成）**：`CompareChart.tsx`（lightweight-charts LineSeries×4，正規化報酬起始=100，1M/3M/6M/1Y/3Y/5Y，Inline 搜尋加入，符號 chip 可刪除，Legend 含累積報酬%）；AI 比較分析按鈕（≥2支時顯示，呼叫 Gemini，快取 15 分鐘）；已整合至 page.tsx 動態 import + ChartSkeleton | ✅ Live |
 | — | **Skeleton 載入動畫（全覆蓋）**：`components/ui/Skeleton.tsx`（`ChartSkeleton` 假K棒脈衝 / `DashboardSkeleton` 市場卡片 / `NewsListSkeleton` 新聞列 / `TableSkeleton` 選股表格 / `RightPanelSkeleton` 右側欄）；page.tsx 11 個動態 import 全部套用；KLine 行內載入改 ChartSkeleton | ✅ Live |
-| `1361516` | **盤前 AI Email 推播（全棧完成）**：Render 封鎖 SMTP port 587，改用 Resend API（HTTPS）；`digest_service.py` `_send_email` 從 smtplib 換成 `urllib.request` 呼叫 Resend REST；`digest/status` 端點改顯示 `RESEND_API_KEY` 狀態；無新增 pip 套件 | ✅ Live |
+| `cdd975f` | **AI 今日精選按鈕（取代 Email 推播）**：刪除 digest/email 整套（Render IP 被 Cloudflare 封）；新增 `GET /api/v1/recommendations`（screener Top5 + Gemini 理由，15min 快取）；HomeDashboard 加「✨ AI 今日精選」按鈕 → 展開卡片列表（排名+價格+AI理由+籌碼標籤，點擊跳 K 線） | ✅ Live |
 | `e59edd8`～`2eb7d7f` | **Web Push Notification（全棧完成）**：Service Worker (`/public/sw.js`) + VAPID + pywebpush；`push_service.py`（Supabase 持久化 + in-memory fallback）；`/api/v1/push/subscribe\|status\|test` 端點；`usePushNotification` hook；Header 📶 `PushSubscribeButton`；修復 slowapi+Pydantic 422；修復 require_user 支援 Google numeric ID；Supabase `push_subscriptions` 表；**端對端測試通過（sent: 1）** | ✅ Live |
 | — | **PE/PB 歷史估值帶（全棧完成）**：後端 `valuation_band_service.py`（5年週線×TTM EPS/BVPS，±1σ/±2σ，分位數）；前端 `ValuationBandSection`（SVG折線+彩帶+`PercentileArc`分位弧+估值評語）；位置：分析Tab→基本面 | ✅ Live |
 | — | **月營收走勢圖（全棧完成）**：後端 `monthly_revenue_service.py`（MOPS IFRS，24個月，YoY/累計YoY，sii/otc/rotc自動嘗試）；前端 `MonthlyRevenueSection`（摘要卡片+`RevenueTrendChart`+`YoYBarChart`+明細表）；位置：分析Tab→基本面 | ✅ Live |
