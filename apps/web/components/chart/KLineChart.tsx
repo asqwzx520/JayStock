@@ -3,12 +3,15 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
   AreaSeries,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
   type SeriesType,
   type CandlestickData,
   type HistogramData,
@@ -18,7 +21,7 @@ import {
   CrosshairMode,
   LineStyle,
 } from "lightweight-charts";
-import type { KlineBar, IntradayBar, ChipsBar } from "@/lib/api";
+import type { KlineBar, IntradayBar, ChipsBar, CandlePattern } from "@/lib/api";
 
 /** K線圖類型 */
 export type ChartType = "candle" | "hollow" | "heikin_ashi" | "line" | "area";
@@ -192,10 +195,32 @@ interface KLineChartProps {
   activeTool?: DrawingTool;
   clearKey?: number;
   symbol?: string;
+  patternMarkers?: CandlePattern[];
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
+
+// ── Pattern marker helpers ────────────────────────────────────────────────────
+
+const PATTERN_COLORS = {
+  bullish: "#22C55E",
+  bearish: "#EF4444",
+  neutral: "#94A3B8",
+} as const;
+
+function buildSeriesMarkers(patterns: CandlePattern[]): SeriesMarker<Time>[] {
+  const markers: SeriesMarker<Time>[] = patterns.map((p) => ({
+    time:     p.date as Time,
+    position: p.direction === "bullish" ? "belowBar" : p.direction === "bearish" ? "aboveBar" : "inBar",
+    color:    PATTERN_COLORS[p.direction],
+    shape:    p.direction === "bullish" ? "arrowUp" : p.direction === "bearish" ? "arrowDown" : "circle",
+    text:     p.label,
+    size:     1,
+  }));
+  // lightweight-charts requires markers sorted by time
+  return markers.sort((a, b) => (a.time as string).localeCompare(b.time as string));
+}
 
 export default function KLineChart({
   data,
@@ -205,10 +230,13 @@ export default function KLineChart({
   activeTool = "cursor",
   clearKey,
   symbol = "",
+  patternMarkers,
 }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRefs   = useRef<ISeriesApi<SeriesType>[]>([]);
+  // Pattern markers plugin ref — created after main series is ready
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // ── Drawing canvas ────────────────────────────────────────────────────────
   const canvasRef      = useRef<HTMLCanvasElement>(null);
@@ -534,8 +562,9 @@ export default function KLineChart({
 
     if (chartRef.current) {
       chartRef.current.remove();
-      chartRef.current  = null;
+      chartRef.current   = null;
       seriesRefs.current = [];
+      markersPluginRef.current = null;
     }
 
     const isIntraday = data.length > 0 && typeof barTime(data[0]) === "number";
@@ -611,6 +640,12 @@ export default function KLineChart({
       });
       s.setData(data.map((d) => ({ time: barTime(d), open: d.open, high: d.high, low: d.low, close: d.close })));
       seriesRefs.current.push(s);
+    }
+
+    // ── Pattern markers (attached to main price series) ───────────────────
+    const mainSeries = seriesRefs.current[0];
+    if (mainSeries && patternMarkers && patternMarkers.length > 0) {
+      markersPluginRef.current = createSeriesMarkers(mainSeries, buildSeriesMarkers(patternMarkers));
     }
 
     // ── Volume ────────────────────────────────────────────────────────────
@@ -850,6 +885,27 @@ export default function KLineChart({
   }, [data, indicators, chipsData, chartType]);
 
   useEffect(() => { buildChart(); }, [buildChart]);
+
+  // ── Sync pattern markers when prop changes (without rebuilding chart) ─────
+  useEffect(() => {
+    const mainSeries = seriesRefs.current[0];
+    if (!mainSeries) return;
+
+    if (!patternMarkers || patternMarkers.length === 0) {
+      // Clear existing markers
+      if (markersPluginRef.current) {
+        markersPluginRef.current.setMarkers([]);
+      }
+      return;
+    }
+
+    const markers = buildSeriesMarkers(patternMarkers);
+    if (markersPluginRef.current) {
+      markersPluginRef.current.setMarkers(markers);
+    } else {
+      markersPluginRef.current = createSeriesMarkers(mainSeries, markers);
+    }
+  }, [patternMarkers]);
 
   useEffect(() => {
     const container = containerRef.current;

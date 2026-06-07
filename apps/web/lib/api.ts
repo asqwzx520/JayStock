@@ -1312,6 +1312,27 @@ export interface CalendarResponse {
   events:      CalendarEvent[];
 }
 
+// ── Candlestick Patterns API ──────────────────────────────────────────────────
+
+export type PatternDirection = "bullish" | "bearish" | "neutral";
+
+export interface CandlePattern {
+  date:        string;           // "YYYY-MM-DD"
+  name:        string;           // e.g. "hammer"
+  label:       string;           // e.g. "錘頭"
+  direction:   PatternDirection;
+  description: string;
+}
+
+export interface PatternsResponse {
+  symbol:   string;
+  patterns: CandlePattern[];
+}
+
+export function getPatterns(symbol: string, limit = 90): Promise<PatternsResponse> {
+  return fetcher<PatternsResponse>(`/api/v1/patterns/${symbol}?limit=${limit}`);
+}
+
 export async function getCalendar(symbols: string[]): Promise<CalendarResponse> {
   if (!symbols.length) return { window_days: 30, from_date: "", to_date: "", count: 0, events: [] };
   const res = await fetch(`${API_BASE}/api/v1/calendar?symbols=${symbols.join(",")}`);

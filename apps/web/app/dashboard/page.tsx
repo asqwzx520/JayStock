@@ -89,6 +89,7 @@ import {
   getMargin,
   getFundamental,
   getStockVerdict,
+  getPatterns,
   INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
@@ -100,6 +101,7 @@ import {
   type MarginBar,
   type MarginResponse,
   type FundamentalData,
+  type CandlePattern,
 } from "@/lib/api";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
@@ -159,6 +161,9 @@ export default function Home() {
   // AI 一句話評價
   const [verdict, setVerdict]             = useState<string | null>(null);
   const [verdictLoading, setVerdictLoading] = useState(false);
+
+  // K 線型態辨識
+  const [patterns, setPatterns] = useState<CandlePattern[]>([]);
 
   // 繪圖工具
   const [activeTool, setActiveTool]       = useState<DrawingTool>("cursor");
@@ -237,6 +242,12 @@ export default function Home() {
     setFundamental(null);
     getFundamental(symbol).then(setFundamental).catch(() => {});
     setVerdict(null);   // 換股時清除舊評價
+  }, [symbol]);
+
+  // K 線型態：symbol 變動時重載（後端 TTL=5min）
+  useEffect(() => {
+    setPatterns([]);
+    getPatterns(symbol).then((r) => setPatterns(r.patterns)).catch(() => {});
   }, [symbol]);
 
   async function fetchVerdict() {
@@ -660,6 +671,7 @@ export default function Home() {
                         activeTool={activeTool}
                         clearKey={drawingClearKey}
                         symbol={symbol}
+                        patternMarkers={patterns}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
                         <div className="pointer-events-none absolute z-10 left-2 flex flex-col"

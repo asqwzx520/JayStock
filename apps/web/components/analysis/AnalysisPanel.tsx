@@ -16,8 +16,8 @@ import type {
   ForeignHoldingResponse,
   DividendHistoryResponse,
 } from "@/lib/api";
-import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory, getAiAnalysis, getEarnings, getVolumeProfile, getFinancialAlerts } from "@/lib/api";
-import type { AiAnalysisResponse, EarningsResponse, VolumeProfileResponse, FinancialAlertsResponse, FinancialAlert } from "@/lib/api";
+import { getTechnical, getFundamental, getFinancials, getMonthlyRevenue, getValuationBand, getPeerComparison, getForeignHolding, getDividendHistory, getAiAnalysis, getEarnings, getVolumeProfile, getFinancialAlerts, getPatterns } from "@/lib/api";
+import type { AiAnalysisResponse, EarningsResponse, VolumeProfileResponse, FinancialAlertsResponse, FinancialAlert, CandlePattern, PatternDirection } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -571,6 +571,69 @@ function FinancialAlertsSection({
           {data.note}。財報異常僅供參考，需結合產業背景綜合判斷。
         </p>
       </div>
+    </Section>
+  );
+}
+
+// ── Candlestick Pattern Section ───────────────────────────────────────────────
+
+const PATTERN_DIR_STYLE: Record<PatternDirection, { bg: string; text: string; label: string }> = {
+  bullish: { bg: "rgba(34,197,94,0.12)",  text: "var(--color-up)",   label: "多頭信號" },
+  bearish: { bg: "rgba(239,68,68,0.12)",  text: "var(--color-down)", label: "空頭信號" },
+  neutral: { bg: "rgba(107,114,128,0.12)", text: "#9ca3af",           label: "中性" },
+};
+
+const PATTERN_ICON: Record<PatternDirection, string> = {
+  bullish: "▲",
+  bearish: "▼",
+  neutral: "●",
+};
+
+function PatternSection({ patterns, loading, error }: { patterns: CandlePattern[]; loading: boolean; error: string | null }) {
+  if (loading) return <Section title="📊 K 線型態辨識"><div className="text-xs text-center py-4" style={{ color: "var(--text-tertiary)" }}>辨識中…</div></Section>;
+  if (error)   return null;
+
+  // Show recent 10 patterns, most recent first
+  const recent = [...patterns].reverse().slice(0, 10);
+
+  return (
+    <Section title="📊 K 線型態辨識">
+      {recent.length === 0 ? (
+        <div className="text-xs text-center py-4" style={{ color: "var(--text-tertiary)" }}>
+          近 90 日無顯著型態
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {recent.map((p, i) => {
+            const s = PATTERN_DIR_STYLE[p.direction];
+            return (
+              <div key={i} className="rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold" style={{ color: s.text }}>{PATTERN_ICON[p.direction]}</span>
+                    <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>{p.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                      style={{ background: s.bg, color: s.text }}
+                    >
+                      {s.label}
+                    </span>
+                    <span className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{p.date.slice(5)}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: "var(--text-tertiary)" }}>{p.description}</p>
+              </div>
+            );
+          })}
+          {patterns.length > 10 && (
+            <p className="text-[11px] text-center pt-1" style={{ color: "var(--text-tertiary)" }}>
+              共 {patterns.length} 個型態，顯示最近 10 個
+            </p>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
@@ -2074,6 +2137,10 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [faData,     setFaData]     = useState<FinancialAlertsResponse | null>(null);
   const [customPeers, setCustomPeers] = useState("");
 
+  const [patData,   setPatData]   = useState<CandlePattern[]>([]);
+  const [patLoad,   setPatLoad]   = useState(false);
+  const [patErr,    setPatErr]    = useState<string | null>(null);
+
   const [techLoad, setTechLoad]   = useState(false);
   const [fundLoad, setFundLoad]   = useState(false);
   const [finLoad,  setFinLoad]    = useState(false);
@@ -2106,7 +2173,11 @@ export default function AnalysisPanel({ symbol }: Props) {
   useEffect(() => {
     setTechData(null); setFundData(null); setFinData(null);  setRevData(null);  setBandData(null);  setPeerData(null);  setFhData(null);  setDivData(null);  setEarnData(null);  setFaData(null);
     setTechErr(null);  setFundErr(null);  setFinErr(null);   setRevErr(null);   setBandErr(null);   setPeerErr(null);   setFhErr(null);   setDivErr(null);   setEarnErr(null);   setFaErr(null);
+    setPatData([]); setPatErr(null);
     setCustomPeers("");
+
+    setPatLoad(true);
+    getPatterns(symbol).then(r => setPatData(r.patterns)).catch(e => setPatErr(e.message)).finally(() => setPatLoad(false));
 
     setTechLoad(true);
     getTechnical(symbol).then(setTechData).catch(e => setTechErr(e.message)).finally(() => setTechLoad(false));
@@ -2173,6 +2244,7 @@ export default function AnalysisPanel({ symbol }: Props) {
           techData ? (
             <div className="space-y-4">
               <AiAnalysisSection symbol={symbol} />
+              <PatternSection patterns={patData} loading={patLoad} error={patErr} />
               <TechSection data={techData} />
               <VolumeProfileSection symbol={symbol} />
               <ForeignHoldingSection data={fhData} loading={fhLoad} error={fhErr} />
