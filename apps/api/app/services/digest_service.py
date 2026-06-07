@@ -4,13 +4,11 @@
 功能：
   1. 每日 08:00（台灣時間）取出 screener 快取中「外資連買 + RSI<60 + 突破 MA20」得分前 5 名
   2. 呼叫 Gemini API 為每檔生成 60 字中文理由
-  3. 組裝成 HTML email 並透過 SMTP 送出
+  3. 組裝成 HTML email 並透過 Resend API 送出（走 HTTPS，避免 Render 封鎖 SMTP port）
 
 環境變數：
-  DIGEST_SMTP_HOST   = smtp.gmail.com
-  DIGEST_SMTP_PORT   = 587
-  DIGEST_SMTP_USER   = your@gmail.com
-  DIGEST_SMTP_PASS   = app_password
+  RESEND_API_KEY     = re_xxxxxxx        (Resend 控制台取得)
+  DIGEST_SMTP_USER   = your@gmail.com    (作為寄件人顯示地址，需在 Resend 驗證網域或用 onboarding@resend.dev)
   DIGEST_RECIPIENTS  = a@b.com,c@d.com   (逗號分隔)
   GEMINI_API_KEY     = ...               (已在 config.py)
 """
@@ -18,11 +16,8 @@
 import asyncio
 import logging
 import os
-import smtplib
 import traceback
 from datetime import date
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -212,33 +207,50 @@ def _build_html(picks: list[dict]) -> str:
 </html>"""
 
 
-# ── 發送 SMTP Email ───────────────────────────────────────────────────────────
+# ── 發送 Email（Resend API，走 HTTPS 避開 Render SMTP 封鎖）─────────────────
 def _send_email(subject: str, html: str, recipients: list[str]) -> bool:
-    host     = os.environ.get("DIGEST_SMTP_HOST", "smtp.gmail.com")
-    port     = int(os.environ.get("DIGEST_SMTP_PORT", "587"))
-    user     = os.environ.get("DIGEST_SMTP_USER", "")
-    password = os.environ.get("DIGEST_SMTP_PASS", "")
+    import urllib.request
+    import json
 
-    if not user or not password:
-        logger.warning("SMTP credentials not configured; skipping email send")
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_addr = os.environ.get("DIGEST_SMTP_USER", "StockPulse <onboarding@resend.dev>")
+
+    if not api_key:
+        logger.warning("RESEND_API_KEY not configured; skipping email send")
         return False
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = f"StockPulse <{user}>"
-    msg["To"]      = ", ".join(recipients)
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    # 若 from_addr 只是 email 不含名稱，補上顯示名稱
+    if "<" not in from_addr:
+        from_addr = f"StockPulse <{from_addr}>"
+
+    payload = json.dumps({
+        "from":    from_addr,
+        "to":      recipients,
+        "subject": subject,
+        "html":    html,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+        },
+        method="POST",
+    )
 
     try:
-        with smtplib.SMTP(host, port, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(user, password)
-            server.sendmail(user, recipients, msg.as_bytes())
-        logger.info("Digest email sent to %d recipients", len(recipients))
-        return True
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read())
+            logger.info("Resend: email sent, id=%s, to=%d recipients", body.get("id"), len(recipients))
+            return True
+    except urllib.error.HTTPError as exc:
+        err_body = exc.read().decode("utf-8", errors="replace")
+        logger.error("Resend send failed: HTTP %s — %s\n%s", exc.code, err_body, traceback.format_exc())
+        return False
     except Exception as exc:
-        logger.error("SMTP send failed: %s\n%s", exc, traceback.format_exc())
+        logger.error("Resend send failed: %s\n%s", exc, traceback.format_exc())
         return False
 
 

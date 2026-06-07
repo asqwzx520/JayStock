@@ -17,19 +17,19 @@ router = APIRouter()
 
 @router.get("/digest/status")
 async def digest_status():
-    """回傳 SMTP / recipient 設定狀態（不洩露實際值）"""
-    smtp_user = os.environ.get("DIGEST_SMTP_USER", "")
-    smtp_pass = os.environ.get("DIGEST_SMTP_PASS", "")
+    """回傳 Resend API / recipient 設定狀態（不洩露實際值）"""
+    resend_key = os.environ.get("RESEND_API_KEY", "")
+    from_addr  = os.environ.get("DIGEST_SMTP_USER", "")
     recipients = os.environ.get("DIGEST_RECIPIENTS", "")
     recipient_list = [e.strip() for e in recipients.split(",") if e.strip()]
 
     return {
-        "smtp_configured": bool(smtp_user and smtp_pass),
-        "smtp_user_set":   bool(smtp_user),
-        "smtp_pass_set":   bool(smtp_pass),
+        "provider":        "resend",
+        "resend_key_set":  bool(resend_key),
+        "from_addr_set":   bool(from_addr),
         "recipient_count": len(recipient_list),
         "recipients_set":  bool(recipient_list),
-        "ready":           bool(smtp_user and smtp_pass and recipient_list),
+        "ready":           bool(resend_key and recipient_list),
     }
 
 
@@ -55,16 +55,15 @@ async def send_digest(
     import asyncio
     from datetime import date
 
-    # 1. 確認 SMTP 設定
-    smtp_user = os.environ.get("DIGEST_SMTP_USER", "")
-    smtp_pass = os.environ.get("DIGEST_SMTP_PASS", "")
+    # 1. 確認 Resend 設定
+    resend_key     = os.environ.get("RESEND_API_KEY", "")
     recipients_raw = os.environ.get("DIGEST_RECIPIENTS", "")
     recipients = [e.strip() for e in recipients_raw.split(",") if e.strip()]
 
-    if not smtp_user or not smtp_pass:
+    if not resend_key:
         raise HTTPException(
             status_code=503,
-            detail="SMTP credentials not configured. Set DIGEST_SMTP_USER and DIGEST_SMTP_PASS in Render environment variables.",
+            detail="RESEND_API_KEY not configured. Set it in Render environment variables.",
         )
     if not recipients:
         raise HTTPException(
