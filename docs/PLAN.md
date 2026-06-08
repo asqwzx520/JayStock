@@ -436,3 +436,76 @@ const DAILY_PERIODS = [
 | `b2121b4` | 修復上櫃股票報價不更新（twse_fetcher tse_\|otc_ 雙查）| ✅ |
 | `00ffe32` | VWAP帶 ±1σ 通道（indicators.ts vwapBand + KLineChart 3 LineSeries + IndicatorSelector）| ✅ |
 | `00ffe32` | 首頁板塊概覽 MiniSectorBar（HomeDashboard pill chips）| ✅ |
+| `d6563dd` | 修復回測台股全失敗（backtest 改用 FinMind，解決 Render 被 Yahoo 封鎖問題）| ✅ |
+
+---
+
+---
+
+# Sprint 3 — 資料庫優化
+
+> 開始日期：2026-06-08  
+> 目標：讓 Supabase 快取真正跑起來，減少 FinMind API 呼叫，提升整體速度
+
+## 背景 & 問題
+
+`kline_daily` / `chips_daily` 兩張表已建立 schema 和 index，但**從未有資料被寫入**。
+原因：只有讀取路徑，沒有寫入路徑。結果每次請求都 cache miss → 打 FinMind → 慢且耗 quota。
+
+## grill-me 決策記錄
+
+| 問題 | 決策 |
+|------|------|
+| 優化目標 | 全部都做，按優先序 |
+| kline 寫入策略 | A — 寫穿快取（cache miss 後立即 upsert） |
+| 同步快取的表 | kline_daily + chips_daily |
+| 後端寫入 key | B — 新增 `SUPABASE_SERVICE_KEY` env var，讀用 anon key，寫用 service key |
+| 快取保留期限 | 5 年（只寫近 5 年內資料） |
+
+---
+
+## Phase 1 — 讓快取真正跑起來（最高影響力）
+
+### 問題
+`kline_daily` / `chips_daily` 表是空的，每次都 miss 到 FinMind。
+
+### 實作清單
+
+| # | 檔案 | 修改 |
+|---|------|------|
+| 1 | `apps/api/app/core/config.py` | 加 `supabase_service_key: str = ""` |
+| 2 | `apps/api/app/core/supabase_client.py` | 加 `get_supabase_admin()` — 用 service_role key，專門寫入用 |
+| 3 | `apps/api/app/api/v1/kline.py` | cache miss 後 `asyncio.create_task(_upsert_kline_cache)` — 5 年以內資料才寫，fire-and-forget 不阻塞 response |
+| 4 | `apps/api/app/api/v1/chips.py` | 加 `_upsert_chips_cache`，FinMind 回來後 fire-and-forget upsert |
+| 5 | Render 環境變數 | 加 `SUPABASE_SERVICE_KEY`（Supabase Dashboard → Settings → API → service_role key） |
+
+### 效果
+同一支股票第一次查後，後續全部命中 Supabase，不打 FinMind。
+
+---
+
+## Phase 2 — Schema / 索引優化
+
+| # | 內容 |
+|---|------|
+| 6 | 新 migration：清理超過 5 年的資料（`DELETE WHERE date < NOW() - INTERVAL '5 years'`） |
+| 7 | 新增 covering index：`idx_kline_covering ON kline_daily (symbol, date DESC) INCLUDE (open, high, low, close, volume)` |
+| 8 | 新增 covering index：`idx_chips_covering ON chips_daily (symbol, date DESC) INCLUDE (foreign_buy, foreign_sell, trust_buy, trust_sell)` |
+
+---
+
+## Phase 3 — 可選擴充（未來）
+
+| 資料 | TTL | 說明 |
+|------|-----|------|
+| `fundamental_cache` | 7天 | PE/EPS/殖利率 |
+| `news_cache` | 4小時 | 減少 Yahoo scrape 頻率 |
+
+---
+
+## Sprint 3 驗證清單
+
+- [ ] Phase 1：kline/chips 第一次查後，Supabase Dashboard 可見到資料寫入
+- [ ] Phase 1：相同股票第二次查，API log 顯示 "Supabase 命中" 而非 "cache miss"
+- [ ] Phase 2：migration 執行後，covering index 存在
+- [ ] Phase 2：`EXPLAIN ANALYZE` 顯示 Index Only Scan

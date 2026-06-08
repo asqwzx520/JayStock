@@ -36,7 +36,7 @@ def _assert_anon_key(key: str) -> None:
 
 
 def get_supabase():
-    """回傳 Supabase Client，未設定則回傳 None（不拋例外）"""
+    """回傳 Supabase Client（anon key），未設定則回傳 None（不拋例外）"""
     global _client, _init_attempted
     if _init_attempted:
         return _client
@@ -58,3 +58,36 @@ def get_supabase():
         _client = None
 
     return _client
+
+
+# ── Admin client（service_role key，後端寫入專用）──────────────────────────────
+
+_admin_client = None
+_admin_init_attempted = False
+
+
+def get_supabase_admin():
+    """
+    回傳 service_role Supabase Client，供後端寫入 kline_daily / chips_daily 等快取表。
+    service_role 繞過 RLS — 僅限後端 server-side 呼叫，絕不暴露給前端。
+    未設定 SUPABASE_SERVICE_KEY 則回傳 None（靜默降級，不影響讀取功能）。
+    """
+    global _admin_client, _admin_init_attempted
+    if _admin_init_attempted:
+        return _admin_client
+    _admin_init_attempted = True
+
+    from app.core.config import settings
+    if not settings.supabase_url or not settings.supabase_service_key:
+        logger.info("SUPABASE_SERVICE_KEY 未設定，Supabase 寫入快取停用")
+        return None
+
+    try:
+        from supabase import create_client
+        _admin_client = create_client(settings.supabase_url, settings.supabase_service_key)
+        logger.info("Supabase admin 客戶端初始化成功（service_role）")
+    except Exception as e:
+        logger.error(f"Supabase admin 初始化失敗: {e}")
+        _admin_client = None
+
+    return _admin_client

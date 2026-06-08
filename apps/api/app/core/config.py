@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     cors_origins: List[str] = ["http://localhost:3000"]
 
     # Supabase
-    supabase_url: str = ""
-    supabase_key: str = ""
+    supabase_url:         str = ""
+    supabase_key:         str = ""   # anon/public key（讀取用，前端安全）
+    supabase_service_key: str = ""   # service_role key（後端寫入用，絕不暴露前端）
 
     # Upstash Redis
     redis_url: str = "redis://localhost:6379"

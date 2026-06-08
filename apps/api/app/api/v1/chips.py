@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Query, Request
+import asyncio
 import logging
 
 from app.services.finmind_service import fetch_institutional, fetch_margin, fetch_broker_data
-from app.core.supabase_client import get_supabase
+from app.core.supabase_client import get_supabase, get_supabase_admin
 from app.core.validators import validate_symbol
 from app.core.rate_limit import limiter
 from app.core.broker_types import classify_broker, is_known_daytrade, detect_daytrade_rate
@@ -69,13 +70,18 @@ def _build_response_data(raw_rows: list[dict], days: int) -> list[dict]:
     return data
 
 
-def _build_response_from_finmind(raw: list[dict], days: int) -> list[dict]:
+def _aggregate_finmind_chips(raw: list[dict]) -> dict[str, dict]:
+    """
+    將 FinMind 三大法人原始資料聚合為 { date: {date, foreign_buy, ...} } dict。
+    供 _build_response_from_finmind 和 _upsert_chips_cache 共用。
+    每個 value dict 都含 "date" 欄位，方便直接傳給 _build_response_data 和 upsert。
+    """
     by_date: dict[str, dict] = {}
     for row in raw:
         d = row["date"]
         if d not in by_date:
             by_date[d] = {
-                "date": d,
+                "date":        d,
                 "foreign_buy": 0, "foreign_sell": 0,
                 "trust_buy":   0, "trust_sell":   0,
                 "dealer_buy":  0, "dealer_sell":  0,
@@ -92,7 +98,11 @@ def _build_response_from_finmind(raw: list[dict], days: int) -> list[dict]:
         elif cat == "dealer":
             by_date[d]["dealer_buy"]   += buy
             by_date[d]["dealer_sell"]  += sell
+    return by_date
 
+
+def _build_response_from_finmind(raw: list[dict], days: int) -> list[dict]:
+    by_date = _aggregate_finmind_chips(raw)
     sorted_dates = sorted(by_date.keys())[-days:]
     data = []
     for d in sorted_dates:
@@ -144,6 +154,47 @@ async def _chips_from_supabase(
     except Exception as e:
         logger.warning(f"[chips] Supabase 讀取失敗: {e}")
         return None
+
+
+async def _upsert_chips_cache(symbol: str, by_date: dict[str, dict]) -> None:
+    """
+    Fire-and-forget：將三大法人聚合資料寫入 Supabase chips_daily。
+    by_date 格式：{ "YYYY-MM-DD": { foreign_buy, foreign_sell, trust_buy, ... } }
+    只寫 5 年以內資料。
+    """
+    admin = get_supabase_admin()
+    if admin is None:
+        return
+
+    cutoff = (date.today() - timedelta(days=365 * 5)).isoformat()
+    to_write = [
+        {
+            "symbol":       symbol,
+            "date":         r["date"],
+            "foreign_buy":  r["foreign_buy"],
+            "foreign_sell": r["foreign_sell"],
+            "trust_buy":    r["trust_buy"],
+            "trust_sell":   r["trust_sell"],
+            "dealer_buy":   r["dealer_buy"],
+            "dealer_sell":  r["dealer_sell"],
+        }
+        for r in by_date.values()
+        if r["date"] >= cutoff
+    ]
+    if not to_write:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: admin.table("chips_daily")
+                         .upsert(to_write, on_conflict="symbol,date")
+                         .execute(),
+        )
+        logger.debug("[chips] upserted %d rows to Supabase for %s", len(to_write), symbol)
+    except Exception as exc:
+        logger.warning("[chips] Supabase upsert 失敗（非致命）: %s", exc)
 
 
 def _build_cumulative_series(data: list[dict]) -> list[dict]:
@@ -316,7 +367,10 @@ async def get_chips(
             raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
         if not raw:
             raise HTTPException(status_code=404, detail=f"No chips data for {sym}")
-        data = _build_response_from_finmind(raw, days)
+        # 聚合後同時快取：fire-and-forget 不阻塞 response
+        by_date = _aggregate_finmind_chips(raw)
+        asyncio.create_task(_upsert_chips_cache(sym, by_date))
+        data = _build_response_data(list(by_date.values()), days)
 
     if not data:
         raise HTTPException(status_code=404, detail=f"No chips data for {sym}")

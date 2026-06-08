@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 from datetime import date, timedelta
+import asyncio
 import logging
 
 from app.services.finmind_service import (
     fetch_daily_kline as finmind_fetch_kline,
     fetch_intraday_kline,
 )
-from app.core.supabase_client import get_supabase
+from app.core.supabase_client import get_supabase, get_supabase_admin
 from app.core.validators import validate_symbol
 from app.core.rate_limit import limiter
 
@@ -40,6 +41,47 @@ async def _kline_from_supabase(
         return None
 
 
+async def _upsert_kline_cache(symbol: str, rows: list[dict]) -> None:
+    """
+    Fire-and-forget：將 FinMind 回傳的 K 線資料寫入 Supabase kline_daily。
+    只寫 5 年以內的資料，避免快取表無限膨脹。
+    使用 service_role client 繞過 RLS 寫入限制。
+    """
+    admin = get_supabase_admin()
+    if admin is None:
+        return
+
+    cutoff = (date.today() - timedelta(days=365 * 5)).isoformat()
+    to_write = [
+        {
+            "symbol":   symbol,
+            "date":     r["date"],
+            "open":     r["open"],
+            "high":     r["high"],
+            "low":      r["low"],
+            "close":    r["close"],
+            "volume":   r["volume"],
+            "turnover": r.get("turnover", 0),
+        }
+        for r in rows
+        if r.get("date", "") >= cutoff
+    ]
+    if not to_write:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: admin.table("kline_daily")
+                         .upsert(to_write, on_conflict="symbol,date")
+                         .execute(),
+        )
+        logger.debug("[kline] upserted %d rows to Supabase for %s", len(to_write), symbol)
+    except Exception as exc:
+        logger.warning("[kline] Supabase upsert 失敗（非致命）: %s", exc)
+
+
 @router.get("/kline/{symbol}")
 @limiter.limit("30/minute")
 async def get_kline(
@@ -62,13 +104,15 @@ async def get_kline(
     # 1. 嘗試從 Supabase 快取讀取
     rows = await _kline_from_supabase(sym, start, end)
 
-    # 2. Cache miss → 直接打 FinMind
+    # 2. Cache miss → 直接打 FinMind，完成後 fire-and-forget 寫回 Supabase
     if rows is None:
         logger.debug(f"[kline] {sym} cache miss，呼叫 FinMind")
         try:
             rows = await finmind_fetch_kline(sym, start, end)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
+        # 寫穿快取（fire-and-forget，不阻塞 response）
+        asyncio.create_task(_upsert_kline_cache(sym, rows))
 
     if not rows:
         raise HTTPException(status_code=404, detail=f"No kline data for {sym}")
