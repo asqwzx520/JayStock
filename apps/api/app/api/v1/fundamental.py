@@ -200,12 +200,13 @@ async def get_fundamental(request: Request, symbol: str):
 
     if is_tw:
         # 台股：A+C 策略
-        # A — FinMind PE/PB（快速可靠）
+        # A — TWSE OpenAPI BWIBBU_ALL：一次 bulk fetch 全市場 PE/PB/殖利率
+        #     （取代 FinMind 逐支呼叫，節省 FinMind quota）
         # C — yfinance 12s timeout 補其餘欄位（失敗不影響回傳）
-        from app.services.finmind_service import fetch_per_pbr
+        from app.services.twse_openapi_service import fetch_all_per_pbr
 
-        per_result, yf_result = await asyncio.gather(
-            fetch_per_pbr(sym),
+        per_map, yf_result = await asyncio.gather(
+            fetch_all_per_pbr(),
             asyncio.wait_for(
                 loop.run_in_executor(None, _fetch_fundamental_sync, sym),
                 timeout=12.0,
@@ -217,15 +218,18 @@ async def get_fundamental(request: Request, symbol: str):
         data = (yf_result if isinstance(yf_result, dict) and yf_result
                 else {"symbol": sym})
 
-        # 用 FinMind PE/PB 覆蓋（更可靠）
-        if isinstance(per_result, list) and per_result:
-            latest = per_result[-1]
-            pe = _safe_float(latest.get("PER"))
-            pb = _safe_float(latest.get("PBR"))
+        # 用 TWSE OpenAPI PE/PB/殖利率覆蓋（官方資料，更可靠）
+        if isinstance(per_map, dict):
+            per_data = per_map.get(sym, {})
+            pe = per_data.get("pe")
+            pb = per_data.get("pb")
+            dy = per_data.get("yield")
             if pe is not None:
                 data["pe_trailing"] = pe
             if pb is not None:
                 data["pb_ratio"] = pb
+            if dy is not None:
+                data["dividend_yield"] = dy   # TWSE 殖利率比 yfinance 更準確
 
         data.setdefault("symbol", sym)
 
