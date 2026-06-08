@@ -40,8 +40,10 @@ export interface KlineResponse {
 }
 
 export interface StockItem {
-  symbol: string;
-  name: string;
+  symbol:    string;
+  name:      string;
+  market?:   "TW" | "US";
+  exchange?: string;  // "NASDAQ" | "NYSE" | undefined
 }
 
 export interface SearchResponse {
@@ -62,6 +64,11 @@ export function getQuotesBatch(symbols: string[]) {
 
 export function getKline(symbol: string, period = "daily") {
   return fetcher<KlineResponse>(`/api/v1/kline/${symbol}?period=${period}`);
+}
+
+/** 美股日K（yfinance，TTL 1h 後端快取） */
+export function getUsKline(symbol: string, period = "daily") {
+  return fetcher<KlineResponse>(`/api/v1/kline/us/${symbol}?period=${period}`);
 }
 
 // ── Intraday K-line (分K) ───────────────────────────────────────────────────

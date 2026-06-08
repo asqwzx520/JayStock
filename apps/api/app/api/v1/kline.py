@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from datetime import date, timedelta
 import asyncio
 import logging
+import time
 
 from app.services.finmind_service import (
     fetch_daily_kline as finmind_fetch_kline,
@@ -236,3 +237,81 @@ def _aggregate(rows: list[dict], freq: str) -> list[dict]:
             "turnover": sum(i["turnover"] for i in items),
         })
     return result
+
+
+# ── 美股 K 線（yfinance）─────────────────────────────────────────────────────
+
+_US_KLINE_CACHE: dict[str, dict] = {}
+_US_KLINE_TTL = 3600  # 1 小時
+
+
+def _yf_fetch_kline_sync(symbol: str, period_str: str) -> list[dict]:
+    """同步呼叫 yfinance（在 executor 中執行）"""
+    try:
+        import yfinance as yf
+        # period → yfinance interval / period 對應
+        _PERIOD_MAP = {
+            "daily":     ("1d", "2y"),
+            "weekly":    ("1wk", "10y"),
+            "monthly":   ("1mo", "20y"),
+            "quarterly": ("3mo", "max"),
+            "yearly":    ("3mo", "max"),   # 年K 自行聚合
+        }
+        iv, yf_period = _PERIOD_MAP.get(period_str, ("1d", "2y"))
+
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=yf_period, interval=iv, auto_adjust=True)
+        if df is None or df.empty:
+            return []
+
+        rows = []
+        for ts, row in df.iterrows():
+            rows.append({
+                "date":     ts.strftime("%Y-%m-%d"),
+                "open":     round(float(row["Open"]),  4),
+                "high":     round(float(row["High"]),  4),
+                "low":      round(float(row["Low"]),   4),
+                "close":    round(float(row["Close"]), 4),
+                "volume":   int(row["Volume"]),
+                "turnover": 0,
+            })
+        return rows
+    except Exception as exc:
+        logger.warning("[kline/us] yfinance 失敗 %s: %s", symbol, exc)
+        return []
+
+
+@router.get("/kline/us/{symbol}")
+@limiter.limit("20/minute")
+async def get_us_kline(
+    request: Request,
+    symbol: str,
+    period: str = Query("daily", description="daily / weekly / monthly / quarterly / yearly"),
+):
+    """
+    美股日/週/月/季/年 K 線（yfinance，TTL 1h 後端快取）
+    範例：GET /api/v1/kline/us/AAPL?period=daily
+    """
+    sym = validate_symbol(symbol)
+    cache_key = f"{sym}:{period}"
+    now = time.time()
+
+    # TTL 快取
+    cached = _US_KLINE_CACHE.get(cache_key)
+    if cached and now - cached["ts"] < _US_KLINE_TTL:
+        rows = cached["rows"]
+        return {"symbol": sym, "period": period, "count": len(rows), "data": rows}
+
+    # 在 thread executor 中呼叫 yfinance（避免 blocking event loop）
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, _yf_fetch_kline_sync, sym, period)
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No US kline data for {sym}")
+
+    # 年K 需要再聚合（yfinance 3mo → 年）
+    if period == "yearly":
+        rows = _aggregate(rows, "YE")
+
+    _US_KLINE_CACHE[cache_key] = {"rows": rows, "ts": now}
+    return {"symbol": sym, "period": period, "count": len(rows), "data": rows}

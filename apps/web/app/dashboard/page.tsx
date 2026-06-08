@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/layout/Header";
 import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
@@ -84,12 +84,14 @@ const WorkspaceModal = dynamic(
 import {
   getQuote,
   getKline,
+  getUsKline,
   getIntradayKline,
   getChips,
   getMargin,
   getFundamental,
   getStockVerdict,
   getPatterns,
+  watchlistApi,
   INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
@@ -106,6 +108,7 @@ import {
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
 import { withCache } from "@/lib/clientCache";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
@@ -138,6 +141,7 @@ function FundItem({ label, value, color }: { label: string; value: string; color
 export default function Home() {
   const [symbol, setSymbol]       = useState(readInitSymbol);  // 支援 /stock/[symbol] 導入
   const [stockName, setStockName] = useState("台積電");
+  const [market, setMarket]       = useState<"TW" | "US">("TW");  // 目前股票市場
   const [quote, setQuote]         = useState<Quote | null>(null);
 
   // K線（日K = KlineBar[], 分K = IntradayBar[]）
@@ -183,11 +187,35 @@ export default function Home() {
   // 手機版：已移除 LeftPanel Drawer，保留狀態供底部 nav 用
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
 
-  // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
+  // 自選股清單（供鍵盤快捷鍵 ↑↓ 切換）
+  const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
+  useEffect(() => {
+    watchlistApi.get()
+      .then(state => {
+        // items is Record<groupId, WatchlistItem[]>
+        const syms = Object.values(state.items).flatMap(arr => arr.map(i => i.symbol));
+        setWatchlistSymbols(syms);
+      })
+      .catch(() => {});
+  }, []);
+
+  // market ref：讓 loadKline callback 讀最新值，不需加入依賴陣列
+  const marketRef = useRef(market);
+  marketRef.current = market;
+
+  // ── 載入 K 線（自動分流：分K / 日週月K / 美股 yfinance）──────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
     setLoading(true); setError("");
     try {
-      if (isIntradayPeriod(prd)) {
+      const mkt = marketRef.current;
+
+      if (mkt === "US") {
+        // 美股：直接呼叫 /kline/us/{symbol}（TTL 1h 後端快取）
+        const klineTtl = (prd === "quarterly" || prd === "yearly") ? 30 * 60_000 : 3 * 60_000;
+        const k = await withCache(`kline_us:${sym}:${prd}`, () => getUsKline(sym, prd), klineTtl);
+        setKlineData(k.data as KlineBar[]);
+        setQuote(null);  // 美股不做即時報價 WebSocket，清除舊 quote
+      } else if (isIntradayPeriod(prd)) {
         // 分K：呼叫 /kline/{symbol}/intraday（TTL 1 分鐘）
         const [q, k] = await Promise.all([
           withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
@@ -237,12 +265,13 @@ export default function Home() {
   }, [symbol, indicators, period, loadKlineChips]);
 
 
-  // 即時報價：WebSocket（盤中 5s，盤外 30s）
-  const { quotes: wsQuotes } = useStockWebSocket([symbol]);
+  // 即時報價：WebSocket（盤中 5s，盤外 30s）；美股不連線
+  const { quotes: wsQuotes } = useStockWebSocket(market === "US" ? [] : [symbol]);
   useEffect(() => {
+    if (market === "US") return;   // 美股不套用 WS 報價
     const q = wsQuotes[symbol];
     if (q) setQuote(q);
-  }, [wsQuotes, symbol]);
+  }, [wsQuotes, symbol, market]);
 
   // 基本面：symbol 變動時重載（前端 TTL 1h，與後端一致）
   useEffect(() => {
@@ -271,10 +300,25 @@ export default function Home() {
     }
   }
 
-  function handleSelectStock(sym: string, name?: string) {
+  function handleSelectStock(sym: string, name?: string, mkt?: "TW" | "US") {
     setSymbol(sym);
     if (name) setStockName(name);
+    // 更新市場（美股隱藏籌碼 Tab）
+    setMarket(mkt ?? "TW");
   }
+
+  // ── 鍵盤快捷鍵 ────────────────────────────────────────────────
+  useKeyboardShortcuts({
+    watchlistSymbols,
+    currentSymbol: symbol,
+    onSymbolChange: (sym) => {
+      setSymbol(sym);
+      switchTab("kline");
+    },
+    onFocusSearch: () => {
+      (document.getElementById("stock-search-input") as HTMLInputElement | null)?.focus();
+    },
+  });
 
   function switchTab(tab: ViewTab) {
     setViewTab(tab);
@@ -305,7 +349,10 @@ export default function Home() {
               height: "36px",
             }}
           >
-            {visibleTabs.map((tab) => {
+            {/* 美股隱藏籌碼 / 回測（無台灣本地籌碼資料）*/}
+            {visibleTabs
+              .filter(tab => market !== "US" || (tab.id !== "chips" && tab.id !== "backtest"))
+              .map((tab) => {
               const isActive = viewTab === tab.id;
               return (
                 <button
@@ -359,6 +406,15 @@ export default function Home() {
                   <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
                     {stockName}
                   </span>
+                  {/* 美股市場標示 */}
+                  {market === "US" && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                      style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
+                    >
+                      🇺🇸 US
+                    </span>
+                  )}
                   {quote && (
                     <span
                       className="num text-base font-bold"

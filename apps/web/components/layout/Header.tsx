@@ -435,7 +435,7 @@ function TickerTape() {
 }
 
 interface HeaderProps {
-  onSelectStock: (symbol: string, name: string) => void;
+  onSelectStock: (symbol: string, name: string, market?: "TW" | "US") => void;
   currentSymbol?: string;
   currentName?: string;
 }
@@ -505,25 +505,26 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
   }, [query]);
 
   function select(item: StockItem) {
-    onSelectStock(item.symbol, item.name);
+    onSelectStock(item.symbol, item.name, item.market);
     setQuery("");
     setOpen(false);
     inputRef.current?.blur();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowDown" && open) {
       e.preventDefault();
       setActiveIdx((i) => Math.min(i + 1, results.length - 1));
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp" && open) {
       e.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && activeIdx >= 0) {
-      e.preventDefault();
-      select(results[activeIdx]);
+    } else if (e.key === "Enter") {
+      // Enter：優先選中高亮項，否則取第一筆結果（直接輸入代號後 Enter）
+      const target = activeIdx >= 0 ? results[activeIdx] : results[0];
+      if (target) { e.preventDefault(); select(target); }
     } else if (e.key === "Escape") {
       setOpen(false);
+      inputRef.current?.blur();
     }
   }
 
@@ -593,8 +594,9 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
         <div className="relative flex-1 min-w-0 max-w-sm">
           <input
             ref={inputRef}
+            id="stock-search-input"
             type="text"
-            placeholder="搜尋股票代號或名稱..."
+            placeholder="搜尋股票代號或名稱... （/ 快速聚焦）"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -631,9 +633,15 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
                   onMouseEnter={() => setActiveIdx(i)}
                 >
                   <span className="num font-medium w-14">{item.symbol}</span>
-                  <span style={{ color: "var(--text-secondary)" }}>
+                  <span className="flex-1 truncate" style={{ color: "var(--text-secondary)" }}>
                     {item.name}
                   </span>
+                  {item.market === "US" && (
+                    <span className="ml-1 shrink-0 text-[10px] px-1.5 py-0.5 rounded"
+                      style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}>
+                      🇺🇸 {item.exchange ?? "US"}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
