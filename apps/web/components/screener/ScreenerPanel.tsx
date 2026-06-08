@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   getScreenerTemplates,
   runScreener,
+  watchlistApi,
   type ScreenerTemplate,
   type ScreenerResult,
   type ScreenerResponse,
@@ -62,6 +63,39 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
   const [sortCol,         setSortCol]          = useState<keyof ScreenerResult>("score");
   const [sortAsc,         setSortAsc]          = useState(false);
   const nlRef = useRef<HTMLInputElement>(null);
+
+  // ── Watchlist 狀態 ─────────────────────────────────────────────────────────
+  const [watchedSymbols,  setWatchedSymbols]  = useState<Set<string>>(new Set());
+  const [firstGroupId,    setFirstGroupId]    = useState<string | null>(null);
+  const [addingSymbols,   setAddingSymbols]   = useState<Set<string>>(new Set());
+
+  // 掛載時載入 watchlist
+  useEffect(() => {
+    watchlistApi.get().then((state) => {
+      const gid = state.groups[0]?.id ?? null;
+      setFirstGroupId(gid);
+      const syms = new Set<string>();
+      Object.values(state.items).forEach((items) =>
+        items.forEach((item) => syms.add(item.symbol))
+      );
+      setWatchedSymbols(syms);
+    }).catch(() => {});
+  }, []);
+
+  const handleAddToWatchlist = useCallback(async (symbol: string) => {
+    if (!firstGroupId || watchedSymbols.has(symbol) || addingSymbols.has(symbol)) return;
+    // Optimistic update
+    setAddingSymbols(prev => new Set([...prev, symbol]));
+    setWatchedSymbols(prev => new Set([...prev, symbol]));
+    try {
+      await watchlistApi.addItem(firstGroupId, symbol);
+    } catch {
+      // Rollback on failure
+      setWatchedSymbols(prev => { const s = new Set(prev); s.delete(symbol); return s; });
+    } finally {
+      setAddingSymbols(prev => { const s = new Set(prev); s.delete(symbol); return s; });
+    }
+  }, [firstGroupId, watchedSymbols, addingSymbols]);
 
   // 載入模板清單（只需一次）
   const ensureTemplates = useCallback(async () => {
@@ -282,6 +316,7 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
                   <Th col="vol_ratio"  label="量比"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
                   <Th col="rsi14"      label="RSI"    onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
                   <th className="px-3 py-2 text-left font-medium">法人</th>
+                  <th className="px-2 py-2 text-center font-medium w-8">+</th>
                 </tr>
               </thead>
               <tbody>
@@ -291,6 +326,9 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
                     r={r}
                     rank={idx + 1}
                     onSelect={() => onSelectStock(r.symbol, r.name)}
+                    isWatched={watchedSymbols.has(r.symbol)}
+                    isAdding={addingSymbols.has(r.symbol)}
+                    onAddToWatchlist={handleAddToWatchlist}
                   />
                 ))}
               </tbody>
@@ -346,10 +384,16 @@ function ResultRow({
   r,
   rank,
   onSelect,
+  isWatched,
+  isAdding,
+  onAddToWatchlist,
 }: {
-  r:        ScreenerResult;
-  rank:     number;
-  onSelect: () => void;
+  r:                 ScreenerResult;
+  rank:              number;
+  onSelect:          () => void;
+  isWatched:         boolean;
+  isAdding:          boolean;
+  onAddToWatchlist:  (symbol: string) => void;
 }) {
   const isUp   = r.change_pct > 0;
   const isDown = r.change_pct < 0;
@@ -468,6 +512,28 @@ function ResultRow({
           <StreakBadge streak={r.trust_streak}   label="投" />
           <StreakBadge streak={r.dealer_streak}  label="自" />
         </div>
+      </td>
+
+      {/* 加自選股按鈕 */}
+      <td className="px-2 py-2 text-center w-8">
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddToWatchlist(r.symbol); }}
+          disabled={isWatched || isAdding}
+          title={isWatched ? "已在自選股" : "加入自選股"}
+          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+          style={{
+            background: isWatched
+              ? "rgba(34,197,94,0.15)"
+              : "var(--bg-elevated)",
+            color: isWatched
+              ? "var(--color-up)"
+              : "var(--text-tertiary)",
+            border: `1px solid ${isWatched ? "rgba(34,197,94,0.4)" : "var(--border)"}`,
+            cursor: isWatched ? "default" : "pointer",
+          }}
+        >
+          {isAdding ? "…" : isWatched ? "✓" : "+"}
+        </button>
       </td>
     </tr>
   );

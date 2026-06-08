@@ -524,6 +524,40 @@ async def fetch_us_quote(symbol: str) -> Optional[dict]:
 _news_cache: dict = {}
 _NEWS_TTL = 600  # 10 分鐘快取
 
+# ── 新聞重要度評分 ────────────────────────────────────────────────────────────
+_NEWS_HIGH_KEYWORDS = [
+    # 個股財務直接事件
+    "法說", "財報", "eps", "除息", "除權", "配息", "股利",
+    "漲停", "跌停", "停牌", "下市", "重大訊息", "盈餘", "虧損",
+    # 國際總經衝擊
+    "非農", "gdp", "cpi", "pce", "fed", "聯準會",
+    "升息", "降息", "利率決策", "貨幣政策",
+    "標普", "道瓊", "那斯達克", "大跌", "暴跌", "崩盤", "熊市",
+    "nvidia", "輝達", "apple", "蘋果", "tesla", "特斯拉",
+    "巴菲特", "破產", "倒閉", "收購", "併購",
+]
+_NEWS_MID_KEYWORDS = [
+    "半導體", "晶圓", "ai", "人工智慧",
+    "法人", "買超", "賣超", "外資", "投信", "自營商",
+    "產業", "供應鏈", "景氣", "出口", "製造業",
+]
+
+import re as _re_news
+
+def _is_chinese(text: str) -> bool:
+    """判斷字串是否含中文字元。"""
+    return bool(_re_news.search(r'[一-鿿]', text))
+
+def _score_importance(title: str, publisher: str) -> str:
+    """根據標題與來源評估新聞重要度：高 / 中 / 低。"""
+    combined = (title + " " + publisher).lower()
+    if any(k.lower() in combined for k in _NEWS_HIGH_KEYWORDS):
+        return "高"
+    if any(k.lower() in combined for k in _NEWS_MID_KEYWORDS):
+        return "中"
+    return "低"
+
+
 def _parse_news_item(item: dict) -> dict:
     """
     相容新舊 yfinance 新聞格式：
@@ -555,13 +589,17 @@ def _parse_news_item(item: dict) -> dict:
         provider   = content.get("provider") or {}
         canonical  = content.get("canonicalUrl") or {}
         clickthrough = content.get("clickThroughUrl") or {}
+        title_val     = content.get("title", "") or item.get("title", "")
+        publisher_val = provider.get("displayName", "") or item.get("publisher", "")
         return {
-            "title":        content.get("title", "") or item.get("title", ""),
-            "publisher":    provider.get("displayName", "") or item.get("publisher", ""),
+            "title":        title_val,
+            "publisher":    publisher_val,
             "link":         canonical.get("url", "") or clickthrough.get("url", "") or item.get("link", ""),
             "published_at": published_at or item.get("providerPublishTime", 0),
             "thumbnail":    thumb,
             "type":         item.get("type", "STORY"),
+            "importance":   _score_importance(title_val, publisher_val),
+            "is_chinese":   _is_chinese(title_val),
         }
     else:
         # ── 舊格式 ───────────────────────────────────────────────
@@ -570,13 +608,17 @@ def _parse_news_item(item: dict) -> dict:
             resolutions = item["thumbnail"].get("resolutions", [])
             if resolutions:
                 thumb = resolutions[-1].get("url")
+        title_val     = item.get("title", "")
+        publisher_val = item.get("publisher", "")
         return {
-            "title":        item.get("title", ""),
-            "publisher":    item.get("publisher", ""),
+            "title":        title_val,
+            "publisher":    publisher_val,
             "link":         item.get("link", ""),
             "published_at": item.get("providerPublishTime", 0),
             "thumbnail":    thumb,
             "type":         item.get("type", "STORY"),
+            "importance":   _score_importance(title_val, publisher_val),
+            "is_chinese":   _is_chinese(title_val),
         }
 
 

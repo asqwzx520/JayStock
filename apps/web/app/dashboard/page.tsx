@@ -105,6 +105,7 @@ import {
 } from "@/lib/api";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
+import { withCache } from "@/lib/clientCache";
 
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
@@ -155,6 +156,11 @@ export default function Home() {
   // 主 tab
   const [viewTab, setViewTab] = useState<ViewTab>("kline");
 
+  // keep-alive：記錄已訪問過的 tab，掛載後不再銷毀
+  const [mountedTabs, setMountedTabs] = useState<Set<ViewTab>>(
+    () => new Set<ViewTab>(["kline", "home", "analysis"])
+  );
+
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
 
@@ -182,18 +188,18 @@ export default function Home() {
     setLoading(true); setError("");
     try {
       if (isIntradayPeriod(prd)) {
-        // 分K：呼叫 /kline/{symbol}/intraday
+        // 分K：呼叫 /kline/{symbol}/intraday（TTL 1 分鐘）
         const [q, k] = await Promise.all([
-          getQuote(sym).catch(() => null),
-          getIntradayKline(sym, prd),
+          withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
+          withCache(`kline_intraday:${sym}:${prd}`, () => getIntradayKline(sym, prd), 60_000),
         ]);
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as IntradayBar[]);
       } else {
-        // 日/週/月 K
+        // 日/週/月 K（TTL 3 分鐘）
         const [q, k] = await Promise.all([
-          getQuote(sym).catch(() => null),
-          getKline(sym, prd),
+          withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
+          withCache(`kline:${sym}:${prd}`, () => getKline(sym, prd), 3 * 60_000),
         ]);
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as KlineBar[]);
@@ -237,17 +243,18 @@ export default function Home() {
     if (q) setQuote(q);
   }, [wsQuotes, symbol]);
 
-  // 基本面：symbol 變動時重載（後端 TTL=1h，不影響效能）
+  // 基本面：symbol 變動時重載（前端 TTL 1h，與後端一致）
   useEffect(() => {
     setFundamental(null);
-    getFundamental(symbol).then(setFundamental).catch(() => {});
+    withCache(`fundamental:${symbol}`, () => getFundamental(symbol), 3_600_000)
+      .then(setFundamental).catch(() => {});
     setVerdict(null);   // 換股時清除舊評價
   }, [symbol]);
 
-  // K 線型態：symbol 變動時重載（後端 TTL=5min）
+  // K 線型態：symbol 變動時重載（前端 TTL 5min，與後端一致）
   useEffect(() => {
-    setPatterns([]);
-    getPatterns(symbol).then((r) => setPatterns(r.patterns)).catch(() => {});
+    withCache(`patterns:${symbol}`, () => getPatterns(symbol), 5 * 60_000)
+      .then((r) => setPatterns(r.patterns)).catch(() => {});
   }, [symbol]);
 
   async function fetchVerdict() {
@@ -266,6 +273,14 @@ export default function Home() {
   function handleSelectStock(sym: string, name?: string) {
     setSymbol(sym);
     if (name) setStockName(name);
+  }
+
+  function switchTab(tab: ViewTab) {
+    setViewTab(tab);
+    setMountedTabs(prev => {
+      if (prev.has(tab)) return prev;
+      return new Set([...prev, tab]);
+    });
   }
 
   return (
@@ -294,7 +309,7 @@ export default function Home() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setViewTab(tab.id)}
+                  onClick={() => switchTab(tab.id)}
                   className="shrink-0 flex items-center px-4 transition-colors"
                   style={{
                     height: "100%",
@@ -497,39 +512,37 @@ export default function Home() {
           <div className="flex-1 min-h-0 relative">
 
             {/* 首頁：280px 自選股側欄 + 右側儀錶板 */}
-            {viewTab === "home" && (
-              <div className="flex h-full min-h-0">
-                {/* 自選股側欄（桌面版顯示）*/}
-                <aside
-                  className="hidden md:block shrink-0 border-r overflow-hidden"
-                  style={{
-                    width: "280px",
-                    background: "var(--bg-surface)",
-                    borderColor: "var(--border)",
+            <div className={viewTab !== "home" ? "hidden" : "flex h-full min-h-0"}>
+              {/* 自選股側欄（桌面版顯示）*/}
+              <aside
+                className="hidden md:block shrink-0 border-r overflow-hidden"
+                style={{
+                  width: "280px",
+                  background: "var(--bg-surface)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                <WatchlistSidebar
+                  currentSymbol={symbol}
+                  onSelectStock={(sym) => {
+                    handleSelectStock(sym, "");
+                    switchTab("kline");
                   }}
-                >
-                  <WatchlistSidebar
-                    currentSymbol={symbol}
-                    onSelectStock={(sym) => {
-                      handleSelectStock(sym, "");
-                      setViewTab("kline");
-                    }}
-                  />
-                </aside>
-                {/* 右側儀錶板 */}
-                <div className="flex-1 min-w-0 min-h-0">
-                  <HomeDashboard
-                    onSelectStock={(sym) => {
-                      handleSelectStock(sym, "");
-                      setViewTab("kline");
-                    }}
-                  />
-                </div>
+                />
+              </aside>
+              {/* 右側儀錶板 */}
+              <div className="flex-1 min-w-0 min-h-0">
+                <HomeDashboard
+                  onSelectStock={(sym) => {
+                    handleSelectStock(sym, "");
+                    switchTab("kline");
+                  }}
+                />
               </div>
-            )}
+            </div>
 
-            {/* K 線 — 左側資訊欄 + 圖表 */}
-            {viewTab === "kline" && (
+            {/* K 線 — 左側資訊欄 + 圖表（永遠掛載，keep-alive）*/}
+            <div className={viewTab !== "kline" ? "hidden" : "flex h-full min-h-0 overflow-hidden"}>
               <div className="flex h-full min-h-0 overflow-hidden">
 
                 {/* 左側資訊欄（190px，桌面版才顯示）*/}
@@ -690,68 +703,82 @@ export default function Home() {
                   )}
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* 籌碼面板（垂直滾動，6 區塊）*/}
-            {viewTab === "chips" && (
-              <ChipsPanel
-                symbol={symbol}
-                days={chipsDays}
-                onDaysChange={setChipsDays}
-              />
+            {/* 籌碼面板（首次訪問才掛載，之後 keep-alive）*/}
+            {mountedTabs.has("chips") && (
+              <div className={viewTab !== "chips" ? "hidden" : "flex-1 min-h-0"}>
+                <ChipsPanel
+                  symbol={symbol}
+                  days={chipsDays}
+                  onDaysChange={setChipsDays}
+                />
+              </div>
             )}
 
             {/* 熱門排行 */}
-            {viewTab === "ranking" && (
-              <div className="flex-1 overflow-y-auto">
+            {mountedTabs.has("ranking") && (
+              <div className={viewTab !== "ranking" ? "hidden" : "flex-1 overflow-y-auto"}>
                 <HotRanking onSelectSymbol={(sym) => {
                   handleSelectStock(sym, "");
-                  setViewTab("kline");
+                  switchTab("kline");
                 }} />
               </div>
             )}
 
-            {/* M5 市場儀錶板（廣度 + 板塊 + 法人） */}
-            {viewTab === "market" && (
-              <MarketDashboard onSelectStock={(sym, name) => {
-                handleSelectStock(sym, name);
-                setViewTab("kline");
-              }} />
+            {/* M5 市場儀錶板 */}
+            {mountedTabs.has("market") && (
+              <div className={viewTab !== "market" ? "hidden" : "flex-1 min-h-0"}>
+                <MarketDashboard onSelectStock={(sym, name) => {
+                  handleSelectStock(sym, name);
+                  switchTab("kline");
+                }} />
+              </div>
             )}
 
             {/* 選股器 */}
-            {viewTab === "screener" && (
-              <ScreenerPanel
-                onSelectStock={(sym, name) => {
-                  handleSelectStock(sym, name);
-                  setViewTab("kline");
-                }}
-              />
+            {mountedTabs.has("screener") && (
+              <div className={viewTab !== "screener" ? "hidden" : "flex-1 min-h-0"}>
+                <ScreenerPanel
+                  onSelectStock={(sym, name) => {
+                    handleSelectStock(sym, name);
+                    switchTab("kline");
+                  }}
+                />
+              </div>
             )}
 
             {/* 個股新聞 */}
-            {viewTab === "news" && (
-              <StockNews symbol={symbol} />
+            {mountedTabs.has("news") && (
+              <div className={viewTab !== "news" ? "hidden" : "flex-1 min-h-0"}>
+                <StockNews symbol={symbol} />
+              </div>
             )}
 
             {/* 回測 */}
-            {viewTab === "backtest" && (
-              <BacktestPanel symbol={symbol} />
+            {mountedTabs.has("backtest") && (
+              <div className={viewTab !== "backtest" ? "hidden" : "flex-1 min-h-0"}>
+                <BacktestPanel symbol={symbol} />
+              </div>
             )}
 
-            {/* 分析 */}
-            {viewTab === "analysis" && (
+            {/* 分析（初始即掛載，keep-alive）*/}
+            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 min-h-0"}>
               <AnalysisPanel symbol={symbol} />
-            )}
+            </div>
 
             {/* 多股比較 */}
-            {viewTab === "compare" && (
-              <CompareChart initialSymbol={symbol} />
+            {mountedTabs.has("compare") && (
+              <div className={viewTab !== "compare" ? "hidden" : "flex-1 min-h-0"}>
+                <CompareChart initialSymbol={symbol} />
+              </div>
             )}
 
             {/* 財報/除權息月曆 */}
-            {viewTab === "calendar" && (
-              <CalendarView />
+            {mountedTabs.has("calendar") && (
+              <div className={viewTab !== "calendar" ? "hidden" : "flex-1 min-h-0"}>
+                <CalendarView />
+              </div>
             )}
 
           </div>
@@ -782,7 +809,7 @@ export default function Home() {
       >
         {/* 首頁 */}
         <button
-          onClick={() => { setViewTab("home"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("home"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "home" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="首頁"
@@ -796,7 +823,7 @@ export default function Home() {
 
         {/* 走勢圖 */}
         <button
-          onClick={() => { setViewTab("kline"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("kline"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "kline" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="走勢圖"
@@ -809,7 +836,7 @@ export default function Home() {
 
         {/* 分析 */}
         <button
-          onClick={() => { setViewTab("analysis"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("analysis"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "analysis" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="分析"
@@ -824,7 +851,7 @@ export default function Home() {
 
         {/* 大盤 */}
         <button
-          onClick={() => { setViewTab("market"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("market"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "market" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="大盤"
@@ -840,7 +867,7 @@ export default function Home() {
 
         {/* 選股 */}
         <button
-          onClick={() => { setViewTab("screener"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("screener"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "screener" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="選股"

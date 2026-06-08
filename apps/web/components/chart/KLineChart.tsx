@@ -215,8 +215,8 @@ function buildSeriesMarkers(patterns: CandlePattern[]): SeriesMarker<Time>[] {
     position: p.direction === "bullish" ? "belowBar" : p.direction === "bearish" ? "aboveBar" : "inBar",
     color:    PATTERN_COLORS[p.direction],
     shape:    p.direction === "bullish" ? "arrowUp" : p.direction === "bearish" ? "arrowDown" : "circle",
-    text:     p.label,
-    size:     1,
+    text:     "",
+    size:     0.6,
   }));
   // lightweight-charts requires markers sorted by time
   return markers.sort((a, b) => (a.time as string).localeCompare(b.time as string));

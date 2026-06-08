@@ -506,6 +506,8 @@ export interface NewsItem {
   published_at: number;   // Unix timestamp（秒）
   thumbnail:    string | null;
   type:         string;
+  importance:   "高" | "中" | "低";  // 後端重要度評分
+  is_chinese:   boolean;              // 標題含中文
 }
 
 export interface StockNewsResponse {
