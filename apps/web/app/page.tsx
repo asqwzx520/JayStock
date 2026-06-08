@@ -86,7 +86,6 @@ import {
   getKline,
   getIntradayKline,
   getChips,
-  getMargin,
   getFundamental,
   getStockVerdict,
   getPatterns,
@@ -96,10 +95,6 @@ import {
   type IntradayBar,
   type IntradayPeriod,
   type ChipsBar,
-  type ChipsCumulative,
-  type ChipsStreakMap,
-  type MarginBar,
-  type MarginResponse,
   type FundamentalData,
   type CandlePattern,
 } from "@/lib/api";

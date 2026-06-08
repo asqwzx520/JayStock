@@ -132,7 +132,7 @@ export default function ChartWithPanels({
       saveHeights(next);
       return next;
     });
-  }, [containerH, subIndicators]);
+  }, [containerH, subIndicators, setHeights]);
 
   // 主圖指標（不含 sub-panel 類型）
   const mainIndicators = indicators.filter(ind => !(SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind));
