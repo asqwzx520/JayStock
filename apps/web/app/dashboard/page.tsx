@@ -109,6 +109,18 @@ import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
 import { withCache } from "@/lib/clientCache";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { loadParams, saveParams } from "@/lib/indicatorParams";
+import type { IndicatorParams } from "@/lib/indicatorParams";
+
+const ChartWithPanels = dynamic(
+  () => import("@/components/chart/ChartWithPanels"),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+
+const FullscreenChartModal = dynamic(
+  () => import("@/components/chart/FullscreenChartModal"),
+  { ssr: false }
+);
 
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
@@ -179,6 +191,19 @@ export default function Home() {
   const [activeTool, setActiveTool]       = useState<DrawingTool>("cursor");
   const [drawingClearKey, setDrawingClearKey] = useState(0);
   const [alertModalOpen, setAlertModalOpen]   = useState(false);
+
+  // 指標參數（含 MA 週期、BOLL std 等），存 localStorage
+  const [indicatorParams, setIndicatorParams] = useState<IndicatorParams>(() => loadParams());
+  const handleParamsChange = useCallback((p: IndicatorParams) => {
+    saveParams(p);
+    setIndicatorParams(p);
+  }, []);
+
+  // 十字線懸停 bar（左側欄顯示 OHLCV）
+  const [hoveredBar, setHoveredBar] = useState<ChartBar | null>(null);
+
+  // 全螢幕模式
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   // 自訂工作區 Modal
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -611,6 +636,34 @@ export default function Home() {
                     borderColor: "var(--border)",
                   }}
                 >
+                  {/* 十字線懸停：顯示當根 K 線 OHLCV */}
+                  {hoveredBar && (
+                    <div className="p-3 pb-0 flex flex-col gap-1.5">
+                      <div className="text-[9px] font-bold tracking-widest mb-1"
+                           style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                        K線資料
+                      </div>
+                      {[
+                        { label: "日期", value: String(("time" in hoveredBar ? hoveredBar.time : (hoveredBar as {date: string}).date) ?? "") },
+                        { label: "開",   value: hoveredBar.open.toFixed(2),  color: hoveredBar.open  >= hoveredBar.close ? "var(--color-down)" : "var(--color-up)" },
+                        { label: "高",   value: hoveredBar.high.toFixed(2),  color: "var(--color-up)" },
+                        { label: "低",   value: hoveredBar.low.toFixed(2),   color: "var(--color-down)" },
+                        { label: "收",   value: hoveredBar.close.toFixed(2), color: hoveredBar.close >= hoveredBar.open  ? "var(--color-up)" : "var(--color-down)" },
+                        { label: "量",   value: hoveredBar.volume >= 1_000_000
+                            ? `${(hoveredBar.volume / 1_000_000).toFixed(1)}M`
+                            : hoveredBar.volume >= 1_000
+                            ? `${(hoveredBar.volume / 1_000).toFixed(1)}K`
+                            : String(hoveredBar.volume) },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="flex justify-between items-center py-0.5 border-b"
+                             style={{ borderColor: "var(--border)", fontSize: "11.5px" }}>
+                          <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
+                          <span className="num font-semibold" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
+                        </div>
+                      ))}
+                      <div className="my-2 border-t" style={{ borderColor: "var(--border)" }} />
+                    </div>
+                  )}
                   {quote ? (
                     <div className="p-3 flex flex-col gap-4">
                       {/* ① 即時報價 */}
@@ -733,7 +786,7 @@ export default function Home() {
                   )}
                   {klineData.length > 0 && (
                     <>
-                      <KLineChart
+                      <ChartWithPanels
                         data={klineData}
                         indicators={indicators}
                         chipsData={klineChipsData}
@@ -742,6 +795,9 @@ export default function Home() {
                         clearKey={drawingClearKey}
                         symbol={symbol}
                         patternMarkers={patterns}
+                        indicatorParams={indicatorParams}
+                        onParamsChange={handleParamsChange}
+                        onCrosshairMove={setHoveredBar}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
                         <div className="pointer-events-none absolute z-10 left-2 flex flex-col"
@@ -756,6 +812,25 @@ export default function Home() {
                           ))}
                         </div>
                       )}
+                      {/* 全螢幕按鈕（右下角）*/}
+                      <button
+                        onClick={() => setFullscreenOpen(true)}
+                        title="全螢幕 K 線圖"
+                        className="absolute bottom-3 right-3 z-30 flex items-center justify-center rounded transition-colors"
+                        style={{
+                          width:       "26px",
+                          height:      "26px",
+                          fontSize:    "14px",
+                          background:  "var(--bg-elevated)",
+                          border:      "1px solid var(--border)",
+                          color:       "var(--text-secondary)",
+                          opacity:     0.7,
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                        onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
+                      >
+                        ⛶
+                      </button>
                     </>
                   )}
                 </div>
@@ -943,6 +1018,27 @@ export default function Home() {
         symbol={symbol}
         name={stockName}
         onClose={() => setAlertModalOpen(false)}
+      />
+    )}
+
+    {/* 🖥 全螢幕 K 線圖 Modal */}
+    {fullscreenOpen && klineData.length > 0 && (
+      <FullscreenChartModal
+        data={klineData}
+        indicators={indicators}
+        chipsData={klineChipsData}
+        chartType={chartType}
+        activeTool={activeTool}
+        clearKey={drawingClearKey}
+        symbol={symbol}
+        patternMarkers={patterns}
+        indicatorParams={indicatorParams}
+        period={period}
+        onClose={() => setFullscreenOpen(false)}
+        onIndicatorsChange={setIndicators}
+        onChartTypeChange={setChartType}
+        onParamsChange={handleParamsChange}
+        onPeriodChange={(p) => { setPeriod(p); loadKline(symbol, p); }}
       />
     )}
     </>

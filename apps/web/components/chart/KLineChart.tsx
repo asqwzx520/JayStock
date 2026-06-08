@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import {
   createChart,
   createSeriesMarkers,
@@ -168,8 +168,13 @@ function barDate(d: ChartBar): string | undefined {
   return "date" in d ? d.date : undefined;
 }
 import { sma, ema, bollinger, macd, rsi, kd, vwap, vwapBand, wr, obv, atr, adx, stochRsi, ichimoku, type OHLCV } from "@/lib/indicators";
+import { type IndicatorParams, DEFAULT_PARAMS } from "@/lib/indicatorParams";
+import IndicatorParamPopover from "@/components/chart/IndicatorParamPopover";
 
 export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "VWAP_BAND" | "WR" | "OBV" | "ATR" | "ADX" | "SRSI" | "ICHI";
+
+/** Sub-panel 指標（由 ChartWithPanels 渲染，不在主圖）*/
+export const SUB_PANEL_INDICATORS: IndicatorType[] = ["MACD", "RSI", "KD", "WR", "OBV", "ATR", "ADX", "SRSI"];
 
 // ── Heikin-Ashi 計算 ──────────────────────────────────────────────────────────
 function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
@@ -188,14 +193,20 @@ function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
 }
 
 interface KLineChartProps {
-  data: ChartBar[];
-  indicators: IndicatorType[];
-  chipsData?: ChipsBar[];
-  chartType?: ChartType;
-  activeTool?: DrawingTool;
-  clearKey?: number;
-  symbol?: string;
-  patternMarkers?: CandlePattern[];
+  data:              ChartBar[];
+  indicators:        IndicatorType[];
+  chipsData?:        ChipsBar[];
+  chartType?:        ChartType;
+  activeTool?:       DrawingTool;
+  clearKey?:         number;
+  symbol?:           string;
+  patternMarkers?:   CandlePattern[];
+  /** 指標參數（含 MA 週期、BOLL 標準差等）*/
+  indicatorParams?:  IndicatorParams;
+  /** 參數變更回呼（供父元件儲存到 localStorage）*/
+  onParamsChange?:   (p: IndicatorParams) => void;
+  /** 十字線移動時回呼對應 bar；滑鼠離開時傳 null */
+  onCrosshairMove?:  (bar: ChartBar | null) => void;
 }
 
 const MA_PERIODS = [5, 10, 20, 60];
@@ -231,6 +242,9 @@ export default function KLineChart({
   clearKey,
   symbol = "",
   patternMarkers,
+  indicatorParams: paramsProp,
+  onParamsChange,
+  onCrosshairMove,
 }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
@@ -238,9 +252,20 @@ export default function KLineChart({
   // Pattern markers plugin ref — created after main series is ready
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
+  // ── 指標參數（外部控制或內部 fallback）────────────────────────────────────
+  const params = paramsProp ?? DEFAULT_PARAMS;
+
+  // ── 參數 Popover 狀態 ──────────────────────────────────────────────────────
+  const [paramPopover, setParamPopover] = useState<keyof IndicatorParams | null>(null);
+  const legendBtnRefs = useRef<Partial<Record<string, React.RefObject<HTMLButtonElement>>>>({});
+
+  // ── 十字線懸停的 bar ─────────────────────────────────────────────────────
+  const [hoveredBar, setHoveredBar] = useState<ChartBar | null>(null);
+
   // ── Drawing canvas ────────────────────────────────────────────────────────
   const canvasRef      = useRef<HTMLCanvasElement>(null);
   const drawingsRef    = useRef<Drawing[]>([]);
+  const undoStackRef   = useRef<Drawing[][]>([]);   // Ctrl+Z 快照堆疊
   const pendingRef     = useRef<{ startX: number; startY: number } | null>(null);
   const previewRef     = useRef<{ x: number; y: number } | null>(null);
   const redrawFnRef    = useRef<() => void>(() => {});
@@ -267,6 +292,7 @@ export default function KLineChart({
   // ── Commit text label ─────────────────────────────────────────────────────
   const commitText = useCallback((overlay: typeof textOverlay, draft: string) => {
     if (!overlay || !draft.trim()) return;
+    undoStackRef.current.push([...drawingsRef.current]);   // Undo 快照
     const next: Drawing[] = [
       ...drawingsRef.current,
       { id: `tx${Date.now()}`, type: "text", price1: overlay.price, time1: overlay.time, text: draft.trim() },
@@ -516,12 +542,13 @@ export default function KLineChart({
   // Keep stable ref so buildChart can subscribe without stale closure
   useEffect(() => { redrawFnRef.current = redrawCanvas; }, [redrawCanvas]);
 
-  // Load saved drawings when symbol changes
+  // Load saved drawings when symbol changes（同時清空 undo stack）
   useEffect(() => {
     if (!symbol) return;
-    drawingsRef.current = lsLoad(symbol);
-    pendingRef.current  = null;
-    previewRef.current  = null;
+    drawingsRef.current  = lsLoad(symbol);
+    undoStackRef.current = [];
+    pendingRef.current   = null;
+    previewRef.current   = null;
     setTimeout(() => redrawFnRef.current(), 50);
   }, [symbol]);
 
@@ -538,9 +565,20 @@ export default function KLineChart({
     }
   }, [activeTool]);
 
-  // Escape key: cancel in-progress channel / text overlay
+  // Escape / Ctrl+Z keydown
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+Z（或 Cmd+Z）：畫線 Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        const prev = undoStackRef.current.pop();
+        if (prev !== undefined) {
+          drawingsRef.current = prev;
+          lsSave(symbolRef.current, prev);
+          redrawFnRef.current();
+        }
+        return;
+      }
       if (e.key !== "Escape") return;
       if (channelPhaseRef.current > 0) {
         channelPhaseRef.current = 0; setChannelPhase2(false);
@@ -668,31 +706,32 @@ export default function KLineChart({
       open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume,
     }));
 
-    // ── Overlay indicators ────────────────────────────────────────────────
+    // ── Overlay indicators（主圖疊加，sub-panel 指標移至 ChartWithPanels）────
     if (indicators.includes("MA")) {
-      MA_PERIODS.forEach((period, idx) => {
-        const vals    = sma(closes, period);
+      params.MA.forEach((period, idx) => {
+        const vals     = sma(closes, period);
         const lineData: LineData<Time>[] = [];
         vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-        const s = chart.addSeries(LineSeries, { color: MA_COLORS[idx], lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        const s = chart.addSeries(LineSeries, { color: MA_COLORS[idx % MA_COLORS.length], lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
         s.setData(lineData);
         seriesRefs.current.push(s);
       });
     }
 
     if (indicators.includes("EMA")) {
-      [12, 26].forEach((period, idx) => {
-        const vals    = ema(closes, period);
+      const emaColors = ["#F472B6", "#34D399"];
+      params.EMA.forEach((period, idx) => {
+        const vals     = ema(closes, period);
         const lineData: LineData<Time>[] = [];
         vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-        const s = chart.addSeries(LineSeries, { color: idx === 0 ? "#F472B6" : "#34D399", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        const s = chart.addSeries(LineSeries, { color: emaColors[idx % emaColors.length], lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
         s.setData(lineData);
         seriesRefs.current.push(s);
       });
     }
 
     if (indicators.includes("BOLL")) {
-      const boll = bollinger(closes, 20, 2);
+      const boll = bollinger(closes, params.BOLL.period, params.BOLL.std);
       const addLine = (vals: (number | null)[], color: string, dash?: boolean) => {
         const lineData: LineData<Time>[] = [];
         vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
@@ -709,49 +748,8 @@ export default function KLineChart({
       addLine(boll.lower, "#60A5FA", true);
     }
 
-    if (indicators.includes("MACD")) {
-      const m = macd(closes);
-      const macdLine: LineData<Time>[] = [], signalLine: LineData<Time>[] = [], histData: HistogramData<Time>[] = [];
-      m.macd.forEach((v, i) => { if (v !== null) macdLine.push({ time: barTime(data[i]), value: v }); });
-      m.signal.forEach((v, i) => { if (v !== null) signalLine.push({ time: barTime(data[i]), value: v }); });
-      m.histogram.forEach((v, i) => {
-        if (v !== null) histData.push({ time: barTime(data[i]), value: v, color: v >= 0 ? "rgba(239,68,68,0.6)" : "rgba(34,197,94,0.6)" });
-      });
-      const mHist = chart.addSeries(HistogramSeries, { priceScaleId: "macd", priceLineVisible: false, lastValueVisible: false });
-      mHist.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      mHist.setData(histData);
-      const mLine = chart.addSeries(LineSeries, { color: "#FBBF24", lineWidth: 1, priceScaleId: "macd", priceLineVisible: false, lastValueVisible: false });
-      mLine.setData(macdLine);
-      const sLine = chart.addSeries(LineSeries, { color: "#60A5FA", lineWidth: 1, priceScaleId: "macd", priceLineVisible: false, lastValueVisible: false });
-      sLine.setData(signalLine);
-      seriesRefs.current.push(mHist, mLine, sLine);
-    }
-
-    if (indicators.includes("RSI")) {
-      const r = rsi(closes, 14);
-      const lineData: LineData<Time>[] = [];
-      r.values.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-      const s = chart.addSeries(LineSeries, { color: "#A78BFA", lineWidth: 1, priceScaleId: "rsi", priceLineVisible: false, lastValueVisible: false });
-      s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      s.setData(lineData);
-      seriesRefs.current.push(s);
-    }
-
-    if (indicators.includes("KD")) {
-      const result = kd(bars);
-      const kData: LineData<Time>[] = [], dData: LineData<Time>[] = [];
-      result.k.forEach((v, i) => { if (v !== null) kData.push({ time: barTime(data[i]), value: v }); });
-      result.d.forEach((v, i) => { if (v !== null) dData.push({ time: barTime(data[i]), value: v }); });
-      const kLine = chart.addSeries(LineSeries, { color: "#FBBF24", lineWidth: 1, priceScaleId: "kd", priceLineVisible: false, lastValueVisible: false });
-      kLine.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      kLine.setData(kData);
-      const dLine = chart.addSeries(LineSeries, { color: "#A78BFA", lineWidth: 1, priceScaleId: "kd", priceLineVisible: false, lastValueVisible: false });
-      dLine.setData(dData);
-      seriesRefs.current.push(kLine, dLine);
-    }
-
     if (indicators.includes("VWAP")) {
-      const vals = vwap(bars, isIntraday ? 0 : 20);
+      const vals = vwap(bars, isIntraday ? 0 : params.VWAP.period);
       const lineData: LineData<Time>[] = [];
       vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
       const s = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: "VWAP" });
@@ -760,80 +758,29 @@ export default function KLineChart({
     }
 
     if (indicators.includes("VWAP_BAND")) {
-      const band = vwapBand(bars, 20);
-      const vwapLine: LineData<Time>[] = [];
-      const upperLine: LineData<Time>[] = [];
-      const lowerLine: LineData<Time>[] = [];
+      const band = vwapBand(bars, params.VWAP_BAND.period);
+      const vwapLine: LineData<Time>[] = [], upperLine: LineData<Time>[] = [], lowerLine: LineData<Time>[] = [];
       band.vwap.forEach((v, i) => { if (v !== null) vwapLine.push({ time: barTime(data[i]), value: v }); });
       band.upper.forEach((v, i) => { if (v !== null) upperLine.push({ time: barTime(data[i]), value: v }); });
       band.lower.forEach((v, i) => { if (v !== null) lowerLine.push({ time: barTime(data[i]), value: v }); });
-      // VWAP 中線（紫色虛線）
-      const vwapS = chart.addSeries(LineSeries, { color: "#C084FC", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: "VWAP" });
-      vwapS.setData(vwapLine);
-      // 上通道（淡紫實線）
-      const upperS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, title: "+1σ" });
-      upperS.setData(upperLine);
-      // 下通道（淡紫實線）
-      const lowerS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, title: "-1σ" });
-      lowerS.setData(lowerLine);
+      const vwapS  = chart.addSeries(LineSeries, { color: "#C084FC", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true,  title: "VWAP" });
+      const upperS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid,  priceLineVisible: false, lastValueVisible: false, title: "+1σ" });
+      const lowerS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid,  priceLineVisible: false, lastValueVisible: false, title: "-1σ" });
+      vwapS.setData(vwapLine); upperS.setData(upperLine); lowerS.setData(lowerLine);
       seriesRefs.current.push(vwapS, upperS, lowerS);
     }
 
-    if (indicators.includes("WR")) {
-      const wrResult = wr(bars, 14);
-      const lineData: LineData<Time>[] = [];
-      wrResult.values.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-      const s = chart.addSeries(LineSeries, { color: "#FB923C", lineWidth: 1, priceScaleId: "wr", priceLineVisible: false, lastValueVisible: false, title: "%R" });
-      s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      s.setData(lineData);
-      seriesRefs.current.push(s);
-    }
-
-    if (indicators.includes("OBV")) {
-      const obvResult = obv(bars);
-      const s = chart.addSeries(LineSeries, { color: "#22D3EE", lineWidth: 1, priceScaleId: "obv", priceLineVisible: false, lastValueVisible: false, title: "OBV" });
-      s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      s.setData(obvResult.values.map((v, i) => ({ time: barTime(data[i]), value: v })));
-      seriesRefs.current.push(s);
-    }
-
-    if (indicators.includes("ATR")) {
-      const atrResult = atr(bars, 14);
-      const lineData: LineData<Time>[] = [];
-      atrResult.values.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-      const s = chart.addSeries(LineSeries, { color: "#FB923C", lineWidth: 1, priceScaleId: "atr", priceLineVisible: false, lastValueVisible: false, title: "ATR" });
-      s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      s.setData(lineData);
-      seriesRefs.current.push(s);
-    }
-
-    if (indicators.includes("ADX")) {
-      const adxResult = adx(bars, 14);
-      const addADXLine = (vals: (number | null)[], color: string, title: string) => {
-        const lineData: LineData<Time>[] = [];
-        vals.forEach((v, i) => { if (v !== null) lineData.push({ time: barTime(data[i]), value: v }); });
-        const s = chart.addSeries(LineSeries, { color, lineWidth: 1, priceScaleId: "adx", priceLineVisible: false, lastValueVisible: false, title });
-        s.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-        s.setData(lineData);
-        seriesRefs.current.push(s);
-      };
-      addADXLine(adxResult.adx,     "#FBBF24", "ADX");
-      addADXLine(adxResult.diPlus,  "#22C55E", "DI+");
-      addADXLine(adxResult.diMinus, "#EF4444", "DI−");
-    }
-
-    if (indicators.includes("SRSI")) {
-      const srsiResult = stochRsi(closes, 14, 14, 3, 3);
-      const kData: LineData<Time>[] = [], dData: LineData<Time>[] = [];
-      srsiResult.k.forEach((v, i) => { if (v !== null) kData.push({ time: barTime(data[i]), value: v }); });
-      srsiResult.d.forEach((v, i) => { if (v !== null) dData.push({ time: barTime(data[i]), value: v }); });
-      const kLine = chart.addSeries(LineSeries, { color: "#FBBF24", lineWidth: 1, priceScaleId: "srsi", priceLineVisible: false, lastValueVisible: false, title: "%K" });
-      kLine.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.02 } });
-      kLine.setData(kData);
-      const dLine = chart.addSeries(LineSeries, { color: "#A78BFA", lineWidth: 1, priceScaleId: "srsi", priceLineVisible: false, lastValueVisible: false, title: "%D" });
-      dLine.setData(dData);
-      seriesRefs.current.push(kLine, dLine);
-    }
+    // ── CrosshairMove → 回呼父元件 + 更新 Legend ──────────────────────────
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !param.seriesData.size) {
+        onCrosshairMove?.(null);
+        setHoveredBar(null);
+        return;
+      }
+      const bar = data.find((d) => String(barTime(d)) === String(param.time)) ?? null;
+      onCrosshairMove?.(bar);
+      setHoveredBar(bar);
+    });
 
     if (indicators.includes("ICHI") && !isIntraday) {
       const ichiResult = ichimoku(bars);
@@ -973,6 +920,7 @@ export default function KLineChart({
     if (activeTool === "hline") {
       const price = main.coordinateToPrice(y);
       if (price === null) return;
+      undoStackRef.current.push([...drawingsRef.current]);   // Undo 快照
       const next = [...drawingsRef.current, { id: `h${Date.now()}`, type: "hline" as const, price1: price }];
       drawingsRef.current = next;
       lsSave(symbolRef.current, next);
@@ -1014,6 +962,7 @@ export default function KLineChart({
         const price3 = main.coordinateToPrice(by1 + (y - baseYAtX));
         if (price3 === null) return;
 
+        undoStackRef.current.push([...drawingsRef.current]);   // Undo 快照
         const next: Drawing[] = [...drawingsRef.current, {
           id: `ch${Date.now()}`, type: "channel",
           price1: draft.price1, time1: draft.time1,
@@ -1067,6 +1016,7 @@ export default function KLineChart({
       const time2  = chart.timeScale().coordinateToTime(x);
       const price2 = main.coordinateToPrice(y);
       if (time1 && time2 && price1 !== null && price2 !== null) {
+        undoStackRef.current.push([...drawingsRef.current]);   // Undo 快照
         const next = [...drawingsRef.current, { id: `${idPrefix}${Date.now()}`, type, price1, time1, price2, time2 }];
         drawingsRef.current = next;
         lsSave(symbolRef.current, next);
@@ -1116,6 +1066,39 @@ export default function KLineChart({
   const handleTouchStart  = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => { e.preventDefault(); const t=e.touches[0]??e.changedTouches[0]; if(t){const[x,y]=getTouchXY(t,e.currentTarget);handleDrawDown(x,y);} }, [handleDrawDown]);
   const handleTouchMove   = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => { e.preventDefault(); const t=e.touches[0]; if(t){const[x,y]=getTouchXY(t,e.currentTarget);handleDrawMove(x,y);} }, [handleDrawMove]);
   const handleTouchEnd    = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => { e.preventDefault(); const t=e.changedTouches[0]; if(t){const[x,y]=getTouchXY(t,e.currentTarget);handleDrawUp(x,y);} }, [handleDrawUp]);
+
+  // ── Legend 項目（依開啟的指標動態產生）────────────────────────────────────
+  const legendItems = useMemo(() => {
+    const items: { key: string; paramKey: keyof IndicatorParams; label: string; color: string }[] = [];
+    if (indicators.includes("MA")) {
+      params.MA.forEach((p, i) => {
+        items.push({ key: `MA${p}`, paramKey: "MA", label: `MA${p}`, color: MA_COLORS[i % MA_COLORS.length] });
+      });
+    }
+    if (indicators.includes("EMA")) {
+      const emaColors = ["#F472B6", "#34D399"];
+      params.EMA.forEach((p, i) => {
+        items.push({ key: `EMA${p}`, paramKey: "EMA", label: `EMA${p}`, color: emaColors[i % emaColors.length] });
+      });
+    }
+    if (indicators.includes("BOLL")) {
+      items.push({ key: "BOLL", paramKey: "BOLL", label: `BOLL(${params.BOLL.period},${params.BOLL.std})`, color: "#60A5FA" });
+    }
+    if (indicators.includes("VWAP")) {
+      items.push({ key: "VWAP", paramKey: "VWAP", label: `VWAP(${params.VWAP.period})`, color: "#E879F9" });
+    }
+    if (indicators.includes("VWAP_BAND")) {
+      items.push({ key: "VWAP_BAND", paramKey: "VWAP_BAND", label: `VWAP帶(${params.VWAP_BAND.period})`, color: "#C084FC" });
+    }
+    return items;
+  }, [indicators, params]);
+
+  // 確保每個 legend 按鈕有對應的 ref（供 Popover 定位用）
+  legendItems.forEach((item) => {
+    if (!legendBtnRefs.current[item.key]) {
+      legendBtnRefs.current[item.key] = { current: null } as unknown as React.RefObject<HTMLButtonElement>;
+    }
+  });
 
   const isDrawing = activeTool !== "cursor";
   const canvasCursor =
@@ -1179,6 +1162,47 @@ export default function KLineChart({
           }}
         >
           點擊設定通道寬度　Esc 取消
+        </div>
+      )}
+
+      {/* ── 指標 Legend（左上角，可點擊編輯參數）────────────────────────── */}
+      {legendItems.length > 0 && (
+        <div className="absolute top-1 left-1 z-20 flex flex-wrap gap-1 pointer-events-none">
+          {legendItems.map((item) => {
+            const btnRef = legendBtnRefs.current[item.key] as React.RefObject<HTMLButtonElement>;
+            return (
+              <div key={item.key} className="relative pointer-events-auto">
+                <button
+                  ref={btnRef}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-opacity hover:opacity-100 opacity-80"
+                  style={{
+                    background: "rgba(0,0,0,0.55)",
+                    color:       item.color,
+                    border:      `1px solid ${item.color}44`,
+                  }}
+                  onClick={() => setParamPopover(prev => prev === item.paramKey ? null : item.paramKey)}
+                  title={`點擊編輯 ${item.paramKey} 參數`}
+                >
+                  {item.label}
+                  <span style={{ opacity: 0.5, fontSize: "8px" }}>✎</span>
+                </button>
+
+                {/* Popover：同一 paramKey 只開一個 */}
+                {paramPopover === item.paramKey && (
+                  <IndicatorParamPopover
+                    indicator={item.paramKey}
+                    params={params}
+                    anchorRef={btnRef}
+                    onChange={(next) => {
+                      onParamsChange?.(next);
+                      setParamPopover(null);
+                    }}
+                    onClose={() => setParamPopover(null)}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

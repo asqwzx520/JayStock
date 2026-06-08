@@ -15,7 +15,7 @@ export interface TabDef {
 
 export const DEFAULT_TABS: TabDef[] = [
   { id: "home",     label: "首頁",   visible: true },
-  { id: "kline",    label: "走勢圖", visible: true },
+  { id: "kline",    label: "K線",   visible: true },
   { id: "chips",    label: "籌碼",   visible: true },
   { id: "market",   label: "大盤",   visible: true },
   { id: "ranking",  label: "排行",   visible: true },
