@@ -17,11 +17,6 @@ import AlertModal         from "@/components/ui/AlertModal";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
-const KLineChart = dynamic(
-  () => import("@/components/chart/KLineChart"),
-  { ssr: false, loading: () => <ChartSkeleton /> }
-);
-
 const ChipsPanel = dynamic(
   () => import("@/components/chips/ChipsPanel"),
   { ssr: false, loading: () => <ChartSkeleton /> }
@@ -87,7 +82,6 @@ import {
   getUsKline,
   getIntradayKline,
   getChips,
-  getMargin,
   getFundamental,
   getStockVerdict,
   getPatterns,
@@ -98,10 +92,6 @@ import {
   type IntradayBar,
   type IntradayPeriod,
   type ChipsBar,
-  type ChipsCumulative,
-  type ChipsStreakMap,
-  type MarginBar,
-  type MarginResponse,
   type FundamentalData,
   type CandlePattern,
 } from "@/lib/api";
@@ -226,7 +216,7 @@ export default function Home() {
 
   // market ref：讓 loadKline callback 讀最新值，不需加入依賴陣列
   const marketRef = useRef(market);
-  marketRef.current = market;
+  useEffect(() => { marketRef.current = market; });
 
   // ── 載入 K 線（自動分流：分K / 日週月K / 美股 yfinance）──────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
