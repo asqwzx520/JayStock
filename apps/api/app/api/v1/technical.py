@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import time
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -30,21 +32,38 @@ def _yf_symbol(symbol: str) -> str:
     return s
 
 
+def _is_tw(symbol: str) -> bool:
+    return symbol[:4].isdigit() if len(symbol) >= 4 else symbol.isdigit()
+
+
 @ttl_cache(ttl=300)
 def _compute_technical_sync(symbol: str) -> dict[str, Any]:
-    import yfinance as yf
     import pandas as pd
     import pandas_ta as ta  # noqa
 
-    yf_sym = _yf_symbol(symbol)
-    df = yf.download(yf_sym, period="2y", auto_adjust=True, progress=False, threads=False)
-    if df.empty:
-        return {}
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df.columns = [c.lower() for c in df.columns]
-    df = df[["open", "high", "low", "close", "volume"]].dropna()
+    # ── 資料來源：台股用 FinMind（避免 Render 被 Yahoo 封 IP）；美股用 yfinance ──
+    if _is_tw(symbol):
+        from app.services.finmind_service import fetch_daily_kline_sync
+        from datetime import timedelta
+        end_d = date.today()
+        start_d = end_d - timedelta(days=365 * 2)
+        rows = fetch_daily_kline_sync(symbol, start_d, end_d)
+        if not rows:
+            return {}
+        df = pd.DataFrame(rows)
+        df = df[["open", "high", "low", "close", "volume"]].apply(
+            pd.to_numeric, errors="coerce"
+        ).dropna().reset_index(drop=True)
+    else:
+        import yfinance as yf
+        yf_sym = _yf_symbol(symbol)
+        df = yf.download(yf_sym, period="2y", auto_adjust=True, progress=False, threads=False)
+        if df.empty:
+            return {}
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df.columns = [c.lower() for c in df.columns]
+        df = df[["open", "high", "low", "close", "volume"]].dropna()
 
     close = df["close"]
     vol   = df["volume"]

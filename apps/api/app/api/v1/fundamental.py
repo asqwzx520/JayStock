@@ -184,24 +184,64 @@ async def _upsert_fundamental_cache(symbol: str, data: dict) -> None:
 async def get_fundamental(request: Request, symbol: str):
     """
     取得個股基本面資料
-    資料層級：Supabase 快取（7天）→ yfinance live
-    台股範例：GET /api/v1/fundamental/2330
-    美股範例：GET /api/v1/fundamental/AAPL
+    台股：L1 Supabase(7天) → L2 FinMind PE/PB + yfinance 補充（12s timeout，失敗不 404）
+    美股：L1 Supabase(7天) → L2 yfinance live
     """
     sym = validate_symbol(symbol)
+    is_tw = _is_tw_symbol(sym)
 
-    # L1：Supabase 快取（7 天 TTL）
+    # ── L1：Supabase 快取（7 天）────────────────────────────────────────────────
     data = await _fundamental_from_supabase(sym)
+    if data:
+        return data
 
-    # L2：Supabase miss → yfinance，並 fire-and-forget 寫回快取
-    if not data:
-        logger.debug("[fundamental] %s Supabase miss，呼叫 yfinance", sym)
-        loop = asyncio.get_running_loop()
+    # ── L2：Live fetch ───────────────────────────────────────────────────────────
+    loop = asyncio.get_running_loop()
+
+    if is_tw:
+        # 台股：A+C 策略
+        # A — FinMind PE/PB（快速可靠）
+        # C — yfinance 12s timeout 補其餘欄位（失敗不影響回傳）
+        from app.services.finmind_service import fetch_per_pbr
+
+        per_result, yf_result = await asyncio.gather(
+            fetch_per_pbr(sym),
+            asyncio.wait_for(
+                loop.run_in_executor(None, _fetch_fundamental_sync, sym),
+                timeout=12.0,
+            ),
+            return_exceptions=True,
+        )
+
+        # 以 yfinance 為底（如果有資料）
+        data = (yf_result if isinstance(yf_result, dict) and yf_result
+                else {"symbol": sym})
+
+        # 用 FinMind PE/PB 覆蓋（更可靠）
+        if isinstance(per_result, list) and per_result:
+            latest = per_result[-1]
+            pe = _safe_float(latest.get("PER"))
+            pb = _safe_float(latest.get("PBR"))
+            if pe is not None:
+                data["pe_trailing"] = pe
+            if pb is not None:
+                data["pb_ratio"] = pb
+
+        data.setdefault("symbol", sym)
+
+        # 只有連 FinMind 都沒拿到任何有效資料才 404
+        meaningful = {k: v for k, v in data.items() if k != "symbol" and v is not None}
+        if not meaningful:
+            raise HTTPException(status_code=404, detail=f"Fundamental data not found for {sym}")
+
+    else:
+        # 美股：yfinance 直接用
         data = await loop.run_in_executor(None, _fetch_fundamental_sync, sym)
-        if data:
-            asyncio.create_task(_upsert_fundamental_cache(sym, data))
+        if not data:
+            raise HTTPException(status_code=404, detail=f"Fundamental data not found for {sym}")
 
-    if not data:
-        raise HTTPException(status_code=404, detail=f"Fundamental data not found for {sym}")
+    # Fire-and-forget 寫 Supabase 快取
+    if data and len(data) > 1:
+        asyncio.create_task(_upsert_fundamental_cache(sym, data))
 
     return data

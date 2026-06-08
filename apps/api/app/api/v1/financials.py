@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,8 +23,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _is_tw(symbol: str) -> bool:
-    return symbol[:4].isdigit() if len(symbol) >= 4 else symbol.isdigit()
+def _is_tw(s: str) -> bool:
+    return s[:4].isdigit() if len(s) >= 4 else s.isdigit()
 
 
 def _yf_symbol(symbol: str) -> str:
@@ -143,17 +144,160 @@ def _fetch_financials_sync(symbol: str) -> dict[str, Any]:
         return {}
 
 
+async def _fetch_financials_tw_finmind(symbol: str) -> dict[str, Any]:
+    """
+    台股財報：FinMind TaiwanStockFinancialStatements + TaiwanStockCashFlowsStatement
+    FinMind 台股財報為累計 YTD，每季末結算。取各年最後一季（Q4/Dec）作為年度數字。
+    """
+    from app.services.finmind_service import fetch_financial_statements, fetch_cash_flow_statement
+
+    start = date.today() - timedelta(days=365 * 6)
+    stmt_rows, cf_rows = await asyncio.gather(
+        fetch_financial_statements(symbol, start),
+        fetch_cash_flow_statement(symbol, start),
+        return_exceptions=True,
+    )
+    if isinstance(stmt_rows, Exception):
+        stmt_rows = []
+    if isinstance(cf_rows, Exception):
+        cf_rows = []
+
+    if not stmt_rows:
+        return {}
+
+    # ── Pivot：{date -> {type -> value}} ────────────────────────────────────────
+    def _pivot(rows: list[dict]) -> dict[str, dict[str, float]]:
+        out: dict[str, dict[str, float]] = {}
+        for r in rows:
+            d, t, v = r.get("date",""), r.get("type",""), r.get("value")
+            if d and t and v is not None:
+                try:
+                    out.setdefault(d, {})[t] = float(v)
+                except (TypeError, ValueError):
+                    pass
+        return out
+
+    stmt = _pivot(stmt_rows)
+    cf   = _pivot(cf_rows)
+
+    # FinMind type 名稱對應（多個備用名）
+    def _find(pivot: dict[str, float], *keys) -> float | None:
+        for k in keys:
+            v = pivot.get(k)
+            if v is not None:
+                return v
+        return None
+
+    # ── 組成季度記錄 ─────────────────────────────────────────────────────────────
+    quarters = []
+    for d_str in sorted(stmt.keys()):
+        try:
+            dt = datetime.strptime(d_str, "%Y-%m-%d")
+        except ValueError:
+            continue
+        p  = stmt[d_str]
+        cp = cf.get(d_str, {})
+
+        rev = _find(p, "Revenue", "TotalRevenue", "OperatingRevenue")
+        gp  = _find(p, "GrossProfit")
+        oi  = _find(p, "OperatingIncome", "OperatingProfit")
+        ni  = _find(p, "NetIncome",
+                       "NetIncomeAttributableToOwnersOfParent",
+                       "ProfitAttributableToOwnersOfParent")
+        eps = _find(p, "EPS", "BasicEPS", "BasicEarningsPerShare")
+        ocf = _find(cp, "CashFlowsFromOperatingActivities",
+                        "NetCashFromOperatingActivities",
+                        "NetCashProvidedByUsedInOperatingActivities")
+        capex = _find(cp, "PurchasesOfPropertyPlantAndEquipment",
+                          "AcquisitionOfPropertyPlantAndEquipment",
+                          "PaymentsForPropertyPlantAndEquipment",
+                          "PurchaseOfPropertyPlantAndEquipment")
+
+        quarters.append({
+            "date": d_str, "year": dt.year, "month": dt.month,
+            "revenue": rev, "gross_profit": gp, "operating_income": oi,
+            "net_income": ni, "eps": eps, "operating_cf": ocf, "capex": capex,
+        })
+
+    if not quarters:
+        return {}
+
+    # ── 年度資料：每年取最後一季（台股 YTD 累計，最後一季 = 全年）────────────────
+    annual_by_year: dict[int, dict] = {}
+    for q in quarters:
+        yr = q["year"]
+        if yr not in annual_by_year or q["month"] > annual_by_year[yr]["month"]:
+            annual_by_year[yr] = q
+
+    def _s(v, d=2):
+        try:
+            return round(float(v), d) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    annual = []
+    for yr in sorted(annual_by_year):
+        q   = annual_by_year[yr]
+        rev = _s(q["revenue"])
+        gp  = _s(q["gross_profit"])
+        oi  = _s(q["operating_income"])
+        ni  = _s(q["net_income"])
+        eps = _s(q["eps"])
+        ocf = _s(q["operating_cf"])
+        cap = _s(q["capex"])
+        annual.append({
+            "year": yr,
+            "revenue":          rev,
+            "net_income":       ni,
+            "gross_profit":     gp,
+            "operating_income": oi,
+            "eps":              eps,
+            "gross_margin":     round(gp / rev, 4) if rev and gp and rev > 0 else None,
+            "net_margin":       round(ni / rev, 4) if rev and ni and rev > 0 else None,
+            "operating_margin": round(oi / rev, 4) if rev and oi and rev > 0 else None,
+            "operating_cf":     ocf,
+            "capex":            cap,
+            "free_cf":          round(ocf + cap, 2) if ocf is not None and cap is not None else ocf,
+        })
+
+    # ── 季度 EPS ─────────────────────────────────────────────────────────────────
+    quarterly_eps = [
+        {"year": q["year"], "month": q["month"],
+         "eps": _s(q["eps"]), "net_income": _s(q["net_income"])}
+        for q in sorted(quarters, key=lambda x: (x["year"], x["month"]))
+        if q["eps"] is not None or q["net_income"] is not None
+    ]
+
+    return {
+        "symbol":        symbol,
+        "currency":      "TWD",
+        "unit":          "億",
+        "divisor":       1e8,
+        "annual":        annual[-10:],
+        "quarterly_eps": quarterly_eps[-8:],
+    }
+
+
 @router.get("/financials/{symbol}")
 @limiter.limit("20/minute")
 async def get_financials(request: Request, symbol: str):
     """
     取得個股財務報表趨勢（5年年度 + 8季EPS）
-    台股：GET /api/v1/financials/2330
-    美股：GET /api/v1/financials/AAPL
+    台股：FinMind（公開資訊觀測站，比 yfinance 更準確）
+    美股：yfinance
     """
     sym = validate_symbol(symbol)
-    loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(None, _fetch_financials_sync, sym)
-    if not data:
-        raise HTTPException(status_code=404, detail=f"無法取得 {sym} 財務資料")
-    return data
+
+    if _is_tw(sym):
+        # 台股：FinMind
+        data = await _fetch_financials_tw_finmind(sym)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"無法取得 {sym} 財務資料（FinMind 無資料）")
+        return data
+    else:
+        # 美股：yfinance
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, _fetch_financials_sync, sym)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"無法取得 {sym} 財務資料")
+        return data

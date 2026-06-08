@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -30,14 +31,49 @@ def _yf_symbol(symbol: str) -> str:
     return s
 
 
+def _is_tw(symbol: str) -> bool:
+    return symbol[:4].isdigit() if len(symbol) >= 4 else symbol.isdigit()
+
+
+def _load_ohlcv_df_sync(symbol: str, days: int):
+    """
+    取 OHLCV DataFrame（sync）：
+    台股 → FinMind（避免 Render 被 Yahoo 封 IP）；美股 → yfinance
+    """
+    import pandas as pd
+
+    if _is_tw(symbol):
+        from app.services.finmind_service import fetch_daily_kline_sync
+        end_d = date.today()
+        start_d = end_d - timedelta(days=days)
+        rows = fetch_daily_kline_sync(symbol, start_d, end_d)
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+        df = df[["open", "high", "low", "close", "volume"]].apply(
+            pd.to_numeric, errors="coerce"
+        ).dropna().reset_index(drop=True)
+        return df
+    else:
+        import yfinance as yf
+        yf_sym = _yf_symbol(symbol)
+        period = f"{max(1, days // 30)}mo"
+        df = yf.download(yf_sym, period=period, auto_adjust=True, progress=False, threads=False)
+        if df.empty:
+            return pd.DataFrame()
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df.columns = [c.lower() for c in df.columns]
+        return df[["open", "high", "low", "close", "volume"]].dropna()
+
+
 @ttl_cache(ttl=900)   # 15 minutes
 def _generate_analysis_sync(symbol: str) -> dict[str, Any]:
     """
-    1. 從 yfinance 取近 3 個月日 K，計算 RSI / MACD / MA / 量比
+    1. 取近 3 個月日 K（台股 FinMind / 美股 yfinance），計算 RSI / MACD / MA / 量比
     2. 嘗試從 screener 快取取法人籌碼
     3. 呼叫 Gemini 生成分析；Gemini 失敗時回退規則文字
     """
-    import yfinance as yf
     import pandas as pd
 
     try:
@@ -48,14 +84,10 @@ def _generate_analysis_sync(symbol: str) -> dict[str, Any]:
 
     from app.core.config import settings  # type: ignore
 
-    yf_sym = _yf_symbol(symbol)
-    df = yf.download(yf_sym, period="3mo", auto_adjust=True, progress=False, threads=False)
+    df = _load_ohlcv_df_sync(symbol, days=90)
     if df.empty:
         raise ValueError(f"無法取得 {symbol} 資料")
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df.columns = [c.lower() for c in df.columns]
     df = df[["open", "high", "low", "close", "volume"]].dropna()
 
     close     = df["close"]
@@ -206,19 +238,12 @@ def _generate_verdict_sync(symbol: str) -> dict[str, Any]:
     一句話 AI 評價（30-50 字）：趨勢方向 + 關鍵訊號 + 短線建議
     比完整分析更快，適合放在 K 線圖旁快速瀏覽。
     """
-    import yfinance as yf
     import pandas as pd
-
     from app.core.config import settings  # type: ignore
 
-    yf_sym = _yf_symbol(symbol)
-    df = yf.download(yf_sym, period="1mo", auto_adjust=True, progress=False, threads=False)
+    df = _load_ohlcv_df_sync(symbol, days=30)
     if df.empty:
         raise ValueError(f"無法取得 {symbol} 資料")
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df.columns = [c.lower() for c in df.columns]
 
     close   = df["close"].dropna()
     price   = float(close.iloc[-1])

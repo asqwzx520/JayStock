@@ -177,6 +177,98 @@ async def fetch_broker_data(
     return data.get("data", [])
 
 
+def fetch_daily_kline_sync(
+    symbol: str,
+    start: date,
+    end: date,
+) -> list[dict]:
+    """
+    同步版 FinMind 日 K 線（httpx.get），供 run_in_executor 的 sync 函式使用。
+    不帶 ttl_cache（呼叫端自行快取）。
+    """
+    params = {
+        "dataset":    "TaiwanStockPrice",
+        "data_id":    symbol,
+        "start_date": start.isoformat(),
+        "end_date":   end.isoformat(),
+        "token":      settings.finmind_token,
+    }
+    resp = httpx.get(FINMIND_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    rows = resp.json().get("data", [])
+    return [
+        {
+            "date":   r["date"],
+            "open":   float(r["open"]),
+            "high":   float(r["max"]),
+            "low":    float(r["min"]),
+            "close":  float(r["close"]),
+            "volume": int(r["Trading_Volume"]),
+        }
+        for r in rows
+    ]
+
+
+@ttl_cache(ttl=3600)
+async def fetch_per_pbr(symbol: str) -> list[dict]:
+    """本益比 / 股價淨值比 — TaiwanStockPER（近 60 天，TTL 1h）"""
+    end = date.today()
+    start = end - timedelta(days=60)
+    params = {
+        "dataset":    "TaiwanStockPER",
+        "data_id":    symbol,
+        "start_date": start.isoformat(),
+        "end_date":   end.isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+@ttl_cache(ttl=3600 * 6)
+async def fetch_financial_statements(
+    symbol: str,
+    start: date | None = None,
+) -> list[dict]:
+    """損益表 — TaiwanStockFinancialStatements（季度，TTL 6h）"""
+    if start is None:
+        start = date.today() - timedelta(days=365 * 6)
+    params = {
+        "dataset":    "TaiwanStockFinancialStatements",
+        "data_id":    symbol,
+        "start_date": start.isoformat(),
+        "end_date":   date.today().isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+@ttl_cache(ttl=3600 * 6)
+async def fetch_cash_flow_statement(
+    symbol: str,
+    start: date | None = None,
+) -> list[dict]:
+    """現金流量表 — TaiwanStockCashFlowsStatement（季度，TTL 6h）"""
+    if start is None:
+        start = date.today() - timedelta(days=365 * 6)
+    params = {
+        "dataset":    "TaiwanStockCashFlowsStatement",
+        "data_id":    symbol,
+        "start_date": start.isoformat(),
+        "end_date":   date.today().isoformat(),
+        "token":      settings.finmind_token,
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(FINMIND_URL, params=params)
+        resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
 @ttl_cache(ttl=300)
 async def fetch_margin(
     symbol: str,
