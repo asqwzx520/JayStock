@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-08（Sprint 1+2+3：4項修復 + 季K/年K/VWAP帶/板塊首頁 + 鍵盤快捷鍵/美股搜尋）  
-> **當前版本：** commit `70bd3af`（Sprint 3：鍵盤快捷鍵 + 美股搜尋 + `/kline/us/` 端點）  
+> **更新日期：** 2026-06-09（Sprint 5：K線圖表全面強化 — Tab改名/OHLCV側欄/全螢幕/Ctrl+Z/指標參數/子面板分離）  
+> **當前版本：** commit `5a31945`（Sprint 5：ChartWithPanels + FullscreenChartModal + SubIndicatorPanel + ResizeDivider + IndicatorParamPopover + indicatorParams lib）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -34,6 +34,15 @@
 - [x] 三大法人籌碼疊圖（外資 / 投信 / 自營）
 - [x] 時間週期切換（1m/5m/15m/30m/60m/日/週/月/**季/年**）
 - [x] **K 線型態標記縮小**（text="" size=0.6，不遮蓋 K 線）
+- [x] **Tab 改名**：走勢圖 → **K線**（`useTabConfig.ts`）
+- [x] **OHLCV 十字線側欄**：滑鼠移到 K 線時左側欄即時顯示開高低收量，離開恢復即時報價（`onCrosshairMove` prop + `hoveredBar` state）
+- [x] **全螢幕按鈕**：圖表右下角 ⛶，點後 Modal 佔滿全視窗（`FullscreenChartModal.tsx`），含完整工具列（週期/圖形/繪圖/指標），ESC 或 ✕ 關閉
+- [x] **Ctrl+Z 撤銷畫線**：無限 undo（`undoStackRef`），每次落筆前 push 快照，Ctrl+Z pop 還原並重繪；symbol 切換時自動清空堆疊
+- [x] **指標參數 Legend + Popover**：圖表左上角顯示 MA5/MA10/EMA12/BOLL(20) 等 Legend，點 ✎ 開 `IndicatorParamPopover` 調整週期/標準差等參數，套用即重繪，localStorage 持久化（`lib/indicatorParams.ts`）
+- [x] **子指標獨立面板**：MACD/RSI/KD/WR/OBV/ATR/ADX/SRSI 各自獨立 `<SubIndicatorPanel>`（獨立 lightweight-charts 實例），不再擋成交量（`SubIndicatorPanel.tsx`）
+- [x] **可拖動分界線**：`ResizeDivider` 5px 拖把，滑鼠拖動即時調整主圖/子指標高度比例；主圖最小 30%，子指標最小 5%，比例存 localStorage
+- [x] **跨面板時間軸同步**：`subscribeVisibleLogicalRangeChange` + `isSyncingRef` 防止 loop，主圖縮放/捲軸即時同步所有子指標面板
+- [x] **ChartWithPanels**（新）：統一管理主圖 + 所有子指標面板，page.tsx 用 ChartWithPanels 替換原 KLineChart 呼叫
 
 ### 自選股（M2）
 - [x] Watchlist CRUD（前後端完整）
@@ -291,7 +300,7 @@
 
 | 面向 | 得分 | 滿分 | 評分 | 最關鍵補強 |
 |------|:----:|:----:|:----:|-----------|
-| K 線圖表技術分析 | **9** | 13 | ★★★★☆ | 季K/年K ✅；VWAP帶 ✅；K線型態 ✅；缺多圖版型/量價背離 |
+| K 線圖表技術分析 | **11** | 13 | ★★★★★ | 季K/年K ✅；VWAP帶 ✅；K線型態 ✅；全螢幕✅；子面板分離✅；Ctrl+Z✅；指標參數✅；缺多圖版型/量價背離 |
 | 台股籌碼分析 | 5 | 9 | ★★★★☆ | 6 區塊垂直滾動、7 項評分、券商分點已補；期貨籌碼尚缺 |
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
 | AI 選股 & 策略 | **7** | 7 | **★★★★★** | 回測引擎 ✅；Screener 一鍵加自選股 ✅ |
@@ -299,9 +308,9 @@
 | 板塊 & 市場概覽 | **3** | 3 | **★★★★★** | 首頁 MiniSectorBar ✅；大盤 SectorHeatmap+成分股 ✅；新聞篩選 ✅ |
 | 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅；財報月曆 ✅；Line 未做 |
 | UX & 平台品質 | 8 | 11 | ★★★★☆ | keep-alive Tab ✅；clientCache ✅；**鍵盤快捷鍵 ✅（Sprint 3）** |
-| **加總** | **49** | **65** | **約 93/100** | |
+| **加總** | **51** | **65** | **約 95/100** | |
 
-> **結論（2026-06-08 Sprint 3 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ Sprint 3 新增 2 功能（**鍵盤快捷鍵**`useKeyboardShortcuts` + **美股搜尋/K線** S&P 500靜態清單+`/kline/us/`）；整體評分 92 → 93 分。  
+> **結論（2026-06-09 Sprint 5 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ Sprint 3 新增 2 功能（鍵盤快捷鍵/美股搜尋K線）+ Sprint 4（分析Tab全修復，FinMind取代yfinance台股）+ **Sprint 5 K線圖表全面強化**（Tab改名/OHLCV側欄/全螢幕/Ctrl+Z/指標參數Legend+Popover/子面板分離+可拖分界線）；整體評分 93 → 95 分。  
 > 下一個建議：**Screener 基本面篩選條件**（PE/殖利率/毛利率/市值）或 **正式網域 + Cloudflare**。
 
 ---
@@ -404,10 +413,11 @@
 
 ---
 
-## ✅ 近期完成（2026-06-08）
+## ✅ 近期完成（2026-06-09）
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `5a31945` | **Sprint 5：K線圖表全面強化** — Tab 改名「K線」；左側欄 OHLCV 十字線（`onCrosshairMove` prop → `hoveredBar` state，滑鼠離開恢復報價）；全螢幕按鈕（右下角 ⛶ → `FullscreenChartModal`，含完整工具列，ESC/✕ 關閉）；Ctrl+Z 無限 undo（`undoStackRef<Drawing[][]>`，symbol 切換清空）；指標參數 Legend+Popover（MA/EMA/BOLL/VWAP 等可點 ✎ 調參數，`IndicatorParamPopover.tsx`，`lib/indicatorParams.ts` localStorage 持久化）；子指標獨立面板（`SubIndicatorPanel.tsx`，`SUB_PANEL_INDICATORS` = MACD/RSI/KD/WR/OBV/ATR/ADX/SRSI，各自獨立 createChart 實例，不擋成交量）；可拖動分界線（`ResizeDivider.tsx`，主圖最小 30%，子指標最小 5%，高度比例 localStorage 持久化）；跨面板時間軸同步（`subscribeVisibleLogicalRangeChange` + `isSyncingRef`）；`ChartWithPanels.tsx` 統一管理，page.tsx 替換 KLineChart 呼叫 | ✅ Local |
 | `70bd3af` | **Sprint 3：鍵盤快捷鍵 + 美股搜尋/K線**：`useKeyboardShortcuts.ts`（/ 聚焦搜尋、↑↓ 切自選股、symRef+listRef 避免 stale closure）；Header Enter 直接確認第一結果（`activeIdx=-1` fallback）、`id="stock-search-input"`、🇺🇸 badge、`select()` 傳 `market`；`stock_list.py` 新增 ~120 S&P 500 股票，`search_stocks()` 回傳 `market: "TW"\|"US"`；`kline.py` 新端點 `GET /kline/us/{symbol}`（yfinance executor，1h TTL 快取，支援 5 種 period）；`dashboard/page.tsx` market state + marketRef 路由（US→getUsKline，跳 WebSocket），美股自動隱藏籌碼/回測 Tab，工具列 🇺🇸 badge，watchlist 載入供 ↑↓ 鍵 | ✅ Live |
 | `00ffe32` | **Sprint 2：VWAP帶 + 首頁板塊概覽**：`indicators.ts` 新增 `vwapBand()`（滾動20日 VWAP ± 1σ）；`KLineChart.tsx` 新增 VWAP_BAND 指標（3 LineSeries：中線+上下通道）；`IndicatorSelector.tsx` 新增「VWAP帶」可開關按鈕；`HomeDashboard.tsx` 新增 `MiniSectorBar`（板塊名稱+漲跌% pill chips，靜默 fetch，不影響主載入）| ✅ Live |
 | `b2121b4` | **Sprint 2：季K/年K + 修復上櫃報價**：`kline.py` 新增 quarterly/yearly period，`_aggregate()` 支援 QE/YE 分組，季K/年K 拉15年資料；`twse_fetcher.py` 修復上櫃股票盤中價格不更新（改為 `tse_XXX.tw|otc_XXX.tw` 同時查詢）；`PeriodSelector.tsx` 新增「季K」「年K」按鈕；`dashboard/page.tsx` 季K/年K cache TTL 設 30 分鐘 | ✅ Live |
@@ -475,4 +485,4 @@
 
 ---
 
-*最後更新：2026-06-08 by Claude（Sprint 1+2+3 完成；Sprint 3 鍵盤快捷鍵 + 美股搜尋/K線；commit `70bd3af`；整體評分 93/100）*
+*最後更新：2026-06-09 by Claude（Sprint 1~5 完成；Sprint 5 K線圖表全面強化；commit `5a31945`；整體評分 95/100）*

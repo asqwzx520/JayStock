@@ -1,6 +1,6 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅、Sprint 5（K線圖表強化）待實作**
+> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅、Sprint 5（K線圖表強化）✅ 完成（commit `5a31945`，2026-06-09）**
 
 ---
 
@@ -398,14 +398,32 @@ localStorage key：`stockpulse_chart_heights_v1`，格式：`{ main: 65, MACD: 1
 
 ## 驗證清單
 
-- [ ] Tab 列顯示「K線」（非「走勢圖」）
-- [ ] 滑鼠移到任一根K線，左側欄開高低收量即時更新；移離後還原即時報價
-- [ ] 右下角 ⛶ 按鈕，點後 Modal 佔滿全視窗，工具列齊全，ESC/✕ 關閉
-- [ ] 畫一條趨勢線 → Ctrl+Z → 消失；再畫多條 → 連按 Ctrl+Z 逐條退回
-- [ ] 開啟 MA，左上角出現「MA5 / MA10 / MA20 / MA60」Legend；點 MA5 → Popover 出現，修改為 8 → 套用 → 線立即重繪，重整頁面後 8 保留
-- [ ] 開啟 MACD，圖表下方出現獨立子面板，成交量柱狀圖完整不被遮蓋
-- [ ] 拖動分界線，主圖縮小子指標擴大；不可拖超過主圖 30% 下限
-- [ ] 同時開啟 MACD + RSI，兩個獨立面板各有分界線；十字線跨面板同步
+- [x] Tab 列顯示「K線」（非「走勢圖」）
+- [x] 滑鼠移到任一根K線，左側欄開高低收量即時更新；移離後還原即時報價
+- [x] 右下角 ⛶ 按鈕，點後 Modal 佔滿全視窗，工具列齊全，ESC/✕ 關閉
+- [x] 畫一條趨勢線 → Ctrl+Z → 消失；再畫多條 → 連按 Ctrl+Z 逐條退回
+- [x] 開啟 MA，左上角出現「MA5 / MA10 / MA20 / MA60」Legend；點 MA5 → Popover 出現，修改為 8 → 套用 → 線立即重繪，重整頁面後 8 保留
+- [x] 開啟 MACD，圖表下方出現獨立子面板，成交量柱狀圖完整不被遮蓋
+- [x] 拖動分界線，主圖縮小子指標擴大；不可拖超過主圖 30% 下限
+- [x] 同時開啟 MACD + RSI，兩個獨立面板各有分界線；十字線跨面板同步
+
+## ✅ Sprint 5 完成摘要（commit `5a31945`，2026-06-09）
+
+| 功能 | 新建/修改檔案 | 狀態 |
+|------|------------|------|
+| Tab 改名「K線」 | `hooks/useTabConfig.ts` | ✅ |
+| OHLCV 十字線側欄 | `KLineChart.tsx`（`onCrosshairMove` prop + `subscribeCrosshairMove`）、`page.tsx`（`hoveredBar` state + 側欄 OHLCV block） | ✅ |
+| 全螢幕 Modal | `components/chart/FullscreenChartModal.tsx`（新建）、`page.tsx`（⛶ 按鈕 + fullscreenOpen state） | ✅ |
+| Ctrl+Z 撤銷畫線 | `KLineChart.tsx`（`undoStackRef`，4 個 push 點 + keydown pop）| ✅ |
+| 指標參數 lib | `lib/indicatorParams.ts`（新建，`IndicatorParams` 型別 + `loadParams/saveParams`） | ✅ |
+| 指標參數 Popover | `components/chart/IndicatorParamPopover.tsx`（新建，FIELDS map + 套用按鈕） | ✅ |
+| KLineChart Legend | `KLineChart.tsx`（`legendItems` useMemo + Legend HTML overlay + Popover 整合）| ✅ |
+| 子指標獨立面板 | `components/chart/SubIndicatorPanel.tsx`（新建，8 種指標各自 createChart） | ✅ |
+| 可拖動分界線 | `components/chart/ResizeDivider.tsx`（新建，5px，mousemove delta） | ✅ |
+| 面板高度管理 | `components/chart/ChartWithPanels.tsx`（新建，heights HeightMap + ResizeObserver + 最小高度限制 + localStorage） | ✅ |
+| 跨面板時間軸同步 | `SubIndicatorPanel.tsx`（`subscribeVisibleLogicalRangeChange` + `isSyncingRef`） | ✅ |
+| page.tsx 整合 | `page.tsx`（`indicatorParams` state + `handleParamsChange`；ChartWithPanels 替換 KLineChart；hoveredBar 側欄；fullscreenOpen + FullscreenChartModal）| ✅ |
+| TypeScript | `npx tsc --noEmit` → 0 errors | ✅ |
 
 ---
 
