@@ -244,9 +244,159 @@ withCache(`kline:${sym}:${per}`, () => fetch..., 120_000)
 
 ---
 
-## 驗證清單
+## 驗證清單（Sprint 1 已完成）
 
-- [ ] K線圖上型態只剩小箭頭/圓點，無中文文字
-- [ ] Screener 每列右側有 `+` 按鈕，點擊後變 `✓`，自選股側欄出現該股
-- [ ] 新聞 tab 只顯示中文標題；切「高」過濾出法說/財報/Fed 類；關鍵字搜尋有效
-- [ ] K線 → 排行 → K線，切回瞬間（不重載）；DevTools Network 無重複 fundamentals 請求
+- [x] K線圖上型態只剩小箭頭/圓點，無中文文字
+- [x] Screener 每列右側有 `+` 按鈕，點擊後變 `✓`，自選股側欄出現該股
+- [x] 新聞 tab 只顯示中文標題；切「高」過濾出法說/財報/Fed 類；關鍵字搜尋有效
+- [x] K線 → 排行 → K線，切回瞬間（不重載）；DevTools Network 無重複 fundamentals 請求
+
+---
+
+---
+
+# Sprint 2 — 功能強化（對標 XQ / TradingView）
+
+> 開始日期：2026-06-08
+> 目標：縮短與 XQ / TradingView 的差距，提升資料量與視覺衝擊
+
+## 現況盤點（程式碼探索結論）
+
+| 功能 | 實際狀況 | 需要做什麼 |
+|------|---------|-----------|
+| 板塊熱力圖 | ✅ 後端 `/market/sectors` + 前端 `SectorHeatmap` 都存在，但**埋在大盤 Tab 裡，不夠顯眼** | 強化視覺、獨立 Tab 或首頁置頂 |
+| VWAP | ✅ `indicators.ts` + `KLineChart.tsx` 都已實作，VWAP 指標可開啟 | 確認 UX，可能加說明或預設開啟 |
+| 季K / 年K | ❌ 後端 `_aggregate()` 只有 W/M，前端週期按鈕無季/年 | 後端加 Q/Y 聚合 + 前端加按鈕 |
+| Screener 基本面條件 | ❌ 目前只有技術面+籌碼篩選 | 加 PE/殖利率/毛利率/市值 條件 |
+
+---
+
+## 功能一：板塊熱力圖強化
+
+### 現況問題
+- 已在「大盤」Tab 裡，但版面小、不夠直覺
+- 沒有點擊進入板塊個股清單的功能
+- 顏色梯度不夠強烈，漲跌對比不明顯
+
+### 目標
+- 加大板塊格子，顯示更多資訊（板塊名稱、平均漲跌幅、成分股數量）
+- 點擊板塊 → 右側列出該板塊所有成分股 + 漲跌幅排序
+- 顏色從深紅→淺紅→白→淺綠→深綠，梯度更明顯
+- （待 grill-me 確認）是否要獨立 Tab
+
+### 涉及檔案
+- `apps/web/components/market/MarketDashboard.tsx`（`SectorHeatmap` + `SectorTile`）
+- `apps/api/app/services/market_service.py`（`_SECTOR_MAP` 可擴充成分股）
+- `apps/web/lib/api.ts`（`SectorData` 型別）
+
+---
+
+## 功能二：VWAP 確認 + UX 優化
+
+### 現況問題
+- VWAP 指標已存在，但使用者不一定知道
+- 盤中分K 用累積 VWAP（正確），日K 用滾動 20 日 VWAP（正確）
+- 可能需要在 IndicatorSelector 加更清楚的說明
+
+### 目標（待 grill-me 確認）
+- 確認現有 VWAP 是否符合使用者預期
+- 是否要分K 預設開啟 VWAP
+- 是否要加 VWAP ± 1σ / ± 2σ 通道（進階版）
+
+### 涉及檔案
+- `apps/web/components/chart/IndicatorSelector.tsx`
+- `apps/web/lib/indicators.ts`（`vwap()` 函式）
+- `apps/web/components/chart/KLineChart.tsx`（L753 VWAP 渲染）
+
+---
+
+## 功能三：季K / 年K
+
+### 現況
+- 後端 `_aggregate(rows, freq)` 已支援 "W"（週）、"M"（月）
+- 前端 `PeriodSelector.tsx` 只有日/週/月 + 分K
+- 後端 query start date 預設 `-365天`，季K/年K 需要更長資料區間
+
+### 實作
+
+**後端 `apps/api/app/api/v1/kline.py`**：
+```python
+# 現有
+if period == "weekly":   rows = _aggregate(rows, "W")
+elif period == "monthly": rows = _aggregate(rows, "M")
+
+# 新增
+elif period == "quarterly": rows = _aggregate(rows, "Q")
+elif period == "yearly":    rows = _aggregate(rows, "Y")
+```
+
+同時調整 `start` 預設值：
+```python
+if start is None:
+    if period in ("quarterly", "yearly"):
+        start = end - timedelta(days=365 * 10)   # 季/年K 拉 10 年
+    else:
+        start = end - timedelta(days=365)
+```
+
+**前端 `apps/web/components/chart/PeriodSelector.tsx`**：
+```typescript
+const DAILY_PERIODS = [
+  { key: "daily",     label: "日K" },
+  { key: "weekly",    label: "週K" },
+  { key: "monthly",   label: "月K" },
+  { key: "quarterly", label: "季K" },  // NEW
+  { key: "yearly",    label: "年K" },  // NEW
+] as const;
+```
+
+**前端 `apps/web/lib/api.ts`**：
+- `Period` 型別加入 `"quarterly" | "yearly"`
+
+**前端 `dashboard/page.tsx`**：
+- `INTRADAY_PERIODS` 判斷式不受影響（季/年K 走日K code path）
+
+### 估計時間：1.5h
+
+---
+
+## 功能四：Screener 基本面篩選條件
+
+### 目標
+在現有技術面+籌碼條件之上，加入基本面篩選：
+
+| 條件 | 說明 | 資料來源 |
+|------|------|---------|
+| PE < N | 本益比低於某值 | yfinance `info.trailingPE` |
+| 殖利率 > N% | 股息殖利率 | yfinance `info.dividendYield` |
+| 毛利率 > N% | Gross Margin | yfinance `info.grossMargins` |
+| 市值 > N 億 | 篩大型股 | yfinance `info.marketCap` |
+| ROE > N% | 股東權益報酬率 | yfinance `info.returnOnEquity` |
+
+### 涉及檔案
+- `apps/api/app/services/screener_service.py`（加基本面欄位到 metrics）
+- `apps/api/app/api/v1/screener.py`（API 過濾條件）
+- `apps/web/components/screener/ScreenerPanel.tsx`（UI 篩選欄位）
+- `apps/web/lib/api.ts`（ScreenerResult 型別擴充）
+
+### 估計時間：3-4h
+
+---
+
+## Sprint 2 實作順序
+
+| # | 功能 | 難度 | 預估時間 |
+|---|------|------|---------|
+| 1 | 季K / 年K | 低 | 1.5h |
+| 2 | 板塊熱力圖強化 | 中 | 3h |
+| 3 | VWAP UX 確認 | 低 | 30min |
+| 4 | Screener 基本面條件 | 中高 | 4h |
+
+---
+
+## Sprint 2 驗證清單
+
+- [ ] 走勢圖可選季K / 年K，資料正確聚合（OHLCV 開收高低量）
+- [ ] 板塊熱力圖顏色對比明顯，點擊板塊顯示成分股清單
+- [ ] VWAP 指標在分K 圖上正確顯示（累積），日K 顯示滾動均值
+- [ ] Screener 可加 PE / 殖利率 / 毛利率 / 市值 篩選條件
