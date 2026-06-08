@@ -1,6 +1,6 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股）✅ 均已完成。**
+> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅ 均已完成。**
 
 ---
 
@@ -564,3 +564,50 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.chips_daily  TO service_role;
 ```
 
 執行後資料立即開始寫入，快取生效。
+
+---
+
+---
+
+# Sprint 4 — 分析 Tab 全面修復
+
+> 完成日期：2026-06-09  
+> 問題：技術面跑很久、基本面 404、財務報表 404
+
+## 根因
+
+所有分析相關 API 均使用 `yfinance` 抓取台股資料（`2330.TW`），而 **Render 雲端 IP 被 Yahoo Finance 封鎖**，導致：
+
+| 症狀 | 原因 |
+|------|------|
+| 技術面跑 30 秒以上 | `yf.download("2330.TW", period="2y")` timeout |
+| 基本面 API 404 | `yf.Ticker("2330.TW").info` 回空 dict → 404 |
+| 財務報表 API 404 | `yf.Ticker("2330.TW").financials` 回空 dict → 404 |
+| AI 分析生成很慢 | OHLCV fetch 就 timeout，Gemini 還未呼叫就已經慢了 |
+
+## 修復決策（grill-me 訪談結果）
+
+| 問題 | 修法 |
+|------|------|
+| 技術面 | FinMind OHLCV → 本地計算 RSI/MACD/KD/MA/布林 |
+| 基本面 | A+C：FinMind PE/PB 優先 + yfinance 12s timeout 補充，永不 404 |
+| 財務報表 | 台股全換 FinMind（損益表 + 現金流量表）；美股保留 yfinance |
+| AI 分析 | 同技術面，OHLCV 換 FinMind，Gemini 呼叫不變 |
+
+## Sprint 4 完成摘要（2026-06-09）
+
+| Commit | 功能 | 狀態 |
+|--------|------|------|
+| `7d7410f` | 日K 預設範圍 1年→2年（週K→5年、月K→10年）| ✅ |
+| `53eb059` | `finmind_service.py` 加 4 個新函式（sync kline、PER/PBR、損益表、現金流）| ✅ |
+| `53eb059` | `technical.py` 台股換 FinMind OHLCV | ✅ |
+| `53eb059` | `ai_analysis.py` 台股 OHLCV 換 FinMind | ✅ |
+| `53eb059` | `fundamental.py` A+C：FinMind PE/PB + yfinance background | ✅ |
+| `53eb059` | `financials.py` 台股全換 FinMind 財報 | ✅ |
+
+### ⚠️ 關鍵坑：台股 yfinance 在 Render 上永遠失敗
+
+Yahoo Finance 封鎖雲端 provider IP（AWS/Render/GCP 等），所有台股資料（`.TW` suffix）都無法從 Render 取得。
+只有**本機開發**時 yfinance 才對台股有效。
+
+**解法**：台股資料統一走 FinMind API，yfinance 只保留美股用途。
