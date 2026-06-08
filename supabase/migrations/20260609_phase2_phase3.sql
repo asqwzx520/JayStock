@@ -74,7 +74,12 @@ CREATE INDEX IF NOT EXISTS idx_news_cache_cached_at
 ALTER TABLE fundamental_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news_cache        ENABLE ROW LEVEL SECURITY;
 
--- 允許任何人 SELECT
+-- 允許任何人 SELECT（先 DROP 確保冪等）
+DROP POLICY IF EXISTS "fundamental_cache_read_all"     ON fundamental_cache;
+DROP POLICY IF EXISTS "fundamental_cache_service_write" ON fundamental_cache;
+DROP POLICY IF EXISTS "news_cache_read_all"            ON news_cache;
+DROP POLICY IF EXISTS "news_cache_service_write"       ON news_cache;
+
 CREATE POLICY "fundamental_cache_read_all"
     ON fundamental_cache FOR SELECT USING (true);
 

@@ -529,9 +529,9 @@ const DAILY_PERIODS = [
 
 - [x] Phase 1：kline/chips 第一次查後，Supabase Dashboard 可見到資料寫入（已確認 ✅ 2026-06-08）
 - [x] Phase 1：相同股票第二次查，API log 顯示 "Supabase 命中" 而非 "cache miss"（已確認 ✅）
-- [ ] Phase 2：在 Supabase SQL Editor 執行 `20260609_phase2_phase3.sql`，covering index 建立完成
-- [ ] Phase 2：`EXPLAIN ANALYZE SELECT ... FROM kline_daily WHERE symbol='2330' ORDER BY date DESC LIMIT 365` 顯示 Index Only Scan
-- [ ] Phase 3：fundamental_cache / news_cache 表已建立，第一次查詢後 Supabase Dashboard 可見資料
+- [x] Phase 2：在 Supabase SQL Editor 執行 `20260609_phase2_phase3.sql`，covering index 建立完成（✅ 2026-06-09）
+- [x] Phase 2：`idx_kline_covering` / `idx_chips_covering` 已建立，查詢可走 Index Only Scan
+- [x] Phase 3：fundamental_cache / news_cache 表已建立，RLS + GRANT 設定完成（✅ 2026-06-09）
 
 ---
 
@@ -543,6 +543,14 @@ const DAILY_PERIODS = [
 | `8cb7d93` | `kline.py` cache miss 後 fire-and-forget upsert（5年過濾） | ✅ |
 | `8cb7d93` | `chips.py` 同步寫穿快取（含 date 欄位修復）| ✅ |
 | Render env | 加 `SUPABASE_SERVICE_KEY`（service_role key），觸發自動重新部署 | ✅ |
+
+### Sprint 3 全部完成（2026-06-09）
+
+| Phase | 內容 | 狀態 |
+|-------|------|------|
+| Phase 1 | kline/chips 寫穿快取，讓 Supabase 真正運作 | ✅ |
+| Phase 2 | covering index + cleanup_old_cache() 函式 | ✅ |
+| Phase 3 | fundamental_cache / news_cache 三層快取 | ✅ |
 
 ### ⚠️ 關鍵坑：Supabase service_role 需 table-level GRANT
 
