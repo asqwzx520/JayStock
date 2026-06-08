@@ -1,6 +1,411 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅ 均已完成。**
+> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅、Sprint 5（K線圖表強化）待實作**
+
+---
+
+# Sprint 5 — K 線圖表全面強化（grill-me 2026-06-09）
+
+> 6 項功能，全部集中在圖表體驗；無後端改動。
+
+## 決策記錄
+
+| # | 功能 | 決策 |
+|---|------|------|
+| 1 | Tab 改名 | 走勢圖 → **K線** |
+| 2 | OHLCV十字線 | **A** — 更新左側欄（`onCrosshairMove` prop 回傳 `ChartBar \| null`，滑鼠離開時還原即時報價） |
+| 3 | 全視窗放大 | **C** — Modal 彈窗 + **A** 完整工具列（週期/圖形/繪圖/指標/AI評價） |
+| 4 | Ctrl+Z 畫線 Undo | **A** — 無限層回退（`undoStack: Drawing[][]` 快照） |
+| 5 | 指標參數顯示 | **C** — 圖表左上角 Legend，可點擊開 Popover 編輯參數；**A** 除 Ichimoku 外全開放 |
+| 6 | 子指標分離 | **C** — 每個子指標各自獨立 `<SubIndicatorPanel>`；可拖動分界線；localStorage 記憶比例；各面板獨立高度；主圖最小 30%、子指標最小 5% |
+
+---
+
+## 指標分類
+
+### Overlay（疊在主圖上，不動）
+`MA` `EMA` `BOLL` `VWAP` `VWAP_BAND` `ICHI` `CHIPS`
+
+### Sub-panel（各自獨立面板）
+`MACD` `RSI` `KD` `WR` `OBV` `ATR` `ADX` `SRSI`
+
+---
+
+## 功能一：Tab 改名
+
+**檔案**：`apps/web/hooks/useTabConfig.ts`
+
+```diff
+- { id: "kline", label: "走勢圖", visible: true },
++ { id: "kline", label: "K線",   visible: true },
+```
+
+> ⚠️ localStorage key `jaystock_tab_config_v1` 的 label 由前端覆蓋，不需 migration。
+
+---
+
+## 功能二：十字線 OHLCV → 左側欄
+
+### KLineChart.tsx 改動
+
+新增 prop：
+```typescript
+interface KLineChartProps {
+  // ...existing
+  onCrosshairMove?: (bar: ChartBar | null) => void;
+}
+```
+
+在 `buildChart` 內訂閱：
+```typescript
+chart.subscribeCrosshairMove((param) => {
+  if (!param.time || !param.seriesData.size) {
+    props.onCrosshairMove?.(null);
+    return;
+  }
+  // 找到對應 data[] 中 barTime(d) === param.time 的 bar
+  const bar = data.find((d) => barTime(d) === param.time) ?? null;
+  props.onCrosshairMove?.(bar);
+});
+```
+
+### page.tsx 改動
+
+```typescript
+const [hoveredBar, setHoveredBar] = useState<ChartBar | null>(null);
+
+// 左側欄顯示邏輯：hoveredBar 優先，否則用 quote
+const displayOpen   = hoveredBar ? hoveredBar.open   : quote?.open;
+const displayHigh   = hoveredBar ? hoveredBar.high   : quote?.high;
+const displayLow    = hoveredBar ? hoveredBar.low    : quote?.low;
+const displayClose  = hoveredBar ? hoveredBar.close  : quote?.price;
+const displayVolume = hoveredBar ? hoveredBar.volume : quote?.volume;
+const displayDate   = hoveredBar && "date" in hoveredBar ? hoveredBar.date : null;
+```
+
+左側欄「今日行情」區塊改用 `display*` 值，日期標題改成 `displayDate ?? "今日行情"`。
+
+---
+
+## 功能三：全視窗 Modal（新元件）
+
+### 新建 `apps/web/components/chart/FullscreenChartModal.tsx`
+
+```typescript
+interface FullscreenChartModalProps {
+  data:        ChartBar[];
+  indicators:  IndicatorType[];
+  chipsData?:  ChipsBar[];
+  chartType:   ChartType;
+  activeTool:  DrawingTool;
+  clearKey:    number;
+  symbol:      string;
+  patternMarkers?: CandlePattern[];
+  indicatorParams: IndicatorParams;   // 同主圖參數，進 Modal 沿用
+  onClose:     () => void;
+  // 以下供 Modal 內工具列用
+  onIndicatorsChange: (v: IndicatorType[]) => void;
+  onChartTypeChange:  (v: ChartType) => void;
+  onPeriodChange:     (v: Period) => void;
+  period:      Period;
+}
+```
+
+結構：
+```tsx
+<div className="fixed inset-0 z-[9000] flex flex-col"
+     style={{ background: "var(--bg-base)" }}>
+  {/* 工具列：與主頁完全相同的 PeriodSelector + ChartTypeSelector + DrawingToolbar + IndicatorSelector */}
+  <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b">
+    ...toolbar...
+    <button onClick={onClose} className="ml-auto">✕ 關閉</button>
+  </div>
+  {/* 圖表區（flex-1，KLineChart + SubIndicatorPanel 同樣架構）*/}
+  <div className="flex-1 min-h-0">
+    <KLineChartWithPanels ... />
+  </div>
+</div>
+```
+
+> Modal 內圖表為獨立實例，不共享主圖的 drawingsRef（各自 localStorage 同 symbol）。
+
+### page.tsx 整合
+
+```typescript
+const [fullscreenOpen, setFullscreenOpen] = useState(false);
+```
+
+在 KLineChart 容器的右下角加按鈕：
+```tsx
+<button
+  onClick={() => setFullscreenOpen(true)}
+  className="absolute bottom-8 right-4 z-10 ..."
+  title="全視窗"
+>
+  ⛶
+</button>
+{fullscreenOpen && <FullscreenChartModal ... onClose={() => setFullscreenOpen(false)} />}
+```
+
+---
+
+## 功能四：Ctrl+Z 畫線 Undo
+
+### KLineChart.tsx 改動
+
+新增 undo stack ref（儲存「畫線前的快照」）：
+```typescript
+const undoStackRef = useRef<Drawing[][]>([]);
+```
+
+每次新增 / 刪除一個 drawing 時，先 push 快照再修改：
+```typescript
+// 新增 drawing 前
+undoStackRef.current.push([...drawingsRef.current]);
+// 修改 drawingsRef.current ...
+lsSave(symbolRef.current, drawingsRef.current);
+```
+
+在 Escape-key useEffect 中加入 Ctrl+Z 監聽（合併到同一個 keydown handler）：
+```typescript
+if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+  e.preventDefault();
+  const prev = undoStackRef.current.pop();
+  if (prev !== undefined) {
+    drawingsRef.current = prev;
+    lsSave(symbolRef.current, prev);
+    redrawFnRef.current();
+  }
+  return;
+}
+```
+
+Symbol 切換時清空 undo stack：
+```typescript
+useEffect(() => {
+  undoStackRef.current = [];
+  // ...existing lsLoad
+}, [symbol]);
+```
+
+---
+
+## 功能五：指標參數 Legend + 可編輯 Popover
+
+### 參數型別定義（新建 `apps/web/lib/indicatorParams.ts`）
+
+```typescript
+export interface IndicatorParams {
+  MA:        number[];                          // 預設 [5, 10, 20, 60]
+  EMA:       number[];                          // 預設 [12, 26]
+  BOLL:      { period: number; std: number };   // 預設 { period:20, std:2 }
+  MACD:      { fast: number; slow: number; signal: number }; // 12,26,9
+  RSI:       { period: number };                // 14
+  KD:        { period: number };                // 9
+  VWAP:      { period: number };                // 20
+  VWAP_BAND: { period: number };                // 20
+  WR:        { period: number };                // 14
+  OBV:       { period: number };                // N/A（無參數）
+  ATR:       { period: number };                // 14
+  ADX:       { period: number };                // 14
+  SRSI:      { period: number };                // 14
+}
+
+export const DEFAULT_PARAMS: IndicatorParams = {
+  MA: [5, 10, 20, 60], EMA: [12, 26],
+  BOLL: { period: 20, std: 2 },
+  MACD: { fast: 12, slow: 26, signal: 9 },
+  RSI: { period: 14 }, KD: { period: 9 },
+  VWAP: { period: 20 }, VWAP_BAND: { period: 20 },
+  WR: { period: 14 }, OBV: { period: 0 },
+  ATR: { period: 14 }, ADX: { period: 14 }, SRSI: { period: 14 },
+};
+
+const LS_KEY = "stockpulse_indicator_params_v1";
+export function loadParams(): IndicatorParams { ... }
+export function saveParams(p: IndicatorParams): void { ... }
+```
+
+### KLineChart.tsx — Legend HTML overlay
+
+在 `containerRef` 之上疊一個 `pointer-events-none` 的 div（Legend 本身 `pointer-events-auto`）：
+
+```tsx
+{/* Legend：圖表左上角 */}
+{activeLegendItems.length > 0 && (
+  <div className="absolute top-1 left-1 z-20 flex flex-col gap-0.5 pointer-events-none">
+    {activeLegendItems.map(item => (
+      <button
+        key={item.key}
+        className="pointer-events-auto flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px]"
+        style={{ background: "rgba(0,0,0,0.45)", color: item.color }}
+        onClick={() => setParamPopover(item.key)}
+      >
+        <span className="font-semibold">{item.label}</span>
+        <span className="opacity-70">{item.value ?? "—"}</span>
+      </button>
+    ))}
+  </div>
+)}
+```
+
+`activeLegendItems` 由 `indicators + hoveredBar + params` 計算而來：
+- MA5 → `{ key:"MA5", label:"MA5", color:"#FBBF24", value: sma(closes,5)[hoveredIdx] }`
+- RSI → `{ key:"RSI", label:"RSI(14)", color:"#A78BFA", value: rsiValues[hoveredIdx] }`
+- 等等
+
+### 新建 `apps/web/components/chart/IndicatorParamPopover.tsx`
+
+```typescript
+interface Props {
+  indicator: keyof IndicatorParams;
+  params:    IndicatorParams;
+  onChange:  (next: IndicatorParams) => void;
+  onClose:   () => void;
+}
+```
+
+根據 `indicator` key 渲染對應輸入框（MA 渲染 4 個 number input，BOLL 渲染 period + std，MACD 渲染 fast/slow/signal），按「套用」呼叫 `onChange` 並 `saveParams`。
+
+### KLineChart.tsx props 新增
+
+```typescript
+interface KLineChartProps {
+  // ...existing
+  indicatorParams?:   IndicatorParams;
+  onParamsChange?:    (p: IndicatorParams) => void;
+}
+```
+
+`buildChart` 的所有 hardcode period 改為讀 `indicatorParams`：
+```diff
+- MA_PERIODS.forEach((period, idx) => {
++ params.MA.forEach((period, idx) => {
+```
+
+---
+
+## 功能六：子指標獨立面板 + 可拖動分界線
+
+### 架構概覽
+
+```
+<ChartWithPanels>          ← 新容器元件（page.tsx 替換原 KLineChart 呼叫處）
+  <KLineChart />           ← 主圖（只含 overlay 指標）
+  <ResizeDivider />        ← 可拖 divider（主圖 ↔ 第一個子指標）
+  <SubIndicatorPanel indicator="MACD" />
+  <ResizeDivider />
+  <SubIndicatorPanel indicator="RSI" />
+  ...
+</ChartWithPanels>
+```
+
+### Sub-panel 指標列表
+需分離到子面板的 `IndicatorType`：
+`MACD` `RSI` `KD` `WR` `OBV` `ATR` `ADX` `SRSI`
+
+### 新建 `apps/web/components/chart/SubIndicatorPanel.tsx`
+
+```typescript
+interface SubIndicatorPanelProps {
+  indicator:  SubIndicatorType;         // "MACD" | "RSI" | ...
+  data:        ChartBar[];
+  params:      IndicatorParams;
+  height:      number;                  // px，由父元件控制
+  syncRange?:  { from: number; to: number } | null;  // 時間軸同步
+  onRangeChange?: (range: { from: number; to: number }) => void;
+}
+```
+
+內部：獨立 `createChart`，`rightPriceScale.scaleMargins: {top:0.05, bottom:0.05}`，隱藏時間軸（`timeScale.visible: false`，只有最底部一個面板顯示時間軸），訂閱 `subscribeVisibleTimeRangeChange` 同步給父元件。
+
+### 新建 `apps/web/components/chart/ResizeDivider.tsx`
+
+```typescript
+interface ResizeDividerProps {
+  onDrag: (deltaY: number) => void;
+}
+```
+
+```tsx
+<div
+  className="shrink-0 h-1 cursor-row-resize select-none"
+  style={{ background: "var(--border)" }}
+  onMouseDown={(e) => {
+    const startY = e.clientY;
+    const onMove = (ev: MouseEvent) => onDrag(ev.clientY - startY);
+    const onUp = () => { document.removeEventListener("mousemove", onMove); ... };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }}
+/>
+```
+
+### 新建 `apps/web/components/chart/ChartWithPanels.tsx`
+
+狀態：
+```typescript
+// 高度比例：[主圖%, 子指標1%, 子指標2%, ...]
+const [heights, setHeights] = useState<number[]>(() => loadHeights());
+const [syncRange, setSyncRange] = useState<{ from:number; to:number } | null>(null);
+```
+
+高度調整（拖動 divider i 時）：
+```typescript
+function handleDrag(dividerIdx: number, deltaY: number) {
+  setHeights(prev => {
+    const next = [...prev];
+    const totalPx = containerRef.current?.clientHeight ?? 600;
+    const deltaPct = (deltaY / totalPx) * 100;
+    const MIN_MAIN = 30, MIN_SUB = 5;
+    // dividerIdx 0 = 主圖 ↔ 子指標1
+    const upper = dividerIdx;
+    const lower = dividerIdx + 1;
+    const minUpper = upper === 0 ? MIN_MAIN : MIN_SUB;
+    next[upper] = Math.max(minUpper, next[upper] + deltaPct);
+    next[lower] = Math.max(MIN_SUB,  next[lower] - deltaPct);
+    // 確保總和 = 100
+    saveHeights(next);
+    return next;
+  });
+}
+```
+
+localStorage key：`stockpulse_chart_heights_v1`，格式：`{ main: 65, MACD: 18, RSI: 17 }`
+
+時間軸同步：
+- 主圖 `onCrosshairMove` + `subscribeVisibleTimeRangeChange` → 更新 `syncRange` state
+- 所有 `SubIndicatorPanel` 接收 `syncRange` prop → `applyOptions` 時間軸（防止 loop：用 `isSyncingRef`）
+
+---
+
+## 實作順序
+
+| # | 項目 | 預估時間 | 影響檔案 |
+|---|------|---------|---------|
+| 1 | Tab 改名 | 1 min | `useTabConfig.ts` |
+| 2 | 十字線 OHLCV | 30 min | `KLineChart.tsx`、`page.tsx` |
+| 3 | Ctrl+Z Undo | 30 min | `KLineChart.tsx` |
+| 4 | indicatorParams 型別 + localStorage | 20 min | `lib/indicatorParams.ts`（新建） |
+| 5 | KLineChart 接入 params + Legend HTML + Popover | 2.5h | `KLineChart.tsx`、`IndicatorParamPopover.tsx`（新建） |
+| 6 | SubIndicatorPanel + ResizeDivider + ChartWithPanels | 3h | 3 個新元件、`page.tsx` |
+| 7 | FullscreenChartModal | 1h | `FullscreenChartModal.tsx`（新建）、`page.tsx` |
+| — | TypeScript check + 驗證 | 30 min | — |
+
+**總計：約 8 小時**
+
+---
+
+## 驗證清單
+
+- [ ] Tab 列顯示「K線」（非「走勢圖」）
+- [ ] 滑鼠移到任一根K線，左側欄開高低收量即時更新；移離後還原即時報價
+- [ ] 右下角 ⛶ 按鈕，點後 Modal 佔滿全視窗，工具列齊全，ESC/✕ 關閉
+- [ ] 畫一條趨勢線 → Ctrl+Z → 消失；再畫多條 → 連按 Ctrl+Z 逐條退回
+- [ ] 開啟 MA，左上角出現「MA5 / MA10 / MA20 / MA60」Legend；點 MA5 → Popover 出現，修改為 8 → 套用 → 線立即重繪，重整頁面後 8 保留
+- [ ] 開啟 MACD，圖表下方出現獨立子面板，成交量柱狀圖完整不被遮蓋
+- [ ] 拖動分界線，主圖縮小子指標擴大；不可拖超過主圖 30% 下限
+- [ ] 同時開啟 MACD + RSI，兩個獨立面板各有分界線；十字線跨面板同步
 
 ---
 
