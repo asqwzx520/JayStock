@@ -65,7 +65,11 @@ async def fetch_quotes(symbols: list[str]) -> dict:
     if _is_circuit_open():
         raise CircuitOpenError("TWSE circuit open — use fallback")
 
-    ex_ch = "|".join(f"tse_{s}.tw" for s in symbols)
+    # 同時帶 tse_（上市）和 otc_（上櫃），API 只回傳有效的那個
+    # 台股代碼在上市/上櫃中唯一，不會衝突
+    ex_ch = "|".join(
+        f"tse_{s}.tw|otc_{s}.tw" for s in symbols
+    )
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(

@@ -196,10 +196,11 @@ export default function Home() {
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as IntradayBar[]);
       } else {
-        // 日/週/月 K（TTL 3 分鐘）
+        // 日/週/月 K（TTL 3 分鐘）；季K/年K 歷史資料不易變，TTL 30 分鐘
+        const klineTtl = (prd === "quarterly" || prd === "yearly") ? 30 * 60_000 : 3 * 60_000;
         const [q, k] = await Promise.all([
           withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
-          withCache(`kline:${sym}:${prd}`, () => getKline(sym, prd), 3 * 60_000),
+          withCache(`kline:${sym}:${prd}`, () => getKline(sym, prd), klineTtl),
         ]);
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as KlineBar[]);

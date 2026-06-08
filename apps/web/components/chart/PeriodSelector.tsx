@@ -9,9 +9,11 @@ const INTRADAY_PERIODS = [
 ] as const;
 
 const DAILY_PERIODS = [
-  { key: "daily",   label: "日K" },
-  { key: "weekly",  label: "週K" },
-  { key: "monthly", label: "月K" },
+  { key: "daily",     label: "日K" },
+  { key: "weekly",    label: "週K" },
+  { key: "monthly",   label: "月K" },
+  { key: "quarterly", label: "季K" },
+  { key: "yearly",    label: "年K" },
 ] as const;
 
 export type IntradayPeriod = (typeof INTRADAY_PERIODS)[number]["key"];

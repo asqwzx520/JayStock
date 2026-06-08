@@ -47,13 +47,17 @@ async def get_kline(
     symbol: str,
     start: date | None = Query(None, description="Start date (YYYY-MM-DD)"),
     end: date | None = Query(None, description="End date (YYYY-MM-DD)"),
-    period: str = Query("daily", description="daily / weekly / monthly"),
+    period: str = Query("daily", description="daily / weekly / monthly / quarterly / yearly"),
 ):
     sym = validate_symbol(symbol)
     if end is None:
         end = date.today()
     if start is None:
-        start = end - timedelta(days=365)
+        # 季K/年K 拉最長（15年），其餘 1 年
+        if period in ("quarterly", "yearly"):
+            start = end - timedelta(days=365 * 15)
+        else:
+            start = end - timedelta(days=365)
 
     # 1. 嘗試從 Supabase 快取讀取
     rows = await _kline_from_supabase(sym, start, end)
@@ -73,6 +77,10 @@ async def get_kline(
         rows = _aggregate(rows, "W")
     elif period == "monthly":
         rows = _aggregate(rows, "M")
+    elif period == "quarterly":
+        rows = _aggregate(rows, "QE")   # pandas Quarter-End
+    elif period == "yearly":
+        rows = _aggregate(rows, "YE")   # pandas Year-End
 
     return {"symbol": sym, "period": period, "count": len(rows), "data": rows}
 
@@ -159,7 +167,13 @@ def _aggregate(rows: list[dict], freq: str) -> list[dict]:
         if freq == "W":
             monday = dt - timedelta(days=dt.weekday())
             return monday.isoformat()
-        return d[:7]
+        if freq == "QE":
+            # Q1=1-3, Q2=4-6, Q3=7-9, Q4=10-12
+            q = (dt.month - 1) // 3 + 1
+            return f"{dt.year}-Q{q}"
+        if freq == "YE":
+            return str(dt.year)
+        return d[:7]  # monthly
 
     groups: dict[str, list[dict]] = {}
     for r in rows:
