@@ -511,6 +511,21 @@ export default function Home() {
                     )}
                     <span className="hidden sm:inline">AI 評價</span>
                   </button>
+                  {/* ⛶ 全螢幕按鈕 */}
+                  <button
+                    onClick={() => setFullscreenOpen(true)}
+                    title="全螢幕 K 線圖（放大）"
+                    className="flex items-center justify-center px-2 py-1 rounded text-[13px] transition-colors"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      border:     "1px solid var(--border)",
+                      color:      "var(--text-secondary)",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+                  >
+                    ⛶
+                  </button>
                 </div>
               )}
             </div>
@@ -802,25 +817,6 @@ export default function Home() {
                           ))}
                         </div>
                       )}
-                      {/* 全螢幕按鈕（右下角）*/}
-                      <button
-                        onClick={() => setFullscreenOpen(true)}
-                        title="全螢幕 K 線圖"
-                        className="absolute bottom-3 right-3 z-30 flex items-center justify-center rounded transition-colors"
-                        style={{
-                          width:       "26px",
-                          height:      "26px",
-                          fontSize:    "14px",
-                          background:  "var(--bg-elevated)",
-                          border:      "1px solid var(--border)",
-                          color:       "var(--text-secondary)",
-                          opacity:     0.7,
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                        onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
-                      >
-                        ⛶
-                      </button>
                     </>
                   )}
                 </div>
