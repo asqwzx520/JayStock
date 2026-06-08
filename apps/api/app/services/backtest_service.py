@@ -482,6 +482,35 @@ def _build_monthly_returns(equity_df: pd.DataFrame) -> list[dict]:
     return result
 
 
+# ── 台股資料抓取（FinMind，比 yfinance 穩定）──────────────────────────────────
+
+async def _fetch_tw_ohlcv(symbol: str, start: str, end: str) -> list[dict]:
+    """
+    台股 OHLCV — 優先走 FinMind（與 K 線圖同源），失敗才 fallback yfinance。
+    避免 Render 等雲端 IP 被 Yahoo Finance 封鎖。
+    """
+    from datetime import date as _date
+    from app.services.finmind_service import fetch_daily_kline  # noqa: PLC0415
+
+    try:
+        rows = await fetch_daily_kline(
+            symbol,
+            _date.fromisoformat(start),
+            _date.fromisoformat(end),
+        )
+        if rows:
+            return rows
+    except Exception as exc:
+        logger.warning("[backtest] FinMind fetch 失敗，fallback yfinance: %s", exc)
+
+    # Fallback：yfinance（本機開發時通常可用）
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _fetch_ohlcv_sync, f"{symbol}.TW", start, end
+    )
+
+
 # ── 主入口 ────────────────────────────────────────────────────────────────────
 
 async def run_backtest(
@@ -509,14 +538,19 @@ async def run_backtest(
 
     yf_sym = _yf_symbol(symbol)
     is_tw  = _is_tw_symbol(symbol)
-    bench_sym = "0050.TW" if is_tw else "SPY"
 
-    # 平行抓取標的 + 基準資料（在 executor 跑同步 yfinance）
-    loop = asyncio.get_event_loop()
-    raw, raw_bench = await asyncio.gather(
-        loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym,   start_date, end_date),
-        loop.run_in_executor(None, _fetch_ohlcv_sync, bench_sym, start_date, end_date),
-    )
+    # ── 資料抓取：台股用 FinMind，美股用 yfinance ──
+    if is_tw:
+        raw, raw_bench = await asyncio.gather(
+            _fetch_tw_ohlcv(symbol,  start_date, end_date),
+            _fetch_tw_ohlcv("0050",  start_date, end_date),
+        )
+    else:
+        loop = asyncio.get_running_loop()
+        raw, raw_bench = await asyncio.gather(
+            loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym, start_date, end_date),
+            loop.run_in_executor(None, _fetch_ohlcv_sync, "SPY",  start_date, end_date),
+        )
 
     if not raw:
         raise ValueError(f"無法取得 {symbol} 的歷史資料，請確認代號正確。")
