@@ -1,7 +1,6 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1 ✅、Sprint 2 ✅、Sprint 3 ✅、Sprint 4 ✅、Sprint 5（K線圖表強化）✅ `5a31945`、Sprint 6（Screener 基本面篩選）✅ `7caeeb4`**
-> **Sprint 7（行情資料來源優化）— 待規劃**
+> **Sprint 1 ✅、Sprint 2 ✅、Sprint 3 ✅、Sprint 4 ✅、Sprint 5 ✅、Sprint 6 ✅、Sprint 7（資料來源優化）進行中**
 
 ---
 
@@ -151,85 +150,56 @@ async def fetch_us_kline(symbol: str, start: date, end: date) -> list[dict]:
 
 ---
 
-## Phase 3 — 台股基本面資料源補強（TWSE OpenAPI）
+## Phase 3 — 台股基本面資料源補強（TWSE OpenAPI）✅ 完成
 
 ### 背景
 
 FinMind 免費方案有每日 quota 限制（600次/天），全靠它做所有台股資料呼叫風險高。  
 `openapi.twse.com.tw` 是台灣證交所官方 REST API，**免費、無需註冊、無明確限速**，可分擔 FinMind。
 
-### 值得接入的三個 endpoint
+### 完成內容（commit `fa919ce`，2026-06-09）
 
-| Endpoint | 內容 | 用途 |
-|----------|------|------|
-| `GET /v1/openAPI/BWIBBU_ALL` | 全市場 PE/PB/殖利率（一次 call 拿 1,700+ 支）| Screener 基本面篩選 ✅ |
-| `GET /v1/exchangeReport/STOCK_DAY_ALL` | 全市場當日開高低收量 | 排行榜/Screener 報價 |
-| `GET /v1/exchangeReport/MI_MARGN` | 全市場融資融券餘額 | 補充籌碼面資料 |
-
-### 最高優先：`BWIBBU_ALL` 解鎖 Screener 基本面篩選
-
-```python
-# apps/api/app/services/twse_openapi_service.py
-import httpx
-from app.core.cache import ttl_cache
-
-TWSE_OPEN_API = "https://openapi.twse.com.tw/v1"
-
-@ttl_cache(ttl=3600 * 4)   # 4小時，盤後資料不需頻繁刷新
-async def fetch_all_per_pbr() -> dict[str, dict]:
-    """
-    回傳 {symbol: {pe, pb, yield}} for ALL listed stocks
-    取代 FinMind 的逐支 TaiwanStockPER 呼叫（節省大量 quota）
-    """
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(f"{TWSE_OPEN_API}/openAPI/BWIBBU_ALL")
-        rows = resp.json()   # list of dicts
-    result = {}
-    for r in rows:
-        sym = r.get("Code", "").strip()
-        if not sym:
-            continue
-        result[sym] = {
-            "pe":    _safe_float(r.get("PEratio")),
-            "pb":    _safe_float(r.get("PBratio")),
-            "yield": _safe_float(r.get("DividendYield")),
-        }
-    return result
-```
+| 檔案 | 內容 | 狀態 |
+|------|------|------|
+| `services/twse_openapi_service.py`（新建） | `fetch_all_per_pbr()` BWIBBU_ALL，TTL 4h | ✅ |
+| `services/twse_openapi_service.py`（新建） | `fetch_all_daily_quotes()` STOCK_DAY_ALL，TTL 5min（備用） | ✅ |
+| `api/v1/fundamental.py` | A+C 策略：FinMind `fetch_per_pbr(sym)` → TWSE `fetch_all_per_pbr()` bulk lookup | ✅ |
+| `api/v1/fundamental.py` | 額外回傳 `dividend_yield`（來自 TWSE，比 yfinance 準確） | ✅ |
 
 ### 整合後的資料源分工
 
 ```
 FinMind（保留）       → 歷史K線 / 季度財報 / 現金流量
-TWSE OpenAPI（新增）  → 全市場PE/PB/殖利率 / 融資融券
-mis.twse（保留）      → 盤中即時報價 polling
+TWSE OpenAPI（新增）  → 全市場PE/PB/殖利率（BWIBBU_ALL，4h TTL）
+mis.twse（不動）      → 盤中即時報價 polling（完全獨立，零影響）
 ```
 
-**涉及檔案**：
-- `apps/api/app/services/twse_openapi_service.py`（新建）
-- `apps/api/app/api/v1/screener.py`（基本面篩選條件接入）
-- `apps/api/app/api/v1/fundamental.py`（PE/PB 來源補充）
+### ⚠️ 關鍵設計原則
+
+- `openapi.twse.com.tw`（盤後資料）和 `mis.twse.com.tw`（即時報價）是**兩套完全獨立的系統**
+- TWSE OpenAPI 整合完全不影響盤中即時行情
+- PE/PB/殖利率資料從「每支股票各呼叫一次 FinMind」改為「一次 bulk fetch 全市場 dict 查詢」，FinMind quota 大幅節省
 
 ---
 
-## Sprint 6 實作順序
+## Sprint 7 實作順序
 
-| # | 項目 | 難度 | 預估時間 | 優先序 |
-|---|------|------|---------|--------|
-| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高 |
-| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高 |
-| 3 | 補上 TPEX 上櫃行情 | 低 | 1h | 🟠 高 |
-| 4 | TWSE OpenAPI BWIBBU_ALL → Screener 基本面篩選 | 中 | 2h | 🟠 高 |
-| 5 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟡 中 |
+| # | 項目 | 難度 | 預估時間 | 優先序 | 狀態 |
+|---|------|------|---------|--------|------|
+| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高 | ⬜ |
+| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高 | ⬜ |
+| 3 | 補上 TPEX 上櫃行情 | 低 | 1h | 🟠 高 | ⬜ |
+| 4 | TWSE OpenAPI BWIBBU_ALL（PE/PB/殖利率） | 中 | 2h | 🟠 高 | ✅ `fa919ce` |
+| 5 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟡 中 | ⬜ |
 
 ---
 
-## Sprint 6 驗證清單
+## Sprint 7 驗證清單
 
 - [ ] K 線圖右上角在盤中時間顯示「🟡 盤中延遲約 5 秒」
 - [ ] Watchlist 10 支股票的 quote polling 合併為 1 個 request（DevTools Network 確認）
 - [ ] 上櫃股票（如 6278）可正常顯示即時行情
-- [ ] Screener 可依 PE / 殖利率 / PB 篩選（資料來自 TWSE OpenAPI BWIBBU_ALL）
+- [x] 台股基本面 PE/PB/殖利率 改由 TWSE OpenAPI BWIBBU_ALL 提供（commit `fa919ce`）
 - [ ] 美股 K 線改由 Twelve Data 提供，Render logs 無 yfinance timeout
 
 ---
