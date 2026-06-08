@@ -96,11 +96,15 @@ async def get_kline(
     if end is None:
         end = date.today()
     if start is None:
-        # 季K/年K 拉最長（15年），其餘 1 年
+        # 各 period 預設拉取範圍
         if period in ("quarterly", "yearly"):
-            start = end - timedelta(days=365 * 15)
+            start = end - timedelta(days=365 * 15)   # 季/年K：15 年
+        elif period == "monthly":
+            start = end - timedelta(days=365 * 10)   # 月K：10 年
+        elif period == "weekly":
+            start = end - timedelta(days=365 * 5)    # 週K：5 年
         else:
-            start = end - timedelta(days=365)
+            start = end - timedelta(days=365 * 2)    # 日K：2 年
 
     # 1. 嘗試從 Supabase 快取讀取
     rows = await _kline_from_supabase(sym, start, end)
