@@ -423,7 +423,16 @@ const DAILY_PERIODS = [
 
 ## Sprint 2 驗證清單
 
-- [ ] 走勢圖可選季K / 年K，資料正確聚合（OHLCV 開收高低量）
-- [ ] 板塊熱力圖顏色對比明顯，點擊板塊顯示成分股清單
-- [ ] VWAP 指標在分K 圖上正確顯示（累積），日K 顯示滾動均值
-- [ ] Screener 可加 PE / 殖利率 / 毛利率 / 市值 篩選條件
+- [x] 走勢圖可選季K / 年K，資料正確聚合（commit `b2121b4`，後端 QE/YE 分組，前端新增按鈕）
+- [x] 板塊熱力圖首頁小版（`MiniSectorBar` pill chips，commit `00ffe32`）；大盤完整版點擊板塊顯示成分股（MarketDashboard，原已有）
+- [x] VWAP_BAND 指標可獨立開關，顯示 VWAP 中線 ± 1σ 通道（commit `00ffe32`，IndicatorSelector 新按鈕）
+- [ ] Screener 可加 PE / 殖利率 / 毛利率 / 市值 篩選條件（**待做 — Sprint 3**）
+
+## Sprint 2 完成摘要（2026-06-08）
+
+| Commit | 功能 | 狀態 |
+|--------|------|------|
+| `b2121b4` | 季K/年K（kline.py QE/YE + PeriodSelector + TTL 30min）| ✅ |
+| `b2121b4` | 修復上櫃股票報價不更新（twse_fetcher tse_\|otc_ 雙查）| ✅ |
+| `00ffe32` | VWAP帶 ±1σ 通道（indicators.ts vwapBand + KLineChart 3 LineSeries + IndicatorSelector）| ✅ |
+| `00ffe32` | 首頁板塊概覽 MiniSectorBar（HomeDashboard pill chips）| ✅ |

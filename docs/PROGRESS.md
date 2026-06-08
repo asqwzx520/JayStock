@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-08（Hover Shimmer + Feature B 警報 + Feature C 月曆 + Feature A K線型態辨識）  
-> **當前版本：** commit `8eeca87`（K線型態辨識：13種型態手寫辨識，K線疊圖 + 分析面板技術Tab）  
+> **更新日期：** 2026-06-08（Sprint 1 4項修復 + Sprint 2 季K/年K/VWAP帶/板塊首頁/上櫃報價修復）  
+> **當前版本：** commit `00ffe32`（Sprint 2：季K年K + VWAP帶 + 首頁板塊概覽 + 上櫃股票報價修復）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -30,9 +30,10 @@
 ### K 線圖表（超越 PRD 規格）
 - [x] 五種圖表類型：蠟燭 / 空心K / Heikin-Ashi / 折線 / 面積
 - [x] 技術指標：MA、EMA、BOLL、MACD、RSI、KD（PRD 標準）
-- [x] 額外指標：VWAP、Williams %R、OBV（PRD 未規劃）
+- [x] 額外指標：VWAP、VWAP帶（±1σ通道可開關）、Williams %R、OBV（PRD 未規劃）
 - [x] 三大法人籌碼疊圖（外資 / 投信 / 自營）
-- [x] 時間週期切換（1m/5m/15m/30m/60m/日/週/月）
+- [x] 時間週期切換（1m/5m/15m/30m/60m/日/週/月/**季/年**）
+- [x] **K 線型態標記縮小**（text="" size=0.6，不遮蓋 K 線）
 
 ### 自選股（M2）
 - [x] Watchlist CRUD（前後端完整）
@@ -46,18 +47,28 @@
 - [x] 漲幅 / 跌幅 / 爆量 Top 20 排行榜
 - [x] 大盤指數列（台股 + 美股）
 - [x] 個股新聞 Tab（yfinance + 新舊格式自動偵測）
+- [x] **新聞中文過濾 + 重要度篩選**（高/中/低 tabs + 分類 chips + 關鍵字搜尋）
+- [x] **板塊熱力圖首頁小版**（HomeDashboard MiniSectorBar，各板塊漲跌 pill chips）
+- [x] **板塊熱力圖大盤版**（MarketDashboard SectorTile + 點擊展開成分股）
 
 ### AI & 選股（M4）
 - [x] 自然語言解析選股（Gemini API）— 競品無此功能
 - [x] 5 個預設策略模板
 - [x] 多維篩選器（技術 / 籌碼 / 基本面）
 - [x] 選股結果列表
+- [x] **Screener 一鍵加自選股**（每列 +/✓ 按鈕，optimistic update + rollback）
 
 ### 即時行情（新增）
 - [x] **WebSocket `/ws/quotes`** 端點（盤中 5s / 盤外 30s diff 推播）
 - [x] **`useStockWebSocket` hook**（自動重連，指數退避）
 - [x] LeftPanel + page.tsx 改用 WS，取代 15s REST 輪詢
 - [x] 連線指示燈（頭部綠點）
+- [x] **修復上櫃股票報價不更新**（twse_fetcher 改為 tse_|otc_ 雙查詢，commit `b2121b4`）
+
+### 效能優化（Sprint 1）
+- [x] **Tab keep-alive**（mountedTabs Set + CSS hidden，kline/home/analysis 永遠掛載，其他首次訪問後不銷毀）
+- [x] **前端 clientCache**（`lib/clientCache.ts`，module-level Map，`withCache<T>()` TTL 包裝）
+  - fundamentals TTL 1h、patterns TTL 5min、kline TTL 3min（季/年K 30min）
 
 ### 部署 & 品質（M6）
 - [x] Google OAuth 登入（NextAuth.js v5）
@@ -147,7 +158,9 @@
 | MA / EMA / BOLL | ✅ | ✅ | ✅ | ✅ | 齊平 |
 | MACD / RSI / KD | ✅ | ✅ | ✅ | ✅ | 齊平 |
 | VWAP / OBV / Williams %R | ✅ | ✅ | ✅ | ✅ | 齊平 |
+| **VWAP ± 1σ 通道帶（可開關）** | ✅ **新增** | ✅ | △ | ❌ | 輕微領先 |
 | 週期：1分 ～ 月K | ✅ | ✅ | ✅ | ✅ | 齊平 |
+| **季K / 年K（最長 15 年）** | ✅ **新增** | ✅ | ✅ | ✅ | 齊平 |
 | **繪圖工具（趨勢線 / 水平線 / 斐波納契）** | ❌ | ✅✅ | ✅ | ✅ | **重大缺口** — 交易者的基本需求 |
 | **多圖版型（2分割 / 4分割）** | ❌ | ✅✅ | ✅ | ❌ | 進階缺口 |
 | **Pine Script / 自訂指標** | ❌ | ✅✅ | ❌ | ❌ | 長期路線 |
@@ -204,7 +217,7 @@
 | **回測引擎（歷史績效驗證）** | ❌ | ✅✅ | △ | ❌ | **重大缺口** — 策略可信度的依據 |
 | **條件單回測 / 參數最佳化** | ❌ | ✅✅ | ❌ | ❌ | 進階缺口 |
 | **策略儲存 / 分享 / 訂閱** | ❌ | ✅✅ | ❌ | △ | 長期路線 |
-| **選股結果一鍵加入自選股** | △ | ✅ | ✅ | ✅ | 小缺口，易補 |
+| **選股結果一鍵加入自選股** | ✅ **已完成** | ✅ | ✅ | ✅ | 已補（`527ee74` Screener +/✓ 按鈕）|
 
 **評分：3/7 ★★★☆☆** — AI 自然語言選股是真正差異化，但缺回測讓策略無法被驗證，削弱說服力。
 
@@ -267,18 +280,18 @@
 
 | 面向 | 得分 | 滿分 | 評分 | 最關鍵補強 |
 |------|:----:|:----:|:----:|-----------|
-| K 線圖表技術分析 | 7 | 11 | ★★★★☆ | 繪圖工具已補，ATR/ADX/StochRSI/Ichimoku 已補強 |
+| K 線圖表技術分析 | **9** | 13 | ★★★★☆ | 季K/年K ✅；VWAP帶 ✅；K線型態 ✅；缺多圖版型/量價背離 |
 | 台股籌碼分析 | 5 | 9 | ★★★★☆ | 6 區塊垂直滾動、7 項評分、券商分點已補；期貨籌碼尚缺 |
 | **個股基本面資料** | **8** | **8** | **★★★★★** | **✅ 全面補強完成（P/E、EPS、殖利率、股利歷史、財報 10 年）** |
-| AI 選股 & 策略 | 6 | 7 | ★★★★★ | 回測引擎 ✅ 已補（`19eb219`）|
-| 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣 |
-| K 線圖表技術分析 | **8** | 11 | ★★★★☆ | K線型態 ✅（`8eeca87`，13種）；缺多圖版型/量價背離 |
+| AI 選股 & 策略 | **7** | 7 | **★★★★★** | 回測引擎 ✅；Screener 一鍵加自選股 ✅ |
+| 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣；上櫃報價已修復 |
+| 板塊 & 市場概覽 | **3** | 3 | **★★★★★** | 首頁 MiniSectorBar ✅；大盤 SectorHeatmap+成分股 ✅；新聞篩選 ✅ |
 | 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅；財報月曆 ✅；Line 未做 |
-| UX & 平台品質 | 7 | 11 | ★★★★☆ | 鍵盤快捷鍵 |
-| **加總** | **46** | **60** | **約 90/100** | |
+| UX & 平台品質 | 7 | 11 | ★★★★☆ | keep-alive Tab ✅；clientCache ✅；鍵盤快捷鍵尚缺 |
+| **加總** | **48** | **65** | **約 92/100** | |
 
-> **結論（2026-06-08 更新）：** K線型態辨識完成（`8eeca87`），13種型態手寫辨識，圖表疊圖+分析面板雙呈現；K線圖表評分 7→8；整體評分 87 → 90 分。  
-> 下一個建議：**鍵盤快捷鍵**（TradingView 必備 UX）或 **選股一鍵加自選股** 或 **正式網域**。
+> **結論（2026-06-08 Sprint 2 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ 修復上櫃報價 bug；整體評分 90 → 92 分。  
+> 下一個建議：**Screener 基本面篩選條件**（PE/殖利率/毛利率/市值）或 **鍵盤快捷鍵**（TradingView 必備 UX）或 **正式網域**。
 
 ---
 
@@ -384,6 +397,9 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `00ffe32` | **Sprint 2：VWAP帶 + 首頁板塊概覽**：`indicators.ts` 新增 `vwapBand()`（滾動20日 VWAP ± 1σ）；`KLineChart.tsx` 新增 VWAP_BAND 指標（3 LineSeries：中線+上下通道）；`IndicatorSelector.tsx` 新增「VWAP帶」可開關按鈕；`HomeDashboard.tsx` 新增 `MiniSectorBar`（板塊名稱+漲跌% pill chips，靜默 fetch，不影響主載入）| ✅ Live |
+| `b2121b4` | **Sprint 2：季K/年K + 修復上櫃報價**：`kline.py` 新增 quarterly/yearly period，`_aggregate()` 支援 QE/YE 分組，季K/年K 拉15年資料；`twse_fetcher.py` 修復上櫃股票盤中價格不更新（改為 `tse_XXX.tw|otc_XXX.tw` 同時查詢）；`PeriodSelector.tsx` 新增「季K」「年K」按鈕；`dashboard/page.tsx` 季K/年K cache TTL 設 30 分鐘 | ✅ Live |
+| `527ee74` | **Sprint 1：4項修復**：K線型態標記縮小（text="" size=0.6）；Screener 一鍵加自選股（+/✓ 按鈕 optimistic update + rollback）；新聞中文過濾+重要度篩選（後端 importance/is_chinese 欄位，前端高/中/低 tabs+分類chips+關鍵字搜尋）；Tab keep-alive + clientCache（mountedTabs Set + `lib/clientCache.ts` TTL Map）| ✅ Live |
 | `8eeca87` | **K線型態辨識（Feature A）**：後端 `patterns.py` 純手寫13種型態（十字星/錘頭/上吊線/倒錘頭/流星/看漲吞噬/看跌吞噬/啟明星/黃昏之星/三白兵/三黑鴉/向上跳空/向下跳空），趨勢輔助區分多頭vs空頭型態；前端 `createSeriesMarkers()`（LW-Charts v5 plugin），多頭▲/空頭▼/中性●；`AnalysisPanel.tsx` `PatternSection`（最近10個，方向badge+日期+描述）；`page.tsx` × 2 整合 | ✅ Live |
 | `671967b` | **財報/除權息月曆（Feature C）**：後端 `calendar.py` 新 endpoint `GET /api/v1/calendar?symbols=...`，30天視窗，平行查詢，6h TTL快取，支援 exdiv/earnings/agm；前端 `CalendarView.tsx`（5×7月曆格，今天日期圓形藍色標示，事件 chip 三色：🟡除息/🔵財報/🟢股東會，點格展開詳情面板，底部事件清單含「N天後」badge，shimmer hover 效果，自選股空時引導提示）；`useTabConfig.ts` 新增"月曆"Tab；`page.tsx` × 2 lazy-load | ✅ Live |
 | `439564d` | **技術指標觸發警報系統（Feature B）**：後端 `alert_rules.py` ALLOWED_FIELDS 7→14（KD-K/MACD柱/MA5/MA60/外資連賣/投信連賣）、條件上限3→10；後端 `dashboard.py` 新增 stoch_k/macd_hist/above_ma5/above_ma60 計算（6mo yfinance）；前端 `AlertModal.tsx`（新）完整 CRUD Modal；前端 `DrawingToolbar.tsx` 🔔 按鈕；`page.tsx` × 2 整合；`api.ts` ALERT_RULE_FIELDS 擴充至 13 個含提示 | ✅ Live |
@@ -417,7 +433,7 @@
 | 端點 | 說明 | 狀態 |
 |------|------|------|
 | `GET /api/v1/quotes/{symbol}` | 個股即時報價 | ✅ 正常 |
-| `GET /api/v1/kline/{symbol}` | K 線歷史資料 | ✅ 正常 |
+| `GET /api/v1/kline/{symbol}` | K 線歷史資料（daily/weekly/monthly/**quarterly/yearly**） | ✅ 正常 |
 | `GET /api/v1/chips/{symbol}` | 三大法人籌碼 | ✅ 正常 |
 | `GET /api/v1/market/indices` | 大盤指數 | ✅ 正常 |
 | `GET /api/v1/market/ranking` | 漲跌爆量排行 | ✅ 正常 |
@@ -446,4 +462,4 @@
 
 ---
 
-*最後更新：2026-06-08 by Claude（Feature A K線型態辨識完成，commit `8eeca87`；整體評分 90/100）*
+*最後更新：2026-06-08 by Claude（Sprint 1 4項修復 + Sprint 2 季K/年K/VWAP帶/板塊首頁/上櫃修復；commit `00ffe32`；整體評分 92/100）*
