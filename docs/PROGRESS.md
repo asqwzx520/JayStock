@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-09（Sprint 6：Screener 基本面篩選條件）  
-> **當前版本：** commit `7caeeb4`（Sprint 6：基本面快取服務 + 7 個篩選欄位 + 展開式 UI + 動態結果欄）  
+> **更新日期：** 2026-06-09（Sprint 6 完成 + TWSE OpenAPI PE/PB 批量取代 yfinance）  
+> **當前版本：** commit `fa919ce`（TWSE OpenAPI 全市場 PE/PB/殖利率一次拉取；`twse_openapi_service.py` 新增；`fundamental.py` 整合）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -66,13 +66,18 @@
 - [x] 多維篩選器（技術 / 籌碼 / 基本面）
 - [x] 選股結果列表
 - [x] **Screener 一鍵加自選股**（每列 +/✓ 按鈕，optimistic update + rollback）
-- [x] **Screener 基本面篩選**（Sprint 6）：
+- [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
   - `fundamental_cache_service.py`：yfinance 批量抓取，24h in-memory TTL，ThreadPoolExecutor
   - `RunRequest` 新增 10 個條件欄位，`_matches()` 同步支援基本面過濾
   - 前端展開式「＋ 基本面條件」面板（min/max 輸入，條件數 badge）
   - 動態結果欄：有啟用哪個基本面條件才顯示對應欄，無條件時保持原有欄位
+- [x] **TWSE OpenAPI 批量基本面**（`fa919ce`）：
+  - `twse_openapi_service.py`：`GET /v1/openAPI/BWIBBU_ALL` 一次拉取全市場 ~1700 支 PE/PB/殖利率（TTL 4h）
+  - `GET /v1/exchangeReport/STOCK_DAY_ALL` 全市場日行情快照（TTL 5min，備用）
+  - `fundamental.py` 台股改走 TWSE 批量查 → 單股 O(1) 查找，取代 FinMind per-symbol TaiwanStockPER 呼叫
+  - FinMind 配額完全釋放給 K 線 / 法人 / 財報等歷史端點
 
 ### 即時行情（新增）
 - [x] **WebSocket `/ws/quotes`** 端點（盤中 5s / 盤外 30s diff 推播）
@@ -317,8 +322,8 @@
 | UX & 平台品質 | 8 | 11 | ★★★★☆ | keep-alive Tab ✅；clientCache ✅；**鍵盤快捷鍵 ✅（Sprint 3）** |
 | **加總** | **51** | **65** | **約 95/100** | |
 
-> **結論（2026-06-09 Sprint 5 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ Sprint 3 新增 2 功能（鍵盤快捷鍵/美股搜尋K線）+ Sprint 4（分析Tab全修復，FinMind取代yfinance台股）+ **Sprint 5 K線圖表全面強化**（Tab改名/OHLCV側欄/全螢幕/Ctrl+Z/指標參數Legend+Popover/子面板分離+可拖分界線）；整體評分 93 → 95 分。  
-> 下一個建議：**Screener 基本面篩選條件**（PE/殖利率/毛利率/市值）或 **正式網域 + Cloudflare**。
+> **結論（2026-06-09 Sprint 6 更新）：** Sprint 1~5 詳見前述 + **Sprint 6 Screener 基本面篩選**（股票池 70→127，PE/殖利率/毛利率/市值/ROE/EPS成長/營收成長 7 欄篩選，展開式面板，動態結果欄）+ **TWSE OpenAPI 批量基本面**（BWIBBU_ALL 取代 FinMind per-symbol PE/PB，FinMind 配額全釋放）；整體評分 95 → **96** 分。  
+> 下一個建議：**行情資料來源優化**（盤中延遲標示 / 批次 TWSE 報價 / TPEX 上櫃行情）或 **正式網域 + Cloudflare**。
 
 ---
 
@@ -424,6 +429,8 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `fa919ce` | **TWSE OpenAPI 批量基本面**：新增 `twse_openapi_service.py`（`BWIBBU_ALL` 一次拉 ~1700 支 PE/PB/殖利率，TTL 4h；`STOCK_DAY_ALL` 全市場日行情快照 TTL 5min）；`fundamental.py` 台股改走 TWSE 批量查詢（單股 O(1)），FinMind `TaiwanStockPER` per-symbol 呼叫全部取代 | ✅ Live |
+| `7caeeb4` | **Sprint 6：Screener 基本面篩選**：股票池 70→127；`fundamental_cache_service.py`（yfinance 批量 24h TTL）；`RunRequest` 10 個基本面條件欄；`_matches()` 過濾；前端展開式面板 + 動態結果欄（7 個欄位按條件啟用顯示） | ✅ Live |
 | `5a31945` | **Sprint 5：K線圖表全面強化** — Tab 改名「K線」；左側欄 OHLCV 十字線（`onCrosshairMove` prop → `hoveredBar` state，滑鼠離開恢復報價）；全螢幕按鈕（右下角 ⛶ → `FullscreenChartModal`，含完整工具列，ESC/✕ 關閉）；Ctrl+Z 無限 undo（`undoStackRef<Drawing[][]>`，symbol 切換清空）；指標參數 Legend+Popover（MA/EMA/BOLL/VWAP 等可點 ✎ 調參數，`IndicatorParamPopover.tsx`，`lib/indicatorParams.ts` localStorage 持久化）；子指標獨立面板（`SubIndicatorPanel.tsx`，`SUB_PANEL_INDICATORS` = MACD/RSI/KD/WR/OBV/ATR/ADX/SRSI，各自獨立 createChart 實例，不擋成交量）；可拖動分界線（`ResizeDivider.tsx`，主圖最小 30%，子指標最小 5%，高度比例 localStorage 持久化）；跨面板時間軸同步（`subscribeVisibleLogicalRangeChange` + `isSyncingRef`）；`ChartWithPanels.tsx` 統一管理，page.tsx 替換 KLineChart 呼叫 | ✅ Local |
 | `70bd3af` | **Sprint 3：鍵盤快捷鍵 + 美股搜尋/K線**：`useKeyboardShortcuts.ts`（/ 聚焦搜尋、↑↓ 切自選股、symRef+listRef 避免 stale closure）；Header Enter 直接確認第一結果（`activeIdx=-1` fallback）、`id="stock-search-input"`、🇺🇸 badge、`select()` 傳 `market`；`stock_list.py` 新增 ~120 S&P 500 股票，`search_stocks()` 回傳 `market: "TW"\|"US"`；`kline.py` 新端點 `GET /kline/us/{symbol}`（yfinance executor，1h TTL 快取，支援 5 種 period）；`dashboard/page.tsx` market state + marketRef 路由（US→getUsKline，跳 WebSocket），美股自動隱藏籌碼/回測 Tab，工具列 🇺🇸 badge，watchlist 載入供 ↑↓ 鍵 | ✅ Live |
 | `00ffe32` | **Sprint 2：VWAP帶 + 首頁板塊概覽**：`indicators.ts` 新增 `vwapBand()`（滾動20日 VWAP ± 1σ）；`KLineChart.tsx` 新增 VWAP_BAND 指標（3 LineSeries：中線+上下通道）；`IndicatorSelector.tsx` 新增「VWAP帶」可開關按鈕；`HomeDashboard.tsx` 新增 `MiniSectorBar`（板塊名稱+漲跌% pill chips，靜默 fetch，不影響主載入）| ✅ Live |
@@ -492,4 +499,4 @@
 
 ---
 
-*最後更新：2026-06-09 by Claude（Sprint 1~5 完成；Sprint 5 K線圖表全面強化；commit `5a31945`；整體評分 95/100）*
+*最後更新：2026-06-09 by Claude（Sprint 1~6 完成；Sprint 6 Screener 基本面篩選 + TWSE OpenAPI 批量基本面；commit `fa919ce`；整體評分 96/100）*
