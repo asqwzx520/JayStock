@@ -1,5 +1,27 @@
 # Sprint Plan — 2026-06-08
 
+> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股）✅ 均已完成。**
+
+---
+
+## ✅ Sprint 3 完成摘要（commit `70bd3af`）
+
+| 功能 | 檔案 | 狀態 |
+|------|------|------|
+| `useKeyboardShortcuts` hook（/ 聚焦、↑↓ 換股） | `hooks/useKeyboardShortcuts.ts`（新建） | ✅ |
+| Header Enter 直接確認、`id="stock-search-input"`、Escape 收合 | `components/layout/Header.tsx` | ✅ |
+| 搜尋結果 🇺🇸 badge，`select()` 傳 `market` | `components/layout/Header.tsx` | ✅ |
+| S&P 500 ~120 股靜態清單，`search_stocks()` 回傳 `market` | `services/stock_list.py` | ✅ |
+| `GET /kline/us/{symbol}`（yfinance，1h TTL，executor） | `api/v1/kline.py` | ✅ |
+| `getUsKline()` + `StockItem.market?` 型別 | `lib/api.ts` | ✅ |
+| market state + marketRef，US→getUsKline，無 WebSocket | `app/dashboard/page.tsx` | ✅ |
+| 美股自動隱藏籌碼/回測 Tab | `app/dashboard/page.tsx` | ✅ |
+| 工具列 🇺🇸 US badge，watchlist 載入供 ↑↓ | `app/dashboard/page.tsx` | ✅ |
+
+---
+
+## Sprint 1 + 2（已完成）
+
 > 本輪 4 項修復，依優先序排列。完成後更新 PROGRESS.md。
 
 ---

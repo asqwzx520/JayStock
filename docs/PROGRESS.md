@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-08（Sprint 1 4項修復 + Sprint 2 季K/年K/VWAP帶/板塊首頁/上櫃報價修復）  
-> **當前版本：** commit `00ffe32`（Sprint 2：季K年K + VWAP帶 + 首頁板塊概覽 + 上櫃股票報價修復）  
+> **更新日期：** 2026-06-08（Sprint 1+2+3：4項修復 + 季K/年K/VWAP帶/板塊首頁 + 鍵盤快捷鍵/美股搜尋）  
+> **當前版本：** commit `70bd3af`（Sprint 3：鍵盤快捷鍵 + 美股搜尋 + `/kline/us/` 端點）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -70,6 +70,17 @@
 - [x] **前端 clientCache**（`lib/clientCache.ts`，module-level Map，`withCache<T>()` TTL 包裝）
   - fundamentals TTL 1h、patterns TTL 5min、kline TTL 3min（季/年K 30min）
 
+### 鍵盤快捷鍵 + 美股支援（Sprint 3）
+- [x] **鍵盤快捷鍵**（`hooks/useKeyboardShortcuts.ts`）
+  - `/` → 聚焦搜尋框；`↑↓` → 循環自選股（自動 K 線同步）；symRef + listRef 避免 stale closure
+- [x] **Header Enter 確認**：`activeIdx === -1` 時直接選 `results[0]`，不需先按方向鍵；`id="stock-search-input"` 供鍵盤 focus
+- [x] **美股搜尋（S&P 500 靜態清單）**：`stock_list.py` 內建 ~120 美股/ETF，`search_stocks()` 同時搜台+美，回傳 `market: "TW"|"US"`
+- [x] **搜尋結果 🇺🇸 badge**：美股顯示藍色 NYSE/NASDAQ badge，`select()` 傳遞 `market` 欄位
+- [x] **美股 K 線端點** `GET /kline/us/{symbol}`（yfinance + executor，後端 1h TTL 快取，支援 daily/weekly/monthly/quarterly/yearly）
+- [x] **前端美股路由**：`market` state，`loadKline` 遇 US → `getUsKline`（marketRef 避免依賴陣列），跳過 WebSocket 報價
+- [x] **Tab 自動過濾**：美股時自動隱藏「籌碼」「回測」tab（無台股本地籌碼資料）
+- [x] **工具列 🇺🇸 badge**：美股在股票名稱旁顯示藍色 🇺🇸 US 標籤
+
 ### 部署 & 品質（M6）
 - [x] Google OAuth 登入（NextAuth.js v5）
 - [x] Dark / Light 模式切換（防 FOUC）
@@ -103,7 +114,7 @@
 | ~~**財務歷史 10 年**~~ | 損益表 + 現金流 10 年 | ✅ 已完成（`financials.py`） |
 | **個股 30 日籌碼詳情表格** | 三大法人日報表 | 有 API 但 UI 未完整呈現 |
 | **連續買超/賣超天數標籤** | 標示「外資連 N 日買超」| 已有 streak badge，但 Watchlist 列表未顯示 |
-| **美股完整支援** | Polygon.io 整合 | 用 yfinance 部分替代，無完整美股 |
+| **美股完整支援** | Polygon.io 整合 | Sprint 3 已加 S&P 500 搜尋 + `/kline/us/` yfinance K 線；無五檔委買委賣/即時行情 |
 | ~~**SMTP 盤前 AI 推播**~~ | 每日 8AM Email | ✅ 已完成（改用 Resend API，`1361516`）|
 
 ### UI / UX 缺口（視覺品質）
@@ -232,7 +243,7 @@
 | 台股完整個股覆蓋 | ✅ | ✅ | ✅ | ✅ | 齊平 |
 | **Level 2 委買委賣五檔** | ❌ | △ 付費 | ✅ | △ | **交易者核心工具** |
 | **盤前 / 盤後美股行情** | ❌ | ✅ | ✅ | ❌ | 美股用戶需求 |
-| **美股完整資料（Polygon.io）** | △ yfinance | ✅✅ | ✅✅ | ❌ | 資料穩定性風險，yfinance 有 rate limit |
+| **美股 K 線 + 搜尋（S&P 500）** | △ **Sprint 3 新增** | ✅✅ | ✅✅ | ❌ | Sprint 3 已加 ~120 美股搜尋 + yfinance K 線端點；無完整即時報價 |
 | **期貨 / 選擇權行情** | ❌ | △ | ✅ | △ | 衍生品交易者需求 |
 | **歷史波動率 / 隱含波動率** | ❌ | ✅ | ✅ | ❌ | 選擇權交易者需求 |
 
@@ -262,7 +273,7 @@
 | Dark / Light 模式（防 FOUC） | ✅ | ✅ | ✅ | △ | 優於籌碼K線 |
 | Google OAuth 登入 | ✅ | ✅ | ✅ | ❌ | 優於籌碼K線 |
 | **行動版 RWD（手機看盤）** | ✅ 已完成 | ✅✅ | App ✅ | △ → ✅ | **三段式 RWD 佈局：底部 Tab bar + 側欄折疊抽屜（`1960da0`）** |
-| **鍵盤快捷鍵** | ❌ | ✅✅ | △ | ❌ | 進階用戶需求 |
+| **鍵盤快捷鍵（/ 搜尋、↑↓ 換股）** | ✅ **Sprint 3** | ✅✅ | △ | ❌ | **已完成（`70bd3af`）：`useKeyboardShortcuts` hook，/ + ↑↓ + Enter 確認** |
 | **Skeleton 載入動畫** | ❌ 純文字 | ✅ | ✅ | ✅ | 視覺品質差距 |
 | 自選股多群組 + 拖曳排序 | ✅ | ✅ | ✅ | ✅ | 齊平 |
 | CSV / JSON 匯出 | ✅ | △ | △ | ❌ | 輕微優勢 |
@@ -272,7 +283,7 @@
 | Sentry 錯誤監控 | ✅ | — | — | — | 工程品質領先 |
 | GitHub Actions CI/CD | ✅ | — | — | — | 工程品質領先 |
 
-**評分：8/12 ★★★★☆** — 工程品質不錯，Hover 互動效果 ✅；鍵盤快捷鍵仍待做。
+**評分：9/12 ★★★★☆** — 工程品質不錯，Hover 互動效果 ✅；**鍵盤快捷鍵 ✅（Sprint 3）**；Skeleton 載入動畫仍待補。
 
 ---
 
@@ -287,11 +298,11 @@
 | 即時行情品質 | 3 | 8 | ★★☆☆☆ | 五檔委買委賣；上櫃報價已修復 |
 | 板塊 & 市場概覽 | **3** | 3 | **★★★★★** | 首頁 MiniSectorBar ✅；大盤 SectorHeatmap+成分股 ✅；新聞篩選 ✅ |
 | 通知 & 提醒 | **6** | 6 | **★★★★★** | 技術指標警報 ✅；財報月曆 ✅；Line 未做 |
-| UX & 平台品質 | 7 | 11 | ★★★★☆ | keep-alive Tab ✅；clientCache ✅；鍵盤快捷鍵尚缺 |
-| **加總** | **48** | **65** | **約 92/100** | |
+| UX & 平台品質 | 8 | 11 | ★★★★☆ | keep-alive Tab ✅；clientCache ✅；**鍵盤快捷鍵 ✅（Sprint 3）** |
+| **加總** | **49** | **65** | **約 93/100** | |
 
-> **結論（2026-06-08 Sprint 2 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ 修復上櫃報價 bug；整體評分 90 → 92 分。  
-> 下一個建議：**Screener 基本面篩選條件**（PE/殖利率/毛利率/市值）或 **鍵盤快捷鍵**（TradingView 必備 UX）或 **正式網域**。
+> **結論（2026-06-08 Sprint 3 更新）：** Sprint 1 修復 4 項（標記縮小/Screener+/新聞篩選/效能）+ Sprint 2 新增 3 功能（季K年K/VWAP帶/首頁板塊概覽）+ Sprint 3 新增 2 功能（**鍵盤快捷鍵**`useKeyboardShortcuts` + **美股搜尋/K線** S&P 500靜態清單+`/kline/us/`）；整體評分 92 → 93 分。  
+> 下一個建議：**Screener 基本面篩選條件**（PE/殖利率/毛利率/市值）或 **正式網域 + Cloudflare**。
 
 ---
 
@@ -397,6 +408,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `70bd3af` | **Sprint 3：鍵盤快捷鍵 + 美股搜尋/K線**：`useKeyboardShortcuts.ts`（/ 聚焦搜尋、↑↓ 切自選股、symRef+listRef 避免 stale closure）；Header Enter 直接確認第一結果（`activeIdx=-1` fallback）、`id="stock-search-input"`、🇺🇸 badge、`select()` 傳 `market`；`stock_list.py` 新增 ~120 S&P 500 股票，`search_stocks()` 回傳 `market: "TW"\|"US"`；`kline.py` 新端點 `GET /kline/us/{symbol}`（yfinance executor，1h TTL 快取，支援 5 種 period）；`dashboard/page.tsx` market state + marketRef 路由（US→getUsKline，跳 WebSocket），美股自動隱藏籌碼/回測 Tab，工具列 🇺🇸 badge，watchlist 載入供 ↑↓ 鍵 | ✅ Live |
 | `00ffe32` | **Sprint 2：VWAP帶 + 首頁板塊概覽**：`indicators.ts` 新增 `vwapBand()`（滾動20日 VWAP ± 1σ）；`KLineChart.tsx` 新增 VWAP_BAND 指標（3 LineSeries：中線+上下通道）；`IndicatorSelector.tsx` 新增「VWAP帶」可開關按鈕；`HomeDashboard.tsx` 新增 `MiniSectorBar`（板塊名稱+漲跌% pill chips，靜默 fetch，不影響主載入）| ✅ Live |
 | `b2121b4` | **Sprint 2：季K/年K + 修復上櫃報價**：`kline.py` 新增 quarterly/yearly period，`_aggregate()` 支援 QE/YE 分組，季K/年K 拉15年資料；`twse_fetcher.py` 修復上櫃股票盤中價格不更新（改為 `tse_XXX.tw|otc_XXX.tw` 同時查詢）；`PeriodSelector.tsx` 新增「季K」「年K」按鈕；`dashboard/page.tsx` 季K/年K cache TTL 設 30 分鐘 | ✅ Live |
 | `527ee74` | **Sprint 1：4項修復**：K線型態標記縮小（text="" size=0.6）；Screener 一鍵加自選股（+/✓ 按鈕 optimistic update + rollback）；新聞中文過濾+重要度篩選（後端 importance/is_chinese 欄位，前端高/中/低 tabs+分類chips+關鍵字搜尋）；Tab keep-alive + clientCache（mountedTabs Set + `lib/clientCache.ts` TTL Map）| ✅ Live |
@@ -434,6 +446,7 @@
 |------|------|------|
 | `GET /api/v1/quotes/{symbol}` | 個股即時報價 | ✅ 正常 |
 | `GET /api/v1/kline/{symbol}` | K 線歷史資料（daily/weekly/monthly/**quarterly/yearly**） | ✅ 正常 |
+| `GET /api/v1/kline/us/{symbol}` | **美股 K 線**（yfinance，1h TTL，支援 daily～yearly） | ✅ 正常（Sprint 3 新增）|
 | `GET /api/v1/chips/{symbol}` | 三大法人籌碼 | ✅ 正常 |
 | `GET /api/v1/market/indices` | 大盤指數 | ✅ 正常 |
 | `GET /api/v1/market/ranking` | 漲跌爆量排行 | ✅ 正常 |
@@ -462,4 +475,4 @@
 
 ---
 
-*最後更新：2026-06-08 by Claude（Sprint 1 4項修復 + Sprint 2 季K/年K/VWAP帶/板塊首頁/上櫃修復；commit `00ffe32`；整體評分 92/100）*
+*最後更新：2026-06-08 by Claude（Sprint 1+2+3 完成；Sprint 3 鍵盤快捷鍵 + 美股搜尋/K線；commit `70bd3af`；整體評分 93/100）*
