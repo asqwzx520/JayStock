@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-09（Sprint 5：K線圖表全面強化 — Tab改名/OHLCV側欄/全螢幕/Ctrl+Z/指標參數/子面板分離）  
-> **當前版本：** commit `5a31945`（Sprint 5：ChartWithPanels + FullscreenChartModal + SubIndicatorPanel + ResizeDivider + IndicatorParamPopover + indicatorParams lib）  
+> **更新日期：** 2026-06-09（Sprint 6：Screener 基本面篩選條件）  
+> **當前版本：** commit `7caeeb4`（Sprint 6：基本面快取服務 + 7 個篩選欄位 + 展開式 UI + 動態結果欄）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -66,6 +66,13 @@
 - [x] 多維篩選器（技術 / 籌碼 / 基本面）
 - [x] 選股結果列表
 - [x] **Screener 一鍵加自選股**（每列 +/✓ 按鈕，optimistic update + rollback）
+- [x] **Screener 基本面篩選**（Sprint 6）：
+  - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
+  - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
+  - `fundamental_cache_service.py`：yfinance 批量抓取，24h in-memory TTL，ThreadPoolExecutor
+  - `RunRequest` 新增 10 個條件欄位，`_matches()` 同步支援基本面過濾
+  - 前端展開式「＋ 基本面條件」面板（min/max 輸入，條件數 badge）
+  - 動態結果欄：有啟用哪個基本面條件才顯示對應欄，無條件時保持原有欄位
 
 ### 即時行情（新增）
 - [x] **WebSocket `/ws/quotes`** 端點（盤中 5s / 盤外 30s diff 推播）

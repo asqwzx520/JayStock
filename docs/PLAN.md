@@ -1,11 +1,33 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅、Sprint 5（K線圖表強化）✅ 完成（commit `5a31945`，2026-06-09）**
-> **Sprint 6（行情資料來源優化）— 規劃中**
+> **Sprint 1 ✅、Sprint 2 ✅、Sprint 3 ✅、Sprint 4 ✅、Sprint 5（K線圖表強化）✅ `5a31945`、Sprint 6（Screener 基本面篩選）✅ `7caeeb4`**
+> **Sprint 7（行情資料來源優化）— 待規劃**
 
 ---
 
-# Sprint 6 — 行情資料來源優化
+# Sprint 6 — Screener 基本面篩選條件 ✅ 完成（commit `7caeeb4`，2026-06-09）
+
+## 完成項目
+
+| 項目 | 說明 | 狀態 |
+|------|------|------|
+| 股票池擴充 | 70 → 127 檔（傳產高殖利率 + 生技 + 高股息ETF） | ✅ |
+| fundamental_cache_service.py | yfinance 批量，24h TTL，ThreadPoolExecutor×5 | ✅ |
+| 7 個基本面欄位 | PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長% | ✅ |
+| screener.py 基本面條件 | RunRequest 10 欄位，_matches() 過濾邏輯 | ✅ |
+| 前端展開式篩選面板 | 「＋ 基本面條件」toggle，條件數 badge | ✅ |
+| 動態結果欄 | 啟用條件才顯示對應欄（PE/殖利率/毛利率等） | ✅ |
+| TypeScript + ESLint | 全 pass | ✅ |
+
+## 設計決策
+- 基本面快取獨立於技術面快取（技術面 30min / 基本面 24h）
+- 技術面刷新完成後背景觸發基本面刷新（不阻塞技術面結果）
+- ETF 基本面欄位顯示「—」（PE/ROE 等無意義，自然 null）
+- 未設篩選條件的欄位不顯示於結果表格（動態欄）
+
+---
+
+# Sprint 7 — 行情資料來源優化
 
 > 規劃日期：2026-06-09
 > 背景：TradingView 差距分析 + 可用免費資料源盤點
