@@ -273,40 +273,65 @@ withCache(`kline:${sym}:${per}`, () => fetch..., 120_000)
 
 ## 功能一：板塊熱力圖強化
 
-### 現況問題
-- 已在「大盤」Tab 裡，但版面小、不夠直覺
-- 沒有點擊進入板塊個股清單的功能
-- 顏色梯度不夠強烈，漲跌對比不明顯
+### grill-me 決策：D
+- 首頁（home tab）加小版熱力圖（橫排緊湊版）
+- 大盤 Tab 加大完整版：格子放大 + 點擊板塊 → 右側顯示成分股漲跌排序
 
-### 目標
-- 加大板塊格子，顯示更多資訊（板塊名稱、平均漲跌幅、成分股數量）
-- 點擊板塊 → 右側列出該板塊所有成分股 + 漲跌幅排序
-- 顏色從深紅→淺紅→白→淺綠→深綠，梯度更明顯
-- （待 grill-me 確認）是否要獨立 Tab
+### 實作細節
+
+**首頁小版**（`HomeDashboard.tsx`）：
+- 橫向排列，每個板塊一個 pill chip（名稱 + 漲跌%）
+- 深紅→淺紅→灰→淺綠→深綠 5段漸層色
+- 點擊 chip → 切到大盤 Tab
+
+**大盤完整版**（`MarketDashboard.tsx`）：
+- `SectorTile` 放大：`min-h-[80px]`，顯示板塊名稱、平均漲跌幅、上漲/下跌檔數
+- 點擊板塊 → 右側面板展開該板塊成分股列表（symbol + name + change_pct 排序）
+- `SectorData` 的 `top_stocks` 欄位已有前5支，需擴充到全部成分股
 
 ### 涉及檔案
-- `apps/web/components/market/MarketDashboard.tsx`（`SectorHeatmap` + `SectorTile`）
-- `apps/api/app/services/market_service.py`（`_SECTOR_MAP` 可擴充成分股）
-- `apps/web/lib/api.ts`（`SectorData` 型別）
+- `apps/web/components/dashboard/HomeDashboard.tsx`（新增 MiniSectorBar）
+- `apps/web/components/market/MarketDashboard.tsx`（SectorTile 放大 + 成分股面板）
+- `apps/api/app/services/market_service.py`（`_SECTOR_MAP` 回傳完整成分股清單）
+- `apps/web/lib/api.ts`（SectorData 型別擴充）
 
 ---
 
-## 功能二：VWAP 確認 + UX 優化
+## 功能二：VWAP ± 1σ 通道（可獨立開關）
 
-### 現況問題
-- VWAP 指標已存在，但使用者不一定知道
-- 盤中分K 用累積 VWAP（正確），日K 用滾動 20 日 VWAP（正確）
-- 可能需要在 IndicatorSelector 加更清楚的說明
+### grill-me 決策：B，要可以開關
+新增 `VWAP_BAND` 指標（獨立於現有 `VWAP`），開啟後顯示 VWAP 中線 + 上下 ±1σ 通道帶。
 
-### 目標（待 grill-me 確認）
-- 確認現有 VWAP 是否符合使用者預期
-- 是否要分K 預設開啟 VWAP
-- 是否要加 VWAP ± 1σ / ± 2σ 通道（進階版）
+### 實作細節
+
+**`apps/web/lib/indicators.ts`**：
+```typescript
+// 新增 vwapBand()，回傳 { mid, upper, lower }[]
+export function vwapBand(bars: OHLCV[], period = 20, mult = 1): {
+  mid: number | null; upper: number | null; lower: number | null;
+}[] {
+  const mids = vwap(bars, period);
+  // 計算每個點的 typical price 對 VWAP 的標準差（滾動 period 個 bar）
+  // upper = mid + mult * σ；lower = mid - mult * σ
+}
+```
+
+**`apps/web/components/chart/KLineChart.tsx`**：
+- `IndicatorType` 加入 `"VWAP_BAND"`
+- 渲染：3條 LineSeries（mid 用實線，upper/lower 用虛線 + 半透明填充）
+- 顏色：紫色 `#E879F9`（與現有 VWAP 同色系，通道用 10% opacity 填充）
+
+**`apps/web/components/chart/IndicatorSelector.tsx`**：
+```typescript
+{ key: "VWAP",      label: "VWAP",      desc: "成交量加權平均價（滾動20日）" },
+{ key: "VWAP_BAND", label: "VWAP帶",    desc: "VWAP ± 1σ 標準差通道" },  // NEW
+```
 
 ### 涉及檔案
-- `apps/web/components/chart/IndicatorSelector.tsx`
-- `apps/web/lib/indicators.ts`（`vwap()` 函式）
-- `apps/web/components/chart/KLineChart.tsx`（L753 VWAP 渲染）
+- `apps/web/lib/indicators.ts`（新增 `vwapBand()` 函式）
+- `apps/web/components/chart/KLineChart.tsx`（VWAP_BAND 渲染邏輯）
+- `apps/web/components/chart/IndicatorSelector.tsx`（新增按鈕）
+- `apps/web/lib/api.ts`（`IndicatorType` 型別同步）
 
 ---
 
@@ -317,26 +342,23 @@ withCache(`kline:${sym}:${per}`, () => fetch..., 120_000)
 - 前端 `PeriodSelector.tsx` 只有日/週/月 + 分K
 - 後端 query start date 預設 `-365天`，季K/年K 需要更長資料區間
 
+### grill-me 決策：C — 拉最長（15 年）
+季K 約 60 根，年K 約 15 根，讓長線投資人看完整週期。
+
 ### 實作
 
 **後端 `apps/api/app/api/v1/kline.py`**：
 ```python
-# 現有
-if period == "weekly":   rows = _aggregate(rows, "W")
-elif period == "monthly": rows = _aggregate(rows, "M")
-
-# 新增
-elif period == "quarterly": rows = _aggregate(rows, "Q")
-elif period == "yearly":    rows = _aggregate(rows, "Y")
-```
-
-同時調整 `start` 預設值：
-```python
 if start is None:
     if period in ("quarterly", "yearly"):
-        start = end - timedelta(days=365 * 10)   # 季/年K 拉 10 年
+        start = end - timedelta(days=365 * 15)   # 最長 15 年
     else:
         start = end - timedelta(days=365)
+
+if period == "weekly":      rows = _aggregate(rows, "W")
+elif period == "monthly":   rows = _aggregate(rows, "M")
+elif period == "quarterly": rows = _aggregate(rows, "QE")  # pandas Q-end
+elif period == "yearly":    rows = _aggregate(rows, "YE")  # pandas Y-end
 ```
 
 **前端 `apps/web/components/chart/PeriodSelector.tsx`**：
@@ -350,11 +372,16 @@ const DAILY_PERIODS = [
 ] as const;
 ```
 
-**前端 `apps/web/lib/api.ts`**：
-- `Period` 型別加入 `"quarterly" | "yearly"`
+**前端 `apps/web/lib/api.ts`** + **`dashboard/page.tsx`**：
+- `Period` / `DailyPeriod` 型別加入 `"quarterly" | "yearly"`
+- `isIntradayPeriod()` 不受影響（季/年K 走日K code path）
+- `clientCache` TTL：季/年K 用 30 分鐘（資料不常變）
 
-**前端 `dashboard/page.tsx`**：
-- `INTRADAY_PERIODS` 判斷式不受影響（季/年K 走日K code path）
+### 涉及檔案
+- `apps/api/app/api/v1/kline.py`（加 Q/Y 聚合 + 擴大 start 範圍）
+- `apps/web/components/chart/PeriodSelector.tsx`（加按鈕）
+- `apps/web/lib/api.ts`（型別）
+- `apps/web/app/dashboard/page.tsx`（cache TTL）
 
 ### 估計時間：1.5h
 
