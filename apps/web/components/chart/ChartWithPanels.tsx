@@ -41,11 +41,46 @@ interface ChartWithPanelsProps {
   onCrosshairMove?:  (bar: ChartBar | null) => void;
 }
 
+// ── 台股盤中時間判斷（UTC+8，09:00–13:30，週一~五）────────────────────────────
+function isTwStock(sym?: string): boolean {
+  if (!sym) return false;
+  return /^\d{4,6}$/.test(sym);
+}
+
+function getTaipeiMinutes(): number {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const taipei = new Date(utcMs + 8 * 3600000);  // UTC+8
+  return taipei.getHours() * 60 + taipei.getMinutes();
+}
+
+function getTaipeiWeekday(): number {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utcMs + 8 * 3600000).getDay(); // 0=Sun, 6=Sat
+}
+
+function checkMarketOpen(): boolean {
+  const day = getTaipeiWeekday();
+  if (day === 0 || day === 6) return false;
+  const mins = getTaipeiMinutes();
+  return mins >= 9 * 60 && mins <= 13 * 60 + 30;  // 09:00–13:30
+}
+
 export default function ChartWithPanels({
   data, indicators, chipsData, chartType, activeTool, clearKey,
   symbol, patternMarkers, indicatorParams, onParamsChange, onCrosshairMove,
 }: ChartWithPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 盤中延遲 badge：台股且市場開盤中才顯示
+  const [marketOpen, setMarketOpen] = useState(false);
+  useEffect(() => {
+    if (!isTwStock(symbol)) { setMarketOpen(false); return; }
+    setMarketOpen(checkMarketOpen());
+    const timer = setInterval(() => setMarketOpen(checkMarketOpen()), 60_000);
+    return () => clearInterval(timer);
+  }, [symbol]);
 
   // 目前活躍的子指標（保持順序）
   const subIndicators = indicators.filter(
@@ -140,7 +175,17 @@ export default function ChartWithPanels({
   const mainPx = Math.round((heights.main / 100) * containerH);
 
   return (
-    <div ref={containerRef} className="flex flex-col w-full h-full min-h-0">
+    <div ref={containerRef} className="relative flex flex-col w-full h-full min-h-0">
+      {/* ── 盤中延遲提示 badge ─────────────────────────────────────────── */}
+      {marketOpen && (
+        <span
+          className="absolute top-2 right-2 z-20 pointer-events-none
+                     text-[10px] leading-none px-1.5 py-0.5 rounded"
+          style={{ background: "rgba(0,0,0,0.45)", color: "rgba(250,204,21,0.75)" }}
+        >
+          🟡 盤中延遲約 5 秒
+        </span>
+      )}
       {/* ── 主圖 ───────────────────────────────────────────────────────── */}
       <div style={{ height: `${mainPx}px`, flexShrink: 0, minHeight: 0 }}>
         <KLineChart
