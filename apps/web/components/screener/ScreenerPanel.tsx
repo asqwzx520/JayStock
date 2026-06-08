@@ -8,6 +8,7 @@ import {
   type ScreenerTemplate,
   type ScreenerResult,
   type ScreenerResponse,
+  type FundFilters,
 } from "@/lib/api";
 
 interface Props {
@@ -51,6 +52,18 @@ function RsiCell({ rsi }: { rsi: number }) {
   );
 }
 
+// ── 動態欄位集（基本面條件啟用時才顯示對應欄）────────────────────────────────
+// 唯一欄位集（合併 min/max 對）
+const FUND_COLS: { key: keyof ScreenerResult; label: string; filterKeys: (keyof FundFilters)[] }[] = [
+  { key: "pe",             label: "PE",     filterKeys: ["pe_min",           "pe_max"]           },
+  { key: "dividend_yield", label: "殖利率%", filterKeys: ["yield_min",        "yield_max"]        },
+  { key: "gross_margin",   label: "毛利率%", filterKeys: ["gross_margin_min"]                     },
+  { key: "market_cap_b",   label: "市值億",  filterKeys: ["market_cap_min_b", "market_cap_max_b"] },
+  { key: "roe",            label: "ROE%",   filterKeys: ["roe_min"]                              },
+  { key: "eps_growth",     label: "EPS成長%", filterKeys: ["eps_growth_min"]                     },
+  { key: "revenue_growth", label: "營收成長%", filterKeys: ["revenue_growth_min"]                },
+];
+
 // ── 主元件 ───────────────────────────────────────────────────────────────────
 export default function ScreenerPanel({ onSelectStock }: Props) {
   const [templates,       setTemplates]       = useState<ScreenerTemplate[]>([]);
@@ -63,6 +76,10 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
   const [sortCol,         setSortCol]          = useState<keyof ScreenerResult>("score");
   const [sortAsc,         setSortAsc]          = useState(false);
   const nlRef = useRef<HTMLInputElement>(null);
+
+  // 基本面篩選展開 / 條件
+  const [fundOpen,    setFundOpen]    = useState(false);
+  const [fundFilters, setFundFilters] = useState<FundFilters>({});
 
   // ── Watchlist 狀態 ─────────────────────────────────────────────────────────
   const [watchedSymbols,  setWatchedSymbols]  = useState<Set<string>>(new Set());
@@ -110,19 +127,23 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
   }, [templatesLoaded]);
 
   // 執行選股
-  const handleRun = useCallback(async (tid?: string, nl?: string) => {
+  const handleRun = useCallback(async (tid?: string, nl?: string, filters?: FundFilters) => {
     await ensureTemplates();
     setLoading(true);
     setError("");
     try {
-      const res = await runScreener(tid, nl, 50);
+      // 清除空字串 filter（只保留有值的欄位）
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters ?? fundFilters).filter(([, v]) => v !== undefined && v !== null && v !== "")
+      ) as FundFilters;
+      const res = await runScreener(tid, nl, 50, Object.keys(cleanFilters).length ? cleanFilters : undefined);
       setResponse(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : "選股失敗，請稍後再試");
     } finally {
       setLoading(false);
     }
-  }, [ensureTemplates]);
+  }, [ensureTemplates, fundFilters]);
 
   // 點擊模板卡
   const handleTemplateClick = async (tid: string) => {
@@ -161,13 +182,6 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
         : String(bv).localeCompare(String(av));
     });
   })();
-
-  const SortIcon = ({ col }: { col: keyof ScreenerResult }) =>
-    sortCol === col ? (
-      <span className="ml-0.5 opacity-70">{sortAsc ? "↑" : "↓"}</span>
-    ) : (
-      <span className="ml-0.5 opacity-20">↕</span>
-    );
 
   // ── 預設顯示：尚未執行選股 ────────────────────────────────────────────────
   const showEmpty = !loading && !response && !error;
@@ -245,6 +259,90 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
             </span>
           </div>
         )}
+
+        {/* ── 基本面篩選展開區 ──────────────────────────────────────────── */}
+        <div className="mt-2">
+          <button
+            onClick={() => setFundOpen(v => !v)}
+            className="flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded transition-colors"
+            style={{
+              color:      Object.keys(fundFilters).length ? "var(--color-brand)" : "var(--text-tertiary)",
+              background: fundOpen ? "var(--bg-elevated)" : "transparent",
+            }}
+          >
+            <span>{fundOpen ? "▾" : "▸"}</span>
+            <span>＋ 基本面條件</span>
+            {Object.keys(fundFilters).length > 0 && (
+              <span
+                className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                style={{ background: "var(--color-brand)", color: "#fff" }}
+              >
+                {Object.keys(fundFilters).length}
+              </span>
+            )}
+          </button>
+
+          {fundOpen && (
+            <div
+              className="mt-2 p-3 rounded-lg border"
+              style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}
+            >
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                {/* 本益比 */}
+                <FundRow label="本益比" unit="x">
+                  <FundInput placeholder="最小" value={fundFilters.pe_min} onChange={v => setFundFilters(p => ({ ...p, pe_min: v }))} />
+                  <span style={{ color: "var(--text-tertiary)" }}>~</span>
+                  <FundInput placeholder="最大" value={fundFilters.pe_max} onChange={v => setFundFilters(p => ({ ...p, pe_max: v }))} />
+                </FundRow>
+
+                {/* 殖利率 */}
+                <FundRow label="殖利率" unit="%">
+                  <FundInput placeholder="最小" value={fundFilters.yield_min} onChange={v => setFundFilters(p => ({ ...p, yield_min: v }))} step={0.5} />
+                  <span style={{ color: "var(--text-tertiary)" }}>~</span>
+                  <FundInput placeholder="最大" value={fundFilters.yield_max} onChange={v => setFundFilters(p => ({ ...p, yield_max: v }))} step={0.5} />
+                </FundRow>
+
+                {/* 毛利率 */}
+                <FundRow label="毛利率 ≥" unit="%">
+                  <FundInput placeholder="如 30" value={fundFilters.gross_margin_min} onChange={v => setFundFilters(p => ({ ...p, gross_margin_min: v }))} />
+                </FundRow>
+
+                {/* 市值 */}
+                <FundRow label="市值" unit="億">
+                  <FundInput placeholder="最小" value={fundFilters.market_cap_min_b} onChange={v => setFundFilters(p => ({ ...p, market_cap_min_b: v }))} step={100} />
+                  <span style={{ color: "var(--text-tertiary)" }}>~</span>
+                  <FundInput placeholder="最大" value={fundFilters.market_cap_max_b} onChange={v => setFundFilters(p => ({ ...p, market_cap_max_b: v }))} step={100} />
+                </FundRow>
+
+                {/* ROE */}
+                <FundRow label="ROE ≥" unit="%">
+                  <FundInput placeholder="如 15" value={fundFilters.roe_min} onChange={v => setFundFilters(p => ({ ...p, roe_min: v }))} />
+                </FundRow>
+
+                {/* EPS 成長率 */}
+                <FundRow label="EPS成長 ≥" unit="%">
+                  <FundInput placeholder="如 20" value={fundFilters.eps_growth_min} onChange={v => setFundFilters(p => ({ ...p, eps_growth_min: v }))} />
+                </FundRow>
+
+                {/* 年營收成長率 */}
+                <FundRow label="營收成長 ≥" unit="%">
+                  <FundInput placeholder="如 10" value={fundFilters.revenue_growth_min} onChange={v => setFundFilters(p => ({ ...p, revenue_growth_min: v }))} />
+                </FundRow>
+              </div>
+
+              {/* 清除 */}
+              {Object.keys(fundFilters).length > 0 && (
+                <button
+                  onClick={() => setFundFilters({})}
+                  className="mt-2.5 text-[11px] px-2 py-0.5 rounded"
+                  style={{ color: "var(--color-down)", background: "rgba(239,68,68,0.08)" }}
+                >
+                  清除基本面條件
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── 結果區 ──────────────────────────────────────────────────── */}
@@ -304,35 +402,52 @@ export default function ScreenerPanel({ onSelectStock }: Props) {
               )}
             </div>
 
-            {/* 表格 */}
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
-                  <Th col="score"      label="評分"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <Th col="symbol"     label="代碼"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <th className="px-3 py-2 text-left font-medium">名稱</th>
-                  <Th col="price"      label="現價"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <Th col="change_pct" label="漲跌%"  onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <Th col="vol_ratio"  label="量比"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <Th col="rsi14"      label="RSI"    onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
-                  <th className="px-3 py-2 text-left font-medium">法人</th>
-                  <th className="px-2 py-2 text-center font-medium w-8">+</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedResults.map((r, idx) => (
-                  <ResultRow
-                    key={r.symbol}
-                    r={r}
-                    rank={idx + 1}
-                    onSelect={() => onSelectStock(r.symbol, r.name)}
-                    isWatched={watchedSymbols.has(r.symbol)}
-                    isAdding={addingSymbols.has(r.symbol)}
-                    onAddToWatchlist={handleAddToWatchlist}
-                  />
-                ))}
-              </tbody>
-            </table>
+            {/* 動態欄位：哪些基本面條件有啟用就顯示哪欄 */}
+            {(() => {
+              const activeFundCols = FUND_COLS.filter(
+                col => col.filterKeys.some(k => fundFilters[k] !== undefined)
+              );
+              return (
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
+                      <Th col="score"      label="評分"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <Th col="symbol"     label="代碼"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <th className="px-3 py-2 text-left font-medium">名稱</th>
+                      <Th col="price"      label="現價"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <Th col="change_pct" label="漲跌%"  onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <Th col="vol_ratio"  label="量比"   onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <Th col="rsi14"      label="RSI"    onSort={handleSort} sortCol={sortCol} sortAsc={sortAsc} />
+                      <th className="px-3 py-2 text-left font-medium">法人</th>
+                      {activeFundCols.map(col => (
+                        <Th
+                          key={col.key}
+                          col={col.key}
+                          label={col.label}
+                          onSort={handleSort}
+                          sortCol={sortCol}
+                          sortAsc={sortAsc}
+                        />
+                      ))}
+                      <th className="px-2 py-2 text-center font-medium w-8">+</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedResults.map((r) => (
+                      <ResultRow
+                        key={r.symbol}
+                        r={r}
+                        onSelect={() => onSelectStock(r.symbol, r.name)}
+                        isWatched={watchedSymbols.has(r.symbol)}
+                        isAdding={addingSymbols.has(r.symbol)}
+                        onAddToWatchlist={handleAddToWatchlist}
+                        activeFundCols={activeFundCols}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
         )}
 
@@ -382,18 +497,18 @@ function Th({
 // ── 結果列元件 ───────────────────────────────────────────────────────────────
 function ResultRow({
   r,
-  rank,
   onSelect,
   isWatched,
   isAdding,
   onAddToWatchlist,
+  activeFundCols,
 }: {
   r:                 ScreenerResult;
-  rank:              number;
   onSelect:          () => void;
   isWatched:         boolean;
   isAdding:          boolean;
   onAddToWatchlist:  (symbol: string) => void;
+  activeFundCols:    { key: keyof ScreenerResult; label: string }[];
 }) {
   const isUp   = r.change_pct > 0;
   const isDown = r.change_pct < 0;
@@ -514,6 +629,18 @@ function ResultRow({
         </div>
       </td>
 
+      {/* 動態基本面欄 */}
+      {activeFundCols.map(col => {
+        const val = r[col.key] as number | null | undefined;
+        return (
+          <td key={col.key} className="px-3 py-2 text-right">
+            <span className="num" style={{ color: val == null ? "var(--text-tertiary)" : "var(--text-primary)" }}>
+              {val == null ? "—" : val.toFixed(1)}
+            </span>
+          </td>
+        );
+      })}
+
       {/* 加自選股按鈕 */}
       <td className="px-2 py-2 text-center w-8">
         <button
@@ -536,6 +663,58 @@ function ResultRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+// ── 基本面輸入輔助元件 ────────────────────────────────────────────────────────
+
+function FundRow({
+  label,
+  unit,
+  children,
+}: {
+  label: string;
+  unit: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[10px] font-semibold" style={{ color: "var(--text-tertiary)" }}>
+        {label}{unit ? ` (${unit})` : ""}
+      </div>
+      <div className="flex items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+function FundInput({
+  placeholder,
+  value,
+  onChange,
+  step = 1,
+}: {
+  placeholder: string;
+  value:       number | undefined;
+  onChange:    (v: number | undefined) => void;
+  step?:       number;
+}) {
+  return (
+    <input
+      type="number"
+      placeholder={placeholder}
+      value={value ?? ""}
+      step={step}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v === "" ? undefined : parseFloat(v));
+      }}
+      className="w-16 px-1.5 py-0.5 rounded text-[11px] text-right outline-none"
+      style={{
+        background:  "var(--bg-surface)",
+        border:      "1px solid var(--border)",
+        color:       "var(--text-primary)",
+      }}
+    />
   );
 }
 

@@ -129,39 +129,64 @@ async def fetch_us_kline(symbol: str, start: date, end: date) -> list[dict]:
 
 ---
 
-## Phase 3 — 中長期：Fugle WebSocket（用戶自帶 Key）
+## Phase 3 — 台股基本面資料源補強（TWSE OpenAPI）
 
-### 架構
+### 背景
 
-Fugle 行情 API 設計給**個人交易者**使用，server 端共用一個 key 有訂閱數限制（開發者方案：300 支 / 2 連線），不適合直接當 SaaS 後端。
+FinMind 免費方案有每日 quota 限制（600次/天），全靠它做所有台股資料呼叫風險高。  
+`openapi.twse.com.tw` 是台灣證交所官方 REST API，**免費、無需註冊、無明確限速**，可分擔 FinMind。
 
-**最可行的方案**：讓進階用戶填入自己的 Fugle API Key，平台負責 WebSocket 連線管理。
+### 值得接入的三個 endpoint
+
+| Endpoint | 內容 | 用途 |
+|----------|------|------|
+| `GET /v1/openAPI/BWIBBU_ALL` | 全市場 PE/PB/殖利率（一次 call 拿 1,700+ 支）| Screener 基本面篩選 ✅ |
+| `GET /v1/exchangeReport/STOCK_DAY_ALL` | 全市場當日開高低收量 | 排行榜/Screener 報價 |
+| `GET /v1/exchangeReport/MI_MARGN` | 全市場融資融券餘額 | 補充籌碼面資料 |
+
+### 最高優先：`BWIBBU_ALL` 解鎖 Screener 基本面篩選
+
+```python
+# apps/api/app/services/twse_openapi_service.py
+import httpx
+from app.core.cache import ttl_cache
+
+TWSE_OPEN_API = "https://openapi.twse.com.tw/v1"
+
+@ttl_cache(ttl=3600 * 4)   # 4小時，盤後資料不需頻繁刷新
+async def fetch_all_per_pbr() -> dict[str, dict]:
+    """
+    回傳 {symbol: {pe, pb, yield}} for ALL listed stocks
+    取代 FinMind 的逐支 TaiwanStockPER 呼叫（節省大量 quota）
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(f"{TWSE_OPEN_API}/openAPI/BWIBBU_ALL")
+        rows = resp.json()   # list of dicts
+    result = {}
+    for r in rows:
+        sym = r.get("Code", "").strip()
+        if not sym:
+            continue
+        result[sym] = {
+            "pe":    _safe_float(r.get("PEratio")),
+            "pb":    _safe_float(r.get("PBratio")),
+            "yield": _safe_float(r.get("DividendYield")),
+        }
+    return result
+```
+
+### 整合後的資料源分工
 
 ```
-用戶填入 Fugle Key → 前端 WS 直連 Fugle
-（不經過 Render，延遲 < 1s）
+FinMind（保留）       → 歷史K線 / 季度財報 / 現金流量
+TWSE OpenAPI（新增）  → 全市場PE/PB/殖利率 / 融資融券
+mis.twse（保留）      → 盤中即時報價 polling
 ```
 
-### 流程
-
-1. 設定頁新增「行情來源」設定：空白（使用預設 5s 輪詢）/ 填入 Fugle Key
-2. 前端帶 Key 直接建立 Fugle WebSocket 連線
-3. 有 Key 的用戶：盤中延遲 < 1s，badge 改為 🟢
-4. 無 Key 的用戶：維持 5s polling，badge 🟡
-
-### 優點
-- **平台完全不用付 Fugle 費用**
-- 用戶用自己的帳號（有 Fugle 帳號者免費可訂 5 支）
-- 差異化功能（進階用戶體驗 vs 免費用戶）
-
-### Fugle 定價（用戶端）
-| 方案 | 訂閱數 | 費用 |
-|------|--------|------|
-| 基本（免費） | 5 支股票 | 免費 |
-| 開發者 | 300 支 | NT$1,499/月 |
-| 進階 | 2000 支 | NT$2,999/月 |
-
-> 對一般散戶：免費方案就夠用（看 1~5 支自選股）
+**涉及檔案**：
+- `apps/api/app/services/twse_openapi_service.py`（新建）
+- `apps/api/app/api/v1/screener.py`（基本面篩選條件接入）
+- `apps/api/app/api/v1/fundamental.py`（PE/PB 來源補充）
 
 ---
 
@@ -169,11 +194,11 @@ Fugle 行情 API 設計給**個人交易者**使用，server 端共用一個 key
 
 | # | 項目 | 難度 | 預估時間 | 優先序 |
 |---|------|------|---------|--------|
-| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高（今天） |
-| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高（今天） |
+| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高 |
+| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高 |
 | 3 | 補上 TPEX 上櫃行情 | 低 | 1h | 🟠 高 |
-| 4 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟠 高 |
-| 5 | Fugle Key 設定頁 + 前端 WS | 高 | 4h | 🟡 中（待規劃） |
+| 4 | TWSE OpenAPI BWIBBU_ALL → Screener 基本面篩選 | 中 | 2h | 🟠 高 |
+| 5 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟡 中 |
 
 ---
 
@@ -182,8 +207,8 @@ Fugle 行情 API 設計給**個人交易者**使用，server 端共用一個 key
 - [ ] K 線圖右上角在盤中時間顯示「🟡 盤中延遲約 5 秒」
 - [ ] Watchlist 10 支股票的 quote polling 合併為 1 個 request（DevTools Network 確認）
 - [ ] 上櫃股票（如 6278）可正常顯示即時行情
+- [ ] Screener 可依 PE / 殖利率 / PB 篩選（資料來自 TWSE OpenAPI BWIBBU_ALL）
 - [ ] 美股 K 線改由 Twelve Data 提供，Render logs 無 yfinance timeout
-- [ ] 用戶填入 Fugle Key 後，badge 變 🟢，盤中行情 < 1s 更新
 
 ---
 

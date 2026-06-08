@@ -372,6 +372,27 @@ export interface ScreenerResult {
   foreign_net_today: number;
   trust_net_today:   number;
   score:             number;
+  // 基本面欄位（可能為 null，首次快取未就緒時）
+  pe?:             number | null;
+  dividend_yield?: number | null;
+  gross_margin?:   number | null;
+  market_cap_b?:   number | null;
+  roe?:            number | null;
+  eps_growth?:     number | null;
+  revenue_growth?: number | null;
+}
+
+export interface FundFilters {
+  pe_min?:             number;
+  pe_max?:             number;
+  yield_min?:          number;
+  yield_max?:          number;
+  gross_margin_min?:   number;
+  market_cap_min_b?:   number;
+  market_cap_max_b?:   number;
+  roe_min?:            number;
+  eps_growth_min?:     number;
+  revenue_growth_min?: number;
 }
 
 export interface ScreenerResponse {
@@ -391,14 +412,17 @@ export async function runScreener(
   templateId?: string,
   nlQuery?: string,
   limit = 50,
+  fundFilters?: FundFilters,
 ): Promise<ScreenerResponse> {
   const res = await fetch(`${API_BASE}/api/v1/screener/run`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({
-      template_id: templateId ?? null,
-      nl_query:    nlQuery    ?? null,
+      template_id:        templateId ?? null,
+      nl_query:           nlQuery    ?? null,
       limit,
+      // 基本面篩選（undefined 不傳，後端 Optional 會是 None）
+      ...fundFilters,
     }),
   });
   if (!res.ok) throw new Error(`Screener API ${res.status}`);

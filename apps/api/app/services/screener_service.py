@@ -1,11 +1,12 @@
 """
 選股器服務
 
-股票池：台灣主要上市股 70 檔（半導體 / 金融 / 化工 / 航運 / 消費 / ETF）
-快取 TTL：30 分鐘（交易日使用，盤後資料凍結）
+股票池：台灣主要上市股 ~127 檔
+  半導體 / IC / 電子 / 電信 / 金融 / 傳產 / 高殖利率 / 生技 / ETF
+快取 TTL：30 分鐘（技術面）/ 24h（基本面）
 並行策略：asyncio.Semaphore(10) — 保護 FinMind API，避免 rate-limit
 
-指標說明
+技術指標
   rsi14        : Wilder RSI-14
   ma20         : 20 日均線（算術）
   ma5          : 5 日均線
@@ -16,6 +17,15 @@
   near_low20   : 收盤在 20 日低點 105% 以下
   foreign_streak / trust_streak / dealer_streak : 連續買超/賣超天數
   foreign_net_today / trust_net_today : 最新一日法人淨買量
+
+基本面指標（yfinance，24h TTL）
+  pe             : 本益比（trailing P/E）
+  dividend_yield : 殖利率 %
+  gross_margin   : 毛利率 %
+  market_cap_b   : 市值（億台幣）
+  roe            : ROE %
+  eps_growth     : EPS 年成長率 %
+  revenue_growth : 年營收成長率 %
 """
 
 import asyncio
@@ -28,34 +38,45 @@ from app.services.finmind_service import fetch_daily_kline, fetch_institutional
 
 logger = logging.getLogger(__name__)
 
-# ── 股票池（70 檔） ────────────────────────────────────────────────────────────
+# ── 股票池（~127 檔） ─────────────────────────────────────────────────────────
 _UNIVERSE: list[str] = [
-    # 半導體 / 晶片
+    # 半導體 / IC 設計 / 晶圓代工（23）
     "2330", "2303", "2454", "2379", "3711", "3034",
     "2344", "2337", "6415", "2408", "3008",
-    # 電子 / 科技 / 組裝
+    "2345", "8299", "5269", "3227", "5274", "3529",
+    "6526", "3615", "4968", "3006", "4966", "3037",
+    # 電子 / 科技 / 組裝（18）
     "2317", "2382", "2357", "2308", "2327", "4938",
     "6669", "2301", "2395", "3661", "2356", "2324",
-    # 電信
+    "2353", "2376", "2377", "3231", "2458", "3706",
+    # 電信（3）
     "3045", "4904", "2412",
-    # 金融
+    # 金融 / 保險（17）
     "2881", "2882", "2891", "2886", "2884",
     "2885", "2887", "2892", "2880", "5880",
-    # 化工 / 石化
+    "2888", "2890", "2883", "2823", "2834", "5876", "2809",
+    # 化工 / 石化（4）
     "1301", "1303", "1326", "6505",
-    # 鋼鐵 / 精密機械
-    "2002", "2049", "3017",
-    # 消費 / 零售
-    "1216", "2912", "2207",
-    # 航運
+    # 鋼鐵 / 精密機械（4）
+    "2002", "2049", "3017", "2354",
+    # 消費 / 零售 / 食品（8）
+    "1216", "2912", "2207", "5903", "1229", "1232", "1215", "1227",
+    # 航運（3）
     "2603", "2609", "2615",
-    # 光電 / 面板
+    # 光電 / 面板（2）
     "3481", "2409",
-    # 傳產 / 其他
-    "2474", "2059", "8046", "3533",
-    "2610", "2618",
-    # ETF
-    "0050", "0056",
+    # 傳產高殖利率 / 水泥 / 紡織（16）
+    "1101", "1102", "1104", "1210", "2157", "2201",
+    "1402", "5871", "2633", "2542", "9933", "9940",
+    "9945", "9941", "2103", "6024",
+    # 生技 / 醫療（5）
+    "3476", "4152", "6446", "4137", "8341",
+    # 傳產 / 其他（8）
+    "2474", "2059", "8046", "3533", "2610", "2618", "2204", "2206",
+    # 高股息 / 科技主題 ETF（12）
+    "0050", "0056", "00878", "00713", "00919",
+    "006208", "00881", "00891", "00929", "00940",
+    "00900", "00830",
 ]
 
 # ── 快取狀態 ──────────────────────────────────────────────────────────────────
@@ -275,9 +296,49 @@ async def refresh_cache(universe: Optional[list[str]] = None) -> None:
         finally:
             _is_refreshing = False
 
+        # 技術面快取刷新後，在背景觸發基本面刷新（不阻塞）
+        pool = universe or _UNIVERSE
+        asyncio.create_task(_trigger_fund_refresh(pool))
+
+
+async def _trigger_fund_refresh(pool: list[str]) -> None:
+    """背景刷新基本面快取（失敗不影響主流程）"""
+    try:
+        from app.services.fundamental_cache_service import refresh_fund_cache
+        await refresh_fund_cache(pool)
+    except Exception as exc:
+        logger.warning("fundamental cache refresh failed: %s", exc)
+
 
 async def get_metrics() -> dict[str, dict]:
-    """取得快取指標；若快取過期則同步刷新（第一次呼叫需等待）"""
+    """
+    取得快取指標（技術面 + 基本面合併）；
+    若技術面過期則同步刷新；基本面採非阻塞方式（缺資料回傳 None 欄位）
+    """
     if not _metrics or _is_stale():
         await refresh_cache()
-    return _metrics
+
+    # 嘗試合併基本面資料（快取未就緒則靜默跳過）
+    try:
+        from app.services.fundamental_cache_service import get_fund_data
+        fund = get_fund_data()
+    except Exception:
+        fund = {}
+
+    if not fund:
+        return _metrics
+
+    merged: dict[str, dict] = {}
+    for sym, m in _metrics.items():
+        fd = fund.get(sym, {})
+        merged[sym] = {
+            **m,
+            "pe":             fd.get("pe"),
+            "dividend_yield": fd.get("dividend_yield"),
+            "gross_margin":   fd.get("gross_margin"),
+            "market_cap_b":   fd.get("market_cap_b"),
+            "roe":            fd.get("roe"),
+            "eps_growth":     fd.get("eps_growth"),
+            "revenue_growth": fd.get("revenue_growth"),
+        }
+    return merged

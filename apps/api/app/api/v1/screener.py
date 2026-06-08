@@ -131,7 +131,8 @@ def _parse_nl(query: str) -> Optional[str]:
 
 # ── 過濾邏輯 ──────────────────────────────────────────────────────────────────
 
-def _matches(m: dict, cond: dict) -> bool:
+def _matches(m: dict, cond: dict, req: Optional["RunRequest"] = None) -> bool:
+    # ── 技術面條件（模板）────────────────────────────────────────────────────
     if cond.get("above_ma20")    and not m.get("above_ma20"):        return False
     if cond.get("near_low20")    and not m.get("near_low20"):        return False
 
@@ -149,6 +150,23 @@ def _matches(m: dict, cond: dict) -> bool:
     if "foreign_streak_min" in cond and fs.get("days", 0)   < cond["foreign_streak_min"]:  return False
     if "trust_streak_dir"   in cond and ts.get("direction") != cond["trust_streak_dir"]:   return False
     if "trust_streak_min"   in cond and ts.get("days", 0)   < cond["trust_streak_min"]:    return False
+
+    # ── 基本面條件（來自 RunRequest，None 代表不篩選）────────────────────────
+    if req is not None:
+        def _chk(field: str, low=None, high=None) -> bool:
+            """若資料不存在且有設篩選條件則排除（避免以 None 通過）"""
+            val = m.get(field)
+            if low  is not None and (val is None or val < low):  return False
+            if high is not None and (val is None or val > high): return False
+            return True
+
+        if not _chk("pe",             req.pe_min,             req.pe_max):            return False
+        if not _chk("dividend_yield", req.yield_min,          req.yield_max):         return False
+        if not _chk("gross_margin",   req.gross_margin_min):                           return False
+        if not _chk("market_cap_b",   req.market_cap_min_b,   req.market_cap_max_b):  return False
+        if not _chk("roe",            req.roe_min):                                    return False
+        if not _chk("eps_growth",     req.eps_growth_min):                             return False
+        if not _chk("revenue_growth", req.revenue_growth_min):                         return False
 
     return True
 
@@ -217,9 +235,20 @@ def _score(m: dict, cond: dict, tid: str) -> float:
 # ── Pydantic 模型 ─────────────────────────────────────────────────────────────
 
 class RunRequest(BaseModel):
-    template_id: Optional[str] = None
-    nl_query:    Optional[str] = None
-    limit:       int            = 50
+    template_id:        Optional[str]   = None
+    nl_query:           Optional[str]   = None
+    limit:              int             = 50
+    # ── 基本面篩選條件（選填，None 代表不篩選）────────────────────────────────
+    pe_min:             Optional[float] = None   # 本益比下限
+    pe_max:             Optional[float] = None   # 本益比上限
+    yield_min:          Optional[float] = None   # 殖利率 % 下限
+    yield_max:          Optional[float] = None   # 殖利率 % 上限
+    gross_margin_min:   Optional[float] = None   # 毛利率 % 下限
+    market_cap_min_b:   Optional[float] = None   # 市值（億）下限
+    market_cap_max_b:   Optional[float] = None   # 市值（億）上限
+    roe_min:            Optional[float] = None   # ROE % 下限
+    eps_growth_min:     Optional[float] = None   # EPS 年成長率 % 下限
+    revenue_growth_min: Optional[float] = None   # 年營收成長率 % 下限
 
 
 # ── 端點 ──────────────────────────────────────────────────────────────────────
@@ -260,7 +289,7 @@ async def run_screener(request: Request, body: RunRequest):
     # 過濾 + 評分
     matched: list[dict] = []
     for sym, m in all_metrics.items():
-        if not cond or _matches(m, cond):
+        if _matches(m, cond, body):
             score = _score(m, cond, tid) if tid else 50.0
             matched.append({**m, "score": score})
 
