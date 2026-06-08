@@ -1,6 +1,6 @@
 # Sprint Plan — 2026-06-08
 
-> **Sprint 1 ✅、Sprint 2 ✅、Sprint 3 ✅、Sprint 4 ✅、Sprint 5 ✅、Sprint 6 ✅、Sprint 7（資料來源優化）進行中**
+> **Sprint 1 ✅、Sprint 2 ✅、Sprint 3 ✅、Sprint 4 ✅、Sprint 5 ✅、Sprint 6 ✅、Sprint 7（資料來源優化）進行中 — 4/5 完成**
 
 ---
 
@@ -184,22 +184,41 @@ mis.twse（不動）      → 盤中即時報價 polling（完全獨立，零影
 
 ## Sprint 7 實作順序
 
-| # | 項目 | 難度 | 預估時間 | 優先序 | 狀態 |
-|---|------|------|---------|--------|------|
-| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高 | ⬜ |
-| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高 | ⬜ |
-| 3 | 補上 TPEX 上櫃行情 | 低 | 1h | 🟠 高 | ⬜ |
-| 4 | TWSE OpenAPI BWIBBU_ALL（PE/PB/殖利率） | 中 | 2h | 🟠 高 | ✅ `fa919ce` |
-| 5 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟡 中 | ⬜ |
+| # | 項目 | 難度 | 狀態 | Commit |
+|---|------|------|------|--------|
+| 1 | 盤中延遲 badge | 低 | ✅ | `327d121` |
+| 2 | mis.twse 批次查詢 | 低 | ✅ | 早已實作（見下方說明） |
+| 3 | 補上 TPEX 上櫃行情 | 低 | ✅ | 早已實作（見下方說明） |
+| 4 | TWSE OpenAPI BWIBBU_ALL（PE/PB/殖利率） | 中 | ✅ | `fa919ce` |
+| 5 | Twelve Data 替換美股 yfinance | 中 | ⬜ | — |
+
+### ⚠️ 項目 2 & 3 早已實作說明
+
+調查後發現，批次查詢和 OTC 支援在更早版本就已完整實作：
+
+**批次查詢**（`twse_fetcher.py` + `ws.py`）
+```python
+# twse_fetcher.py — 一次 HTTP call 帶所有 symbols
+ex_ch = "|".join(f"tse_{s}.tw|otc_{s}.tw" for s in symbols)
+```
+```typescript
+// useStockWebSocket.ts — 一條 WS 帶所有 symbols
+const url = `${WS_BASE}/ws/quotes?symbols=${syms.join(",")}`;
+```
+
+**TPEX 上櫃**（同一個 `fetch_quotes` 呼叫）
+- 每個 symbol 同時送 `tse_XXX.tw|otc_XXX.tw` 兩個 prefix
+- TWSE API 只回傳股票實際所屬交易所的資料
+- 上市/上櫃自動分流，無需額外判斷
 
 ---
 
 ## Sprint 7 驗證清單
 
-- [ ] K 線圖右上角在盤中時間顯示「🟡 盤中延遲約 5 秒」
-- [ ] Watchlist 10 支股票的 quote polling 合併為 1 個 request（DevTools Network 確認）
-- [ ] 上櫃股票（如 6278）可正常顯示即時行情
-- [x] 台股基本面 PE/PB/殖利率 改由 TWSE OpenAPI BWIBBU_ALL 提供（commit `fa919ce`）
+- [x] K 線圖右上角在盤中時間顯示「🟡 盤中延遲約 5 秒」（台股 09:00–13:30，`327d121`）
+- [x] quote polling 一次帶所有 symbols（`twse_fetcher.py` 早已實作）
+- [x] 上櫃股票（如 6278）可正常顯示即時行情（`tse_|otc_` 雙 prefix 早已實作）
+- [x] 台股基本面 PE/PB/殖利率 改由 TWSE OpenAPI BWIBBU_ALL 提供（`fa919ce`）
 - [ ] 美股 K 線改由 Twelve Data 提供，Render logs 無 yfinance timeout
 
 ---
