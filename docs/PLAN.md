@@ -527,7 +527,31 @@ const DAILY_PERIODS = [
 
 ## Sprint 3 驗證清單
 
-- [ ] Phase 1：kline/chips 第一次查後，Supabase Dashboard 可見到資料寫入
-- [ ] Phase 1：相同股票第二次查，API log 顯示 "Supabase 命中" 而非 "cache miss"
+- [x] Phase 1：kline/chips 第一次查後，Supabase Dashboard 可見到資料寫入（已確認 ✅ 2026-06-08）
+- [x] Phase 1：相同股票第二次查，API log 顯示 "Supabase 命中" 而非 "cache miss"（已確認 ✅）
 - [ ] Phase 2：migration 執行後，covering index 存在
 - [ ] Phase 2：`EXPLAIN ANALYZE` 顯示 Index Only Scan
+
+---
+
+## Sprint 3 Phase 1 完成摘要（2026-06-08）
+
+| Commit | 功能 | 狀態 |
+|--------|------|------|
+| `8cb7d93` | `config.py` 加 `supabase_service_key`；`supabase_client.py` 加 `get_supabase_admin()` | ✅ |
+| `8cb7d93` | `kline.py` cache miss 後 fire-and-forget upsert（5年過濾） | ✅ |
+| `8cb7d93` | `chips.py` 同步寫穿快取（含 date 欄位修復）| ✅ |
+| Render env | 加 `SUPABASE_SERVICE_KEY`（service_role key），觸發自動重新部署 | ✅ |
+
+### ⚠️ 關鍵坑：Supabase service_role 需 table-level GRANT
+
+`service_role` 雖然繞過 RLS policy，但**仍需顯式 table-level 授權**。
+若只有 RLS policy 沒有 GRANT，會看到 `permission denied for table kline_daily (code: 42501)`。
+
+修復方式（在 Supabase SQL Editor 執行一次）：
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.kline_daily  TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.chips_daily  TO service_role;
+```
+
+執行後資料立即開始寫入，快取生效。
