@@ -483,7 +483,7 @@ export default function Home() {
               </div>
 
               {viewTab === "kline" && (
-                <div className="flex items-center gap-2">
+                <div className="shrink-0 flex items-center gap-2">
                   <DrawingToolbar
                     active={activeTool}
                     onChange={setActiveTool}
@@ -496,7 +496,7 @@ export default function Home() {
                     onClick={fetchVerdict}
                     disabled={verdictLoading}
                     title="AI 一句話評價"
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
+                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
                     style={{
                       background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
                       border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
@@ -511,11 +511,11 @@ export default function Home() {
                     )}
                     <span className="hidden sm:inline">AI 評價</span>
                   </button>
-                  {/* ⛶ 全螢幕按鈕 */}
+                  {/* 全螢幕按鈕 */}
                   <button
                     onClick={() => setFullscreenOpen(true)}
                     title="全螢幕 K 線圖（放大）"
-                    className="flex items-center justify-center px-2 py-1 rounded text-[13px] transition-colors"
+                    className="shrink-0 flex items-center justify-center px-2 py-1 rounded transition-colors"
                     style={{
                       background: "var(--bg-elevated)",
                       border:     "1px solid var(--border)",
@@ -524,7 +524,13 @@ export default function Home() {
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
                   >
-                    ⛶
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                      <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
                   </button>
                 </div>
               )}
