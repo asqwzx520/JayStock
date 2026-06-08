@@ -605,9 +605,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.chips_daily  TO service_role;
 | `53eb059` | `fundamental.py` A+C：FinMind PE/PB + yfinance background | ✅ |
 | `53eb059` | `financials.py` 台股全換 FinMind 財報 | ✅ |
 
-### ⚠️ 關鍵坑：台股 yfinance 在 Render 上永遠失敗
+### ⚠️ 關鍵坑：台股 yfinance 在 Render 上不穩定且慢
 
-Yahoo Finance 封鎖雲端 provider IP（AWS/Render/GCP 等），所有台股資料（`.TW` suffix）都無法從 Render 取得。
-只有**本機開發**時 yfinance 才對台股有效。
+Yahoo Finance 對雲端 provider IP（AWS/Render 等）有限速或偶爾封鎖，台股資料（`.TW` suffix）在 Render 上：
+- **技術面**：有時能跑出來，但要等 10~30 秒（timeout 邊緣）
+- **基本面 / 財報**：`Ticker.info` / `Ticker.financials` 更容易被封，常回傳空資料 → 404
 
-**解法**：台股資料統一走 FinMind API，yfinance 只保留美股用途。
+本機開發時 yfinance 台股正常，上 Render 就不穩定。
+
+**解法**：台股資料統一走 FinMind API（穩定、快速），yfinance 只保留美股用途。
