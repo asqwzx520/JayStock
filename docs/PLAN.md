@@ -1,6 +1,189 @@
 # Sprint Plan — 2026-06-08
 
 > **Sprint 1（4項修復）✅、Sprint 2（季K/年K + VWAP帶 + 板塊）✅、Sprint 3（鍵盤快捷鍵 + 美股 + DB優化）✅、Sprint 4（分析 Tab 修復）✅、Sprint 5（K線圖表強化）✅ 完成（commit `5a31945`，2026-06-09）**
+> **Sprint 6（行情資料來源優化）— 規劃中**
+
+---
+
+# Sprint 6 — 行情資料來源優化
+
+> 規劃日期：2026-06-09
+> 背景：TradingView 差距分析 + 可用免費資料源盤點
+
+## 核心痛點
+
+| 症狀 | 根因 |
+|------|------|
+| 盤中行情有 5~10 秒延遲 | `mis.twse.com.tw` 為 REST polling，非 WebSocket 推播 |
+| 每次 polling 只查一支股票 | API 呼叫次數過高，Render 負載浪費 |
+| 上櫃股（OTC）即時行情缺失 | 未接 `mis.tpex.org.tw` |
+| 美股 yfinance 在 Render 不穩定 | Yahoo Finance 對雲端 IP 有限速/偶爾封鎖 |
+
+---
+
+## Phase 1 — 立即可做（免費，零風險）
+
+### 1-A：前端加「盤中延遲」誠實標示
+
+**檔案**：K 線圖右上角（`ChartWithPanels.tsx` 或 `KLineChart.tsx`）
+
+```tsx
+{/* 盤中才顯示，收盤後不顯示 */}
+{isMarketOpen && (
+  <span className="absolute top-2 right-2 z-10 text-[10px] text-yellow-400/70
+                   bg-black/40 px-1.5 py-0.5 rounded pointer-events-none">
+    🟡 盤中延遲約 5 秒
+  </span>
+)}
+```
+
+**為什麼要做**：避免用戶誤以為平台當機（爆量拉抬時 5 秒看起來像當掉）。
+
+---
+
+### 1-B：台股 mis.twse 改批次查詢（最高 CP 值）
+
+**現況**：每支股票一個 HTTP request（N 個股票 = N 次 polling）。
+
+**改法**：用 `|` 分隔符一次查多支：
+
+```
+GET mis.twse.com.tw/stock/api/getStockInfo.asp?
+    ex_ch=tse_2330.tw|tse_2317.tw|tse_0050.tw|tse_2454.tw...
+```
+
+**效果**：
+- API 呼叫次數 ÷ 30（一次最多 30 支）
+- Render 出站流量大幅下降
+- Watchlist 中所有股票的 polling 合併成 1~2 個 request
+
+**涉及檔案**：`apps/api/app/services/twse_fetcher.py`（或現有 quote polling 邏輯）
+
+---
+
+### 1-C：補上上櫃股（TPEX）即時行情
+
+**現況**：只查 `mis.twse.com.tw`（上市股票），上櫃股（例如 6278、4966）報價來源缺失。
+
+**改法**：股票代碼判斷，上櫃走 `mis.tpex.org.tw`：
+
+```python
+def _get_quote_url(symbol: str) -> str:
+    # 上櫃股代碼通常為 4 位數字，部分從 4 開頭或 6 開頭
+    # 可查 TPEX 清單確認
+    if is_otc(symbol):
+        return f"https://mis.tpex.org.tw/stock/api/getStockInfo.asp?ex_ch=otc_{symbol}.tw"
+    return f"https://mis.twse.com.tw/stock/api/getStockInfo.asp?ex_ch=tse_{symbol}.tw"
+```
+
+---
+
+## Phase 2 — 美股資料源替換
+
+### 問題
+`yfinance` 在 Render 對美股也不穩定（timeout、空資料），需要更可靠的替代方案。
+
+### 比較
+
+| 方案 | 免費限制 | 穩定性 | 建議 |
+|------|---------|--------|------|
+| yfinance（現狀） | 無上限，但 Render 上不穩定 | ⚠️ 時好時壞 | 逐步替換 |
+| **Twelve Data** | 800 次/天，8 次/分 | ✅ 穩定 | **優先換** |
+| Polygon.io free | 無限歷史，1次/min 即時 | ✅ 穩定 | 歷史K線備選 |
+| Alpha Vantage | 25 次/天 | ✅ | ❌ 太少 |
+
+### 改法
+
+**Twelve Data** 替換方案（歷史K線 + quote）：
+
+```python
+# apps/api/app/services/twelve_data_service.py
+import httpx
+
+TWELVE_DATA_KEY = settings.twelve_data_api_key  # env var
+BASE_URL = "https://api.twelvedata.com"
+
+async def fetch_us_kline(symbol: str, start: date, end: date) -> list[dict]:
+    url = f"{BASE_URL}/time_series"
+    params = {
+        "symbol":     symbol,
+        "interval":   "1day",
+        "start_date": str(start),
+        "end_date":   str(end),
+        "apikey":     TWELVE_DATA_KEY,
+        "format":     "JSON",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(url, params=params)
+        data = resp.json().get("values", [])
+    return [{"date": r["datetime"], "open": float(r["open"]), "high": float(r["high"]),
+             "low": float(r["low"]), "close": float(r["close"]),
+             "volume": int(r["volume"])} for r in data]
+```
+
+**涉及檔案**：
+- `apps/api/app/services/twelve_data_service.py`（新建）
+- `apps/api/app/api/v1/kline.py`（美股路徑替換）
+- `apps/api/app/core/config.py`（加 `twelve_data_api_key`）
+- Render 環境變數：加 `TWELVE_DATA_API_KEY`
+
+---
+
+## Phase 3 — 中長期：Fugle WebSocket（用戶自帶 Key）
+
+### 架構
+
+Fugle 行情 API 設計給**個人交易者**使用，server 端共用一個 key 有訂閱數限制（開發者方案：300 支 / 2 連線），不適合直接當 SaaS 後端。
+
+**最可行的方案**：讓進階用戶填入自己的 Fugle API Key，平台負責 WebSocket 連線管理。
+
+```
+用戶填入 Fugle Key → 前端 WS 直連 Fugle
+（不經過 Render，延遲 < 1s）
+```
+
+### 流程
+
+1. 設定頁新增「行情來源」設定：空白（使用預設 5s 輪詢）/ 填入 Fugle Key
+2. 前端帶 Key 直接建立 Fugle WebSocket 連線
+3. 有 Key 的用戶：盤中延遲 < 1s，badge 改為 🟢
+4. 無 Key 的用戶：維持 5s polling，badge 🟡
+
+### 優點
+- **平台完全不用付 Fugle 費用**
+- 用戶用自己的帳號（有 Fugle 帳號者免費可訂 5 支）
+- 差異化功能（進階用戶體驗 vs 免費用戶）
+
+### Fugle 定價（用戶端）
+| 方案 | 訂閱數 | 費用 |
+|------|--------|------|
+| 基本（免費） | 5 支股票 | 免費 |
+| 開發者 | 300 支 | NT$1,499/月 |
+| 進階 | 2000 支 | NT$2,999/月 |
+
+> 對一般散戶：免費方案就夠用（看 1~5 支自選股）
+
+---
+
+## Sprint 6 實作順序
+
+| # | 項目 | 難度 | 預估時間 | 優先序 |
+|---|------|------|---------|--------|
+| 1 | 盤中延遲 badge | 低 | 15 min | 🔴 最高（今天） |
+| 2 | mis.twse 批次查詢 | 低 | 1h | 🔴 最高（今天） |
+| 3 | 補上 TPEX 上櫃行情 | 低 | 1h | 🟠 高 |
+| 4 | Twelve Data 替換美股 yfinance | 中 | 2h | 🟠 高 |
+| 5 | Fugle Key 設定頁 + 前端 WS | 高 | 4h | 🟡 中（待規劃） |
+
+---
+
+## Sprint 6 驗證清單
+
+- [ ] K 線圖右上角在盤中時間顯示「🟡 盤中延遲約 5 秒」
+- [ ] Watchlist 10 支股票的 quote polling 合併為 1 個 request（DevTools Network 確認）
+- [ ] 上櫃股票（如 6278）可正常顯示即時行情
+- [ ] 美股 K 線改由 Twelve Data 提供，Render logs 無 yfinance timeout
+- [ ] 用戶填入 Fugle Key 後，badge 變 🟢，盤中行情 < 1s 更新
 
 ---
 
