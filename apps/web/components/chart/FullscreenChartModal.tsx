@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { ChartBar, ChartType, DrawingTool, IndicatorType } from "@/components/chart/KLineChart";
 import ChartWithPanels from "@/components/chart/ChartWithPanels";
 import PeriodSelector   from "@/components/chart/PeriodSelector";

@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import type { IndicatorParams } from "@/lib/indicatorParams";
 
 interface Props {
-  indicator: keyof IndicatorParams;
-  params:    IndicatorParams;
-  anchorRef: React.RefObject<HTMLElement | null>;
-  onChange:  (next: IndicatorParams) => void;
-  onClose:   () => void;
+  indicator:   keyof IndicatorParams;
+  params:      IndicatorParams;
+  /** 回傳 anchor DOM 元素的 getter，避免在 render 階段讀取 ref.current */
+  getAnchorEl: () => HTMLElement | null;
+  onChange:    (next: IndicatorParams) => void;
+  onClose:     () => void;
 }
 
 // ── 各指標的欄位定義 ─────────────────────────────────────────────────────────
@@ -54,26 +55,27 @@ function getInitialValues(indicator: keyof IndicatorParams, params: IndicatorPar
   return { ...(val as Record<string, number>) };
 }
 
-export default function IndicatorParamPopover({ indicator, params, anchorRef, onChange, onClose }: Props) {
+export default function IndicatorParamPopover({ indicator, params, getAnchorEl, onChange, onClose }: Props) {
   const fields = FIELDS[indicator];
   const [values, setValues] = useState<Record<string, number>>(() =>
     getInitialValues(indicator, params)
   );
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // 點外部關閉
+  // 點外部關閉（在 effect 內呼叫 getAnchorEl()，避免 render 階段讀 ref）
   useEffect(() => {
     function handle(e: MouseEvent) {
+      const anchor = getAnchorEl();
       if (
         popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
-        anchorRef.current  && !anchorRef.current.contains(e.target as Node)
+        (!anchor || !anchor.contains(e.target as Node))
       ) {
         onClose();
       }
     }
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
-  }, [onClose, anchorRef]);
+  }, [onClose, getAnchorEl]);
 
   if (!fields) return null;
 

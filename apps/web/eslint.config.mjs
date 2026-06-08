@@ -19,6 +19,15 @@ const eslintConfig = defineConfig([
     rules: {
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/use-memo": "off",
+      // Allow _underscore-prefixed names to be intentionally unused
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern":   "^_",
+          "varsIgnorePattern":   "^_",
+          "caughtErrorsIgnorePattern": "^_",
+        },
+      ],
     },
   },
 ]);

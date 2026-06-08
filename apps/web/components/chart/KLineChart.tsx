@@ -14,7 +14,6 @@ import {
   type SeriesMarker,
   type SeriesType,
   type CandlestickData,
-  type HistogramData,
   type LineData,
   type Time,
   ColorType,
@@ -167,7 +166,19 @@ function barTime(d: ChartBar): Time {
 function barDate(d: ChartBar): string | undefined {
   return "date" in d ? d.date : undefined;
 }
-import { sma, ema, bollinger, macd, rsi, kd, vwap, vwapBand, wr, obv, atr, adx, stochRsi, ichimoku, type OHLCV } from "@/lib/indicators";
+/**
+ * LW Charts v5 回傳的 param.time 對日K 是 BusinessDay 物件 {year,month,day}，
+ * 對分K 是 number (UTCTimestamp)，對字串型別則直接返回字串。
+ * 統一轉換為可比較的字串/數字字串，避免 String(BusinessDay) → "[object Object]"。
+ */
+function timeToKey(t: Time): string {
+  if (typeof t === "number") return String(t);
+  if (typeof t === "string") return t;
+  // BusinessDay {year, month, day}
+  const bd = t as { year: number; month: number; day: number };
+  return `${bd.year}-${String(bd.month).padStart(2, "0")}-${String(bd.day).padStart(2, "0")}`;
+}
+import { sma, ema, bollinger, vwap, vwapBand, ichimoku, type OHLCV } from "@/lib/indicators";
 import { type IndicatorParams, DEFAULT_PARAMS } from "@/lib/indicatorParams";
 import IndicatorParamPopover from "@/components/chart/IndicatorParamPopover";
 
@@ -209,7 +220,6 @@ interface KLineChartProps {
   onCrosshairMove?:  (bar: ChartBar | null) => void;
 }
 
-const MA_PERIODS = [5, 10, 20, 60];
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
 // ── Pattern marker helpers ────────────────────────────────────────────────────
@@ -257,10 +267,11 @@ export default function KLineChart({
 
   // ── 參數 Popover 狀態 ──────────────────────────────────────────────────────
   const [paramPopover, setParamPopover] = useState<keyof IndicatorParams | null>(null);
-  const legendBtnRefs = useRef<Partial<Record<string, React.RefObject<HTMLButtonElement>>>>({});
+  // 儲存各 legend 按鈕的 DOM 元素，使用 callback ref 寫入（不在 render 階段讀取）
+  const legendBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  // ── 十字線懸停的 bar ─────────────────────────────────────────────────────
-  const [hoveredBar, setHoveredBar] = useState<ChartBar | null>(null);
+  // ── 十字線懸停的 bar（只用 setter，值透過 onCrosshairMove 傳給父層）─────
+  const [, setHoveredBar] = useState<ChartBar | null>(null);
 
   // ── Drawing canvas ────────────────────────────────────────────────────────
   const canvasRef      = useRef<HTMLCanvasElement>(null);
@@ -777,7 +788,8 @@ export default function KLineChart({
         setHoveredBar(null);
         return;
       }
-      const bar = data.find((d) => String(barTime(d)) === String(param.time)) ?? null;
+      const key = timeToKey(param.time);
+      const bar = data.find((d) => timeToKey(barTime(d)) === key) ?? null;
       onCrosshairMove?.(bar);
       setHoveredBar(bar);
     });
@@ -849,6 +861,7 @@ export default function KLineChart({
 
     chart.timeScale().fitContent();
     setTimeout(() => redrawFnRef.current(), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, indicators, chipsData, chartType]);
 
   useEffect(() => { buildChart(); }, [buildChart]);
@@ -1093,12 +1106,6 @@ export default function KLineChart({
     return items;
   }, [indicators, params]);
 
-  // 確保每個 legend 按鈕有對應的 ref（供 Popover 定位用）
-  legendItems.forEach((item) => {
-    if (!legendBtnRefs.current[item.key]) {
-      legendBtnRefs.current[item.key] = { current: null } as unknown as React.RefObject<HTMLButtonElement>;
-    }
-  });
 
   const isDrawing = activeTool !== "cursor";
   const canvasCursor =
@@ -1168,41 +1175,38 @@ export default function KLineChart({
       {/* ── 指標 Legend（左上角，可點擊編輯參數）────────────────────────── */}
       {legendItems.length > 0 && (
         <div className="absolute top-1 left-1 z-20 flex flex-wrap gap-1 pointer-events-none">
-          {legendItems.map((item) => {
-            const btnRef = legendBtnRefs.current[item.key] as React.RefObject<HTMLButtonElement>;
-            return (
-              <div key={item.key} className="relative pointer-events-auto">
-                <button
-                  ref={btnRef}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-opacity hover:opacity-100 opacity-80"
-                  style={{
-                    background: "rgba(0,0,0,0.55)",
-                    color:       item.color,
-                    border:      `1px solid ${item.color}44`,
-                  }}
-                  onClick={() => setParamPopover(prev => prev === item.paramKey ? null : item.paramKey)}
-                  title={`點擊編輯 ${item.paramKey} 參數`}
-                >
-                  {item.label}
-                  <span style={{ opacity: 0.5, fontSize: "8px" }}>✎</span>
-                </button>
+          {legendItems.map((item) => (
+            <div key={item.key} className="relative pointer-events-auto">
+              <button
+                ref={(el) => { legendBtnRefs.current[item.key] = el; }}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-opacity hover:opacity-100 opacity-80"
+                style={{
+                  background: "rgba(0,0,0,0.55)",
+                  color:       item.color,
+                  border:      `1px solid ${item.color}44`,
+                }}
+                onClick={() => setParamPopover(prev => prev === item.paramKey ? null : item.paramKey)}
+                title={`點擊編輯 ${item.paramKey} 參數`}
+              >
+                {item.label}
+                <span style={{ opacity: 0.5, fontSize: "8px" }}>✎</span>
+              </button>
 
-                {/* Popover：同一 paramKey 只開一個 */}
-                {paramPopover === item.paramKey && (
-                  <IndicatorParamPopover
-                    indicator={item.paramKey}
-                    params={params}
-                    anchorRef={btnRef}
-                    onChange={(next) => {
-                      onParamsChange?.(next);
-                      setParamPopover(null);
-                    }}
-                    onClose={() => setParamPopover(null)}
-                  />
-                )}
-              </div>
-            );
-          })}
+              {/* Popover：同一 paramKey 只開一個 */}
+              {paramPopover === item.paramKey && (
+                <IndicatorParamPopover
+                  indicator={item.paramKey}
+                  params={params}
+                  getAnchorEl={() => legendBtnRefs.current[item.key] ?? null}
+                  onChange={(next) => {
+                    onParamsChange?.(next);
+                    setParamPopover(null);
+                  }}
+                  onClose={() => setParamPopover(null)}
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

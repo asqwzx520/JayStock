@@ -409,59 +409,60 @@ export default function Home() {
           {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
           {(viewTab === "kline" || viewTab === "chips") && (
             <div
-              className="shrink-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 border-b overflow-x-auto"
+              className="shrink-0 flex items-center border-b"
               style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
             >
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                {/* 代碼 + 報價 */}
-                <div className="flex items-baseline gap-2">
-                  <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    {symbol}
-                  </span>
-                  <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {stockName}
-                  </span>
-                  {/* 美股市場標示 */}
-                  {market === "US" && (
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-                      style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
-                    >
-                      🇺🇸 US
+              {/* ── 可橫向滾動區塊（股票資訊、週期、繪圖工具、指標）── */}
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 overflow-x-auto">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap shrink-0">
+                  {/* 代碼 + 報價 */}
+                  <div className="flex items-baseline gap-2">
+                    <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                      {symbol}
                     </span>
-                  )}
-                  {quote && (
-                    <span
-                      className="num text-base font-bold"
-                      style={{
-                        color: quote.change > 0
-                          ? "var(--color-up)"
-                          : quote.change < 0
-                          ? "var(--color-down)"
-                          : "var(--color-flat)",
-                      }}
-                    >
-                      {quote.price.toFixed(2)}
-                      <span className="text-xs ml-1.5">
-                        {quote.change > 0 ? "+" : ""}
-                        {quote.change_pct.toFixed(2)}%
+                    <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {stockName}
+                    </span>
+                    {/* 美股市場標示 */}
+                    {market === "US" && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                        style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
+                      >
+                        🇺🇸 US
                       </span>
-                    </span>
-                  )}
-                </div>
+                    )}
+                    {quote && (
+                      <span
+                        className="num text-base font-bold"
+                        style={{
+                          color: quote.change > 0
+                            ? "var(--color-up)"
+                            : quote.change < 0
+                            ? "var(--color-down)"
+                            : "var(--color-flat)",
+                        }}
+                      >
+                        {quote.price.toFixed(2)}
+                        <span className="text-xs ml-1.5">
+                          {quote.change > 0 ? "+" : ""}
+                          {quote.change_pct.toFixed(2)}%
+                        </span>
+                      </span>
+                    )}
+                  </div>
 
-                {/* 分隔線 */}
-                <div className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} />
+                  {/* 分隔線 */}
+                  <div className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} />
 
-                {/* K線：週期 + 圖形種類 */}
-                {viewTab === "kline" ? (
-                  <>
-                    <PeriodSelector active={period} onChange={setPeriod} />
-                    <ChartTypeSelector active={chartType} onChange={setChartType} />
-                  </>
-                ) : (
-                  /* 籌碼：天數 + 子 tab + streak */
-                  <>
+                  {/* K線：週期 + 圖形種類 */}
+                  {viewTab === "kline" ? (
+                    <>
+                      <PeriodSelector active={period} onChange={setPeriod} />
+                      <ChartTypeSelector active={chartType} onChange={setChartType} />
+                    </>
+                  ) : (
+                    /* 籌碼：天數 */
                     <div className="flex items-center gap-1">
                       {CHIPS_DAYS.map((d) => (
                         <button
@@ -477,45 +478,50 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
+                  )}
+                </div>
 
-                  </>
+                {viewTab === "kline" && (
+                  <div className="shrink-0 flex items-center gap-2">
+                    <DrawingToolbar
+                      active={activeTool}
+                      onChange={setActiveTool}
+                      onClearAll={() => setDrawingClearKey((k) => k + 1)}
+                      onAlertClick={() => setAlertModalOpen(true)}
+                    />
+                    <IndicatorSelector active={indicators} onChange={setIndicators} />
+                    {/* 🤖 AI 一句話評價按鈕 */}
+                    <button
+                      onClick={fetchVerdict}
+                      disabled={verdictLoading}
+                      title="AI 一句話評價"
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
+                      style={{
+                        background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
+                        border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
+                        color:       verdict ? "var(--color-brand)" : "var(--text-secondary)",
+                        opacity:     verdictLoading ? 0.6 : 1,
+                      }}
+                    >
+                      {verdictLoading ? (
+                        <span className="animate-spin text-[12px]">⟳</span>
+                      ) : (
+                        "🤖"
+                      )}
+                      <span className="hidden sm:inline">AI 評價</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
+              {/* ── 全螢幕按鈕：永遠固定在最右側，不參與橫向捲動 ── */}
               {viewTab === "kline" && (
-                <div className="shrink-0 flex items-center gap-2">
-                  <DrawingToolbar
-                    active={activeTool}
-                    onChange={setActiveTool}
-                    onClearAll={() => setDrawingClearKey((k) => k + 1)}
-                    onAlertClick={() => setAlertModalOpen(true)}
-                  />
-                  <IndicatorSelector active={indicators} onChange={setIndicators} />
-                  {/* 🤖 AI 一句話評價按鈕 */}
-                  <button
-                    onClick={fetchVerdict}
-                    disabled={verdictLoading}
-                    title="AI 一句話評價"
-                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
-                    style={{
-                      background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
-                      border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
-                      color:       verdict ? "var(--color-brand)" : "var(--text-secondary)",
-                      opacity:     verdictLoading ? 0.6 : 1,
-                    }}
-                  >
-                    {verdictLoading ? (
-                      <span className="animate-spin text-[12px]">⟳</span>
-                    ) : (
-                      "🤖"
-                    )}
-                    <span className="hidden sm:inline">AI 評價</span>
-                  </button>
-                  {/* 全螢幕按鈕 */}
+                <div className="shrink-0 flex items-center px-2 py-1.5 border-l"
+                     style={{ borderColor: "var(--border)" }}>
                   <button
                     onClick={() => setFullscreenOpen(true)}
                     title="全螢幕 K 線圖（放大）"
-                    className="shrink-0 flex items-center justify-center px-2 py-1 rounded transition-colors"
+                    className="flex items-center justify-center px-2 py-1 rounded transition-colors"
                     style={{
                       background: "var(--bg-elevated)",
                       border:     "1px solid var(--border)",
