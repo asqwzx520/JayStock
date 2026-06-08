@@ -14,6 +14,7 @@ import {
   getDashboardSummary,
   getAiWatchlistSummary,
   getRecommendations,
+  getSectorHeatmap,
   alertRulesApi,
   watchlistApi,
   getUserId,
@@ -28,6 +29,7 @@ import {
   type CreateAlertRulePayload,
   type WatchlistState,
   type RecommendationPick,
+  type SectorData,
 } from "@/lib/api";
 
 // ─── localStorage helpers (same as LeftPanel) ───────────────────────────────
@@ -118,6 +120,40 @@ function VolRatioBadge({ ratio }: { ratio: number }) {
     >
       量{ratio.toFixed(1)}x
     </span>
+  );
+}
+
+// ─── 首頁板塊熱力 Mini Bar ────────────────────────────────────────────────────
+function MiniSectorBar({ sectors }: { sectors: SectorData[] }) {
+  if (sectors.length === 0) return null;
+  return (
+    <div
+      className="rounded-xl px-3 py-2.5"
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+    >
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>📊 板塊概覽</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {sectors.map((s) => {
+          const pct = s.avg_change;
+          const isUp = pct >= 0;
+          const bgColor  = isUp ? "rgba(34,197,94,0.10)"  : "rgba(239,68,68,0.10)";
+          const txtColor = isUp ? "var(--color-up)"        : "var(--color-down)";
+          const bdrColor = isUp ? "rgba(34,197,94,0.25)"   : "rgba(239,68,68,0.25)";
+          return (
+            <span
+              key={s.name}
+              className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+              style={{ background: bgColor, color: txtColor, border: `1px solid ${bdrColor}` }}
+              title={`上漲${s.advances} 下跌${s.declines}（共${s.total}檔）`}
+            >
+              {s.name}&nbsp;{pct >= 0 ? "+" : ""}{pct.toFixed(2)}%
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -783,6 +819,9 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
   const [picksError, setPicksError]     = useState<string | null>(null);
   const [picksOpen, setPicksOpen]       = useState(false);
 
+  // 板塊概覽（首頁小版）
+  const [sectors, setSectors] = useState<SectorData[]>([]);
+
   const userId = typeof window !== "undefined" ? getUserId() : "";
 
   // ── 載入自訂規則 ───────────────────────────────────────────────────────────
@@ -835,6 +874,8 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
     }
 
     loadRules();
+    // 板塊概覽：靜默失敗，不影響主要 dashboard
+    getSectorHeatmap().then((r) => setSectors(r.sectors)).catch(() => {});
   }, [loadDashboard, loadRules, userId]);
 
   // ── AI 每日自選股摘要 ──────────────────────────────────────────────────────
@@ -1143,6 +1184,9 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
             ))}
           </div>
         )}
+
+        {/* 板塊概覽 Mini Bar */}
+        <MiniSectorBar sectors={sectors} />
 
         {/* Block ① 今日警示 */}
         {(!loading || summary) && (

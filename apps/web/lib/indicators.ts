@@ -497,3 +497,48 @@ export function ichimoku(
 
   return { tenkan, kijun, senkouA, senkouB, chikou };
 }
+
+// ── VWAP Band (VWAP ± 1σ 通道) ───────────────────────────────────────────────
+export interface VWAPBandResult {
+  vwap:  (number | null)[];
+  upper: (number | null)[];
+  lower: (number | null)[];
+}
+
+/**
+ * 滾動 VWAP ± 1 標準差通道（rolling window = period，適合日K）
+ * upper = VWAP + 1σ, lower = VWAP - 1σ
+ */
+export function vwapBand(bars: OHLCV[], period = 20): VWAPBandResult {
+  const n = bars.length;
+  const vwapArr:  (number | null)[] = new Array(n).fill(null);
+  const upperArr: (number | null)[] = new Array(n).fill(null);
+  const lowerArr: (number | null)[] = new Array(n).fill(null);
+
+  for (let i = period - 1; i < n; i++) {
+    let sumTPV = 0, sumV = 0;
+    const tps: number[] = [];
+
+    for (let j = i - period + 1; j <= i; j++) {
+      const tp = (bars[j].high + bars[j].low + bars[j].close) / 3;
+      const v  = bars[j].volume;
+      sumTPV += tp * v;
+      sumV   += v;
+      tps.push(tp);
+    }
+
+    if (sumV === 0) continue;
+    const vw = sumTPV / sumV;
+    vwapArr[i] = vw;
+
+    // 以 TP 對 VWAP 的離差計算 σ（等量加權）
+    let variance = 0;
+    for (const tp of tps) variance += (tp - vw) ** 2;
+    const sigma = Math.sqrt(variance / period);
+
+    upperArr[i] = vw + sigma;
+    lowerArr[i] = vw - sigma;
+  }
+
+  return { vwap: vwapArr, upper: upperArr, lower: lowerArr };
+}

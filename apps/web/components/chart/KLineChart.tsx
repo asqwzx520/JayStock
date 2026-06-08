@@ -167,9 +167,9 @@ function barTime(d: ChartBar): Time {
 function barDate(d: ChartBar): string | undefined {
   return "date" in d ? d.date : undefined;
 }
-import { sma, ema, bollinger, macd, rsi, kd, vwap, wr, obv, atr, adx, stochRsi, ichimoku, type OHLCV } from "@/lib/indicators";
+import { sma, ema, bollinger, macd, rsi, kd, vwap, vwapBand, wr, obv, atr, adx, stochRsi, ichimoku, type OHLCV } from "@/lib/indicators";
 
-export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "WR" | "OBV" | "ATR" | "ADX" | "SRSI" | "ICHI";
+export type IndicatorType = "MA" | "EMA" | "BOLL" | "MACD" | "RSI" | "KD" | "CHIPS" | "VWAP" | "VWAP_BAND" | "WR" | "OBV" | "ATR" | "ADX" | "SRSI" | "ICHI";
 
 // ── Heikin-Ashi 計算 ──────────────────────────────────────────────────────────
 function computeHeikinAshi(bars: ChartBar[]): CandlestickData<Time>[] {
@@ -757,6 +757,26 @@ export default function KLineChart({
       const s = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: "VWAP" });
       s.setData(lineData);
       seriesRefs.current.push(s);
+    }
+
+    if (indicators.includes("VWAP_BAND")) {
+      const band = vwapBand(bars, 20);
+      const vwapLine: LineData<Time>[] = [];
+      const upperLine: LineData<Time>[] = [];
+      const lowerLine: LineData<Time>[] = [];
+      band.vwap.forEach((v, i) => { if (v !== null) vwapLine.push({ time: barTime(data[i]), value: v }); });
+      band.upper.forEach((v, i) => { if (v !== null) upperLine.push({ time: barTime(data[i]), value: v }); });
+      band.lower.forEach((v, i) => { if (v !== null) lowerLine.push({ time: barTime(data[i]), value: v }); });
+      // VWAP 中線（紫色虛線）
+      const vwapS = chart.addSeries(LineSeries, { color: "#C084FC", lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: "VWAP" });
+      vwapS.setData(vwapLine);
+      // 上通道（淡紫實線）
+      const upperS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, title: "+1σ" });
+      upperS.setData(upperLine);
+      // 下通道（淡紫實線）
+      const lowerS = chart.addSeries(LineSeries, { color: "#E879F9", lineWidth: 1, lineStyle: LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, title: "-1σ" });
+      lowerS.setData(lowerLine);
+      seriesRefs.current.push(vwapS, upperS, lowerS);
     }
 
     if (indicators.includes("WR")) {
