@@ -529,8 +529,9 @@ const DAILY_PERIODS = [
 
 - [x] Phase 1：kline/chips 第一次查後，Supabase Dashboard 可見到資料寫入（已確認 ✅ 2026-06-08）
 - [x] Phase 1：相同股票第二次查，API log 顯示 "Supabase 命中" 而非 "cache miss"（已確認 ✅）
-- [ ] Phase 2：migration 執行後，covering index 存在
-- [ ] Phase 2：`EXPLAIN ANALYZE` 顯示 Index Only Scan
+- [ ] Phase 2：在 Supabase SQL Editor 執行 `20260609_phase2_phase3.sql`，covering index 建立完成
+- [ ] Phase 2：`EXPLAIN ANALYZE SELECT ... FROM kline_daily WHERE symbol='2330' ORDER BY date DESC LIMIT 365` 顯示 Index Only Scan
+- [ ] Phase 3：fundamental_cache / news_cache 表已建立，第一次查詢後 Supabase Dashboard 可見資料
 
 ---
 

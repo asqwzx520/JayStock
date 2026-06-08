@@ -658,23 +658,83 @@ def _fetch_news_sync(ticker_sym: str) -> list[dict]:
         return []
 
 
+async def _news_from_supabase(symbol: str) -> list[dict] | None:
+    """從 Supabase 讀取新聞快取（TTL 4 小時）"""
+    try:
+        from datetime import datetime, timezone, timedelta
+        from app.core.supabase_client import get_supabase
+        supabase = get_supabase()
+        if supabase is None:
+            return None
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(
+            None,
+            lambda: supabase.table("news_cache")
+                            .select("items, cached_at")
+                            .eq("symbol", symbol)
+                            .gte("cached_at", cutoff)
+                            .execute(),
+        )
+        rows = resp.data
+        if rows:
+            return rows[0]["items"]
+        return None
+    except Exception as exc:
+        logger.warning("[news] Supabase 讀取失敗: %s", exc)
+        return None
+
+
+async def _upsert_news_cache(symbol: str, items: list[dict]) -> None:
+    """Fire-and-forget：將新聞列表寫入 Supabase news_cache"""
+    try:
+        from datetime import datetime, timezone
+        from app.core.supabase_client import get_supabase_admin
+        admin = get_supabase_admin()
+        if admin is None:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: admin.table("news_cache")
+                         .upsert({"symbol": symbol, "items": items, "cached_at": now},
+                                 on_conflict="symbol")
+                         .execute(),
+        )
+        logger.debug("[news] upserted Supabase cache for %s (%d items)", symbol, len(items))
+    except Exception as exc:
+        logger.warning("[news] Supabase upsert 失敗（非致命）: %s", exc)
+
+
 async def fetch_stock_news(symbol: str) -> list[dict]:
     """
     取得個股新聞（yfinance）
+    資料層級：L1 in-memory（10 min）→ L2 Supabase（4 hr）→ L3 yfinance live
     台股加 .TW 後綴；美股直接用原代碼。
-    快取 TTL：10 分鐘
     """
     key = symbol.upper()
     now = time.time()
+
+    # L1：in-memory（10 分鐘，避免同一 server instance 重複打 Supabase）
     cached = _news_cache.get(key)
     if cached and now - cached.get("ts", 0) < _NEWS_TTL:
         return cached["data"]
 
-    # 台股代碼：4~6 位數字（可帶 1 個英文後綴），如 2330、0050、00878、00631L
+    # L2：Supabase 持久快取（4 小時 TTL）
+    news = await _news_from_supabase(key)
+    if news is not None:
+        logger.debug("[news] %s Supabase cache hit (%d items)", key, len(news))
+        _news_cache[key] = {"data": news, "ts": now}
+        return news
+
+    # L3：yfinance live fetch，完成後 fire-and-forget 寫回 Supabase
     import re as _re
     ticker_sym = f"{symbol}.TW" if _re.match(r"^\d{4,6}[A-Za-z]?$", symbol) else symbol.upper()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     news = await loop.run_in_executor(None, _fetch_news_sync, ticker_sym)
 
     _news_cache[key] = {"data": news, "ts": now}
+    if news:
+        asyncio.create_task(_upsert_news_cache(key, news))
     return news

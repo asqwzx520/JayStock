@@ -12,12 +12,14 @@ GET /api/v1/fundamental/{symbol}
 
 import asyncio
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from app.core.rate_limit import limiter
 from app.core.cache import ttl_cache
 from app.core.validators import validate_symbol
+from app.core.supabase_client import get_supabase, get_supabase_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -132,17 +134,72 @@ def _fetch_fundamental_sync(symbol: str) -> dict:
         return {}
 
 
+async def _fundamental_from_supabase(symbol: str) -> dict | None:
+    """從 Supabase 讀取基本面快取（TTL 7 天）"""
+    try:
+        supabase = get_supabase()
+        if supabase is None:
+            return None
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(
+            None,
+            lambda: supabase.table("fundamental_cache")
+                            .select("data, cached_at")
+                            .eq("symbol", symbol)
+                            .gte("cached_at", cutoff)
+                            .execute(),
+        )
+        rows = resp.data
+        if rows:
+            return rows[0]["data"]
+        return None
+    except Exception as exc:
+        logger.warning("[fundamental] Supabase 讀取失敗: %s", exc)
+        return None
+
+
+async def _upsert_fundamental_cache(symbol: str, data: dict) -> None:
+    """Fire-and-forget：將基本面資料寫入 Supabase fundamental_cache"""
+    admin = get_supabase_admin()
+    if admin is None:
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: admin.table("fundamental_cache")
+                         .upsert({"symbol": symbol, "data": data, "cached_at": now},
+                                 on_conflict="symbol")
+                         .execute(),
+        )
+        logger.debug("[fundamental] upserted Supabase cache for %s", symbol)
+    except Exception as exc:
+        logger.warning("[fundamental] Supabase upsert 失敗（非致命）: %s", exc)
+
+
 @router.get("/fundamental/{symbol}")
 @limiter.limit("30/minute")
 async def get_fundamental(request: Request, symbol: str):
     """
     取得個股基本面資料
+    資料層級：Supabase 快取（7天）→ yfinance live
     台股範例：GET /api/v1/fundamental/2330
     美股範例：GET /api/v1/fundamental/AAPL
     """
     sym = validate_symbol(symbol)
-    loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(None, _fetch_fundamental_sync, sym)
+
+    # L1：Supabase 快取（7 天 TTL）
+    data = await _fundamental_from_supabase(sym)
+
+    # L2：Supabase miss → yfinance，並 fire-and-forget 寫回快取
+    if not data:
+        logger.debug("[fundamental] %s Supabase miss，呼叫 yfinance", sym)
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, _fetch_fundamental_sync, sym)
+        if data:
+            asyncio.create_task(_upsert_fundamental_cache(sym, data))
 
     if not data:
         raise HTTPException(status_code=404, detail=f"Fundamental data not found for {sym}")
