@@ -25,7 +25,8 @@ const syne = Syne({
 });
 
 const notoSansTC = Noto_Sans_TC({
-  subsets: ["chinese-traditional"],
+  // 中文字型不支援 subset，改用 preload: false 避免阻塞
+  preload: false,
   weight: ["400", "500", "700"],
   variable: "--loaded-noto-sans-tc",
   display: "swap",
