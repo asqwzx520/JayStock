@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
   createChart, LineSeries, ColorType, CrosshairMode,
-  type IChartApi, type ISeriesApi, type LineData, type Time,
+  type IChartApi, type Time,
 } from "lightweight-charts";
 import {
   getChips, getBrokerChips, getForeignHolding, getMargin,

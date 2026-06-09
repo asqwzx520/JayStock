@@ -341,8 +341,7 @@ function VolumeProfileSection({ symbol }: { symbol: string }) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { setData(null); setError(null); load(symbol, vpPeriod); }, [symbol]);
-  useEffect(() => { if (data !== null || loading) load(symbol, vpPeriod); }, [vpPeriod]);
+  useEffect(() => { setData(null); setError(null); load(symbol, vpPeriod); }, [symbol, vpPeriod]);
 
   const W_BAR_MAX = 200;   // max SVG bar width in px
 
@@ -972,7 +971,7 @@ function ForeignHoldingChart({ items }: { items: ForeignHoldingItem[] }) {
       {/* Area + line: holding % */}
       <path d={areaD} fill="url(#fh-grad)" />
       <polyline points={linePts} fill="none"
-        stroke="#3b82f6" strokeWidth={2} strokeLinejoin="round" />
+        stroke={lineColor} strokeWidth={2} strokeLinejoin="round" />
 
       {/* Price overlay */}
       {hasPrice && (
@@ -1654,13 +1653,11 @@ function PeerComparisonSection({
   data,
   loading,
   error,
-  targetSymbol,
   onCustomPeers,
 }: {
   data:          PeerComparisonResponse | null;
   loading:       boolean;
   error:         string | null;
-  targetSymbol:  string;
   onCustomPeers: (peers: string) => void;
 }) {
   const [editMode,  setEditMode]  = useState(false);
@@ -2265,7 +2262,6 @@ export default function AnalysisPanel({ symbol }: Props) {
               <MonthlyRevenueSection data={revData}  loading={revLoad}  error={revErr}  />
               <PeerComparisonSection
                 data={peerData}  loading={peerLoad} error={peerErr}
-                targetSymbol={symbol}
                 onCustomPeers={(peers) => { setCustomPeers(peers); loadPeers(symbol, peers); }}
               />
             </div>

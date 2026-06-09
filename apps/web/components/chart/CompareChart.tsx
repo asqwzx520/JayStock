@@ -172,12 +172,13 @@ export default function CompareChart({ initialSymbol = "2330" }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount（ref 的 current 要在 effect body 裡複製，cleanup function 才能安全存取）
   useEffect(() => {
+    const seriesMapCopy = seriesMap.current;
     return () => {
       chartRef.current?.remove();
       chartRef.current = null;
-      seriesMap.current.clear();
+      seriesMapCopy.clear();
     };
   }, []);
 

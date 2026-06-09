@@ -5,7 +5,6 @@ import {
   createChart,
   LineSeries,
   type IChartApi,
-  type LineData,
   type Time,
   ColorType,
   CrosshairMode,
