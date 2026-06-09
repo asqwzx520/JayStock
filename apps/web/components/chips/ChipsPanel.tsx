@@ -271,7 +271,9 @@ function ForeignHoldingSection({ symbol }: { symbol: string }) {
         </div>
       ) : data.length === 0 ? (
         <div className="h-20 flex items-center justify-center">
-          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>僅台股支援，美股不適用</span>
+          <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+            {/^\d{4,6}$/.test(symbol) ? "外資持股資料暫時無法取得" : "僅台股支援，美股不適用"}
+          </span>
         </div>
       ) : (
         <div ref={containerRef} />

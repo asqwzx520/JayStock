@@ -89,13 +89,41 @@ def _yf_quote_sync(ticker_sym: str) -> dict:
 
 # ── 大盤指數 ─────────────────────────────────────────────────────────────────
 
+async def _fetch_twii_from_twse() -> dict:
+    """
+    從 mis.twse.com.tw 取得台股加權指數即時報價，作為 yfinance 的備援。
+    回傳格式與 _yf_quote_sync 相同：{price, change, change_pct}
+    """
+    try:
+        import httpx
+        url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0"
+        async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "Mozilla/5.0"}) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+        items = data.get("msgArray", [])
+        if not items:
+            return {}
+        item = items[0]
+        price      = float(item.get("z", item.get("y", "")) or 0)
+        prev_close = float(item.get("y", "") or 0)
+        if price == 0 or prev_close == 0:
+            return {}
+        change     = round(price - prev_close, 2)
+        change_pct = round(change / prev_close * 100, 2)
+        return {"price": round(price, 2), "change": change, "change_pct": change_pct}
+    except Exception as exc:
+        logger.debug("[market] TWSE TWII fallback failed: %s", exc)
+        return {}
+
+
 async def fetch_indices() -> list[dict]:
     """取得各大盤指數（帶 TTL 快取）"""
     now = time.time()
     if _indices_cache.get("data") and now - _indices_cache.get("ts", 0) < _INDICES_TTL:
         return _indices_cache["data"]
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     tasks = [
         loop.run_in_executor(None, _yf_quote_sync, meta["ticker"])
         for meta in _INDEX_META
@@ -106,6 +134,11 @@ async def fetch_indices() -> list[dict]:
     for meta, q in zip(_INDEX_META, quotes):
         if isinstance(q, Exception) or not q:
             q = {}
+
+        # 台股加權指數：yfinance 在 Render 上可能被擋，改用 TWSE 備援
+        if meta["id"] == "TWII" and not q:
+            q = await _fetch_twii_from_twse()
+
         results.append({
             "id":         meta["id"],
             "name":       meta["name"],

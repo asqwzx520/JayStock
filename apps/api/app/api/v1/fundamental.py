@@ -199,14 +199,19 @@ async def get_fundamental(request: Request, symbol: str):
     loop = asyncio.get_running_loop()
 
     if is_tw:
-        # 台股：A+C 策略
+        # 台股：三路並行 fetch
         # A — TWSE OpenAPI BWIBBU_ALL：一次 bulk fetch 全市場 PE/PB/殖利率
-        #     （取代 FinMind 逐支呼叫，節省 FinMind quota）
-        # C — yfinance 12s timeout 補其餘欄位（失敗不影響回傳）
-        from app.services.twse_openapi_service import fetch_all_per_pbr
+        # B — FinMind 財務報表（最近一年）：毛利率/營利率/淨利率/EPS/成長率
+        # C — yfinance 12s timeout 補其餘欄位（Render 上常被擋，失敗不影響回傳）
+        from app.services.twse_openapi_service import fetch_all_per_pbr, fetch_all_daily_quotes
+        from app.services.finmind_service import fetch_financial_statements
 
-        per_map, yf_result = await asyncio.gather(
+        start_fin = datetime.now(timezone.utc).date() - timedelta(days=730)   # 最近 2 年
+
+        per_map, daily_map, stmt_rows, yf_result = await asyncio.gather(
             fetch_all_per_pbr(),
+            fetch_all_daily_quotes(),
+            fetch_financial_statements(sym, start_fin),
             asyncio.wait_for(
                 loop.run_in_executor(None, _fetch_fundamental_sync, sym),
                 timeout=12.0,
@@ -218,7 +223,7 @@ async def get_fundamental(request: Request, symbol: str):
         data = (yf_result if isinstance(yf_result, dict) and yf_result
                 else {"symbol": sym})
 
-        # 用 TWSE OpenAPI PE/PB/殖利率覆蓋（官方資料，更可靠）
+        # ── A：TWSE OpenAPI PE/PB/殖利率覆蓋（官方資料，更可靠）──────────────
         if isinstance(per_map, dict):
             per_data = per_map.get(sym, {})
             pe = per_data.get("pe")
@@ -230,6 +235,91 @@ async def get_fundamental(request: Request, symbol: str):
                 data["pb_ratio"] = pb
             if dy is not None:
                 data["dividend_yield"] = dy   # TWSE 殖利率比 yfinance 更準確
+
+        # ── A2：TWSE 日行情取最新收盤價（用於估算 market_cap）──────────────────
+        if isinstance(daily_map, dict) and sym in daily_map and not data.get("market_cap"):
+            price = daily_map[sym].get("close")
+            # market_cap 估算需要流通股數，此處僅補收盤價
+            if price and not data.get("current_price"):
+                data.setdefault("current_price", price)
+
+        # ── B：FinMind 財務報表 → 計算盈利能力指標 ──────────────────────────────
+        if isinstance(stmt_rows, list) and stmt_rows:
+            try:
+                # 整理最近 2 年的年度數字（同 financials.py 邏輯）
+                by_date: dict[str, dict[str, float]] = {}
+                for r in stmt_rows:
+                    d, t, v = r.get("date", ""), r.get("type", ""), r.get("value")
+                    if d and t and v is not None:
+                        try:
+                            by_date.setdefault(d, {})[t] = float(v)
+                        except (TypeError, ValueError):
+                            pass
+
+                def _find_val(p: dict, *keys):
+                    for k in keys:
+                        v = p.get(k)
+                        if v is not None:
+                            return v
+                    return None
+
+                # 取最近有資料的 2 年（取最後一季 per year）
+                years_data: dict[int, dict] = {}
+                for d_str in sorted(by_date.keys()):
+                    try:
+                        yr = int(d_str[:4])
+                        mo = int(d_str[5:7])
+                    except Exception:
+                        continue
+                    p = by_date[d_str]
+                    rev = _find_val(p, "Revenue", "OperatingRevenue", "TotalRevenue")
+                    gp  = _find_val(p, "GrossProfit", "GrossProfitLoss")
+                    oi  = _find_val(p, "OperatingIncome", "OperatingProfit", "ProfitFromOperations")
+                    ni  = _find_val(p, "NetIncome", "NetIncomeAttributableToOwnersOfParent",
+                                       "ProfitAttributableToOwnersOfParent", "ProfitForThePeriod",
+                                       "AfterTaxProfit")
+                    eps = _find_val(p, "EPS", "BasicEPS", "BasicEarningsPerShare")
+                    if rev or ni or eps:
+                        if yr not in years_data or mo > years_data[yr].get("_month", 0):
+                            years_data[yr] = {"rev": rev, "gp": gp, "oi": oi, "ni": ni, "eps": eps, "_month": mo}
+
+                if years_data:
+                    sorted_years = sorted(years_data.keys())
+                    latest = years_data[sorted_years[-1]]
+                    rev_l = latest.get("rev")
+                    gp_l  = latest.get("gp")
+                    oi_l  = latest.get("oi")
+                    ni_l  = latest.get("ni")
+                    eps_l = latest.get("eps")
+
+                    # 毛利率 / 營利率 / 淨利率
+                    if rev_l and rev_l > 0:
+                        if gp_l is not None and not data.get("gross_margin"):
+                            data["gross_margin"] = round(gp_l / rev_l, 4)
+                        if oi_l is not None and not data.get("operating_margin"):
+                            data["operating_margin"] = round(oi_l / rev_l, 4)
+                        if ni_l is not None and not data.get("profit_margin"):
+                            data["profit_margin"] = round(ni_l / rev_l, 4)
+
+                    # EPS
+                    if eps_l is not None and not data.get("eps_trailing"):
+                        data["eps_trailing"] = round(float(eps_l), 2)
+
+                    # 年營收成長率（最近 2 年）
+                    if len(sorted_years) >= 2 and not data.get("revenue_growth"):
+                        prev_yr = years_data[sorted_years[-2]]
+                        rev_p = prev_yr.get("rev")
+                        if rev_l and rev_p and rev_p > 0:
+                            data["revenue_growth"] = round((rev_l - rev_p) / rev_p, 4)
+
+                    # EPS 年成長率
+                    if len(sorted_years) >= 2 and not data.get("earnings_growth"):
+                        prev_yr = years_data[sorted_years[-2]]
+                        eps_p = prev_yr.get("eps")
+                        if eps_l and eps_p and eps_p > 0:
+                            data["earnings_growth"] = round((float(eps_l) - float(eps_p)) / abs(float(eps_p)), 4)
+            except Exception as exc:
+                logger.warning("[fundamental] FinMind stmt parse failed for %s: %s", sym, exc)
 
         data.setdefault("symbol", sym)
 

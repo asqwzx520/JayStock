@@ -126,8 +126,8 @@ async def get_recommendations(request: Request):
     if not metrics:
         logger.info("recommendations: screener cache empty — running refresh")
         try:
-            from app.services.screener_service import refresh_metrics
-            await refresh_metrics()
+            from app.services.screener_service import refresh_cache
+            await refresh_cache()
             metrics = _get_cached_metrics()
         except Exception as exc:
             logger.warning("screener refresh failed: %s", exc)

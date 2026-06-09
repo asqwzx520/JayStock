@@ -76,8 +76,8 @@ async def send_digest(
     if not metrics:
         logger.info("Digest: screener cache empty — running refresh first")
         try:
-            from app.services.screener_service import refresh_metrics
-            await refresh_metrics()
+            from app.services.screener_service import refresh_cache
+            await refresh_cache()
             metrics = _get_cached_metrics()
         except Exception as exc:
             logger.warning("Screener refresh failed: %s", exc)

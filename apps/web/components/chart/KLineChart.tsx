@@ -644,6 +644,8 @@ export default function KLineChart({
         timeVisible:    isIntraday,
         secondsVisible: false,
       },
+      handleScroll: true,
+      handleScale:  true,
     });
 
     chartRef.current = chart;
@@ -862,7 +864,7 @@ export default function KLineChart({
     chart.timeScale().fitContent();
     setTimeout(() => redrawFnRef.current(), 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, indicators, chipsData, chartType]);
+  }, [data, indicators, chipsData, chartType, params]);
 
   useEffect(() => { buildChart(); }, [buildChart]);
 

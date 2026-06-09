@@ -155,5 +155,6 @@ async def get_dividends(request: Request, symbol: str):
     loop = asyncio.get_event_loop()
     data = await loop.run_in_executor(None, _fetch_dividends_sync, sym)
     if not data:
-        raise HTTPException(status_code=404, detail=f"無法取得 {sym} 股利歷史")
+        # 台股在 Render 上 yfinance 可能被擋，回傳空列表而非 404
+        return {"symbol": sym, "dividends": [], "summary": {}, "source": "unavailable"}
     return data

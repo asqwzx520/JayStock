@@ -452,10 +452,15 @@ async def get_dashboard_summary(
         except Exception:
             pass   # 無效 user_id 或查詢失敗 → 跳過自訂規則
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _fetch(sym: str) -> dict:
-        return await loop.run_in_executor(None, _summary_sync, sym, user_rules)
+        try:
+            return await loop.run_in_executor(None, _summary_sync, sym, user_rules)
+        except Exception as exc:
+            logger.warning("dashboard: _summary_sync failed for %s: %s", sym, exc)
+            return {"symbol": sym, "quote": {}, "signals": [], "signal_count": 0,
+                    "upcoming_dates": [], "has_alert": False}
 
     results = await asyncio.gather(*[_fetch(s) for s in symbol_list])
 

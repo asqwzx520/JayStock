@@ -198,20 +198,32 @@ async def _fetch_financials_tw_finmind(symbol: str) -> dict[str, Any]:
         p  = stmt[d_str]
         cp = cf.get(d_str, {})
 
-        rev = _find(p, "Revenue", "TotalRevenue", "OperatingRevenue")
-        gp  = _find(p, "GrossProfit")
-        oi  = _find(p, "OperatingIncome", "OperatingProfit")
+        rev = _find(p, "Revenue", "TotalRevenue", "OperatingRevenue",
+                       "SalesRevenue", "NetSales")
+        gp  = _find(p, "GrossProfit", "GrossProfitLoss")
+        oi  = _find(p, "OperatingIncome", "OperatingProfit",
+                       "ProfitFromOperations", "IncomeFromOperations")
         ni  = _find(p, "NetIncome",
                        "NetIncomeAttributableToOwnersOfParent",
-                       "ProfitAttributableToOwnersOfParent")
-        eps = _find(p, "EPS", "BasicEPS", "BasicEarningsPerShare")
+                       "ProfitAttributableToOwnersOfParent",
+                       "ProfitForThePeriod",
+                       "ProfitLossAttributableToOwnersOfParent",
+                       "ContinuingOperationsProfit",
+                       "NetProfitAfterTax",
+                       "AfterTaxProfit")
+        eps = _find(p, "EPS", "BasicEPS", "BasicEarningsPerShare",
+                       "EarningsPerShare", "BasicEarningsLossPerShare")
         ocf = _find(cp, "CashFlowsFromOperatingActivities",
                         "NetCashFromOperatingActivities",
-                        "NetCashProvidedByUsedInOperatingActivities")
+                        "NetCashProvidedByUsedInOperatingActivities",
+                        "CashGeneratedFromOperations",
+                        "NetCashProvidedByOperatingActivities")
         capex = _find(cp, "PurchasesOfPropertyPlantAndEquipment",
                           "AcquisitionOfPropertyPlantAndEquipment",
                           "PaymentsForPropertyPlantAndEquipment",
-                          "PurchaseOfPropertyPlantAndEquipment")
+                          "PurchaseOfPropertyPlantAndEquipment",
+                          "AcquisitionOfFixedAssets",
+                          "PaymentsToAcquirePropertyPlantAndEquipment")
 
         quarters.append({
             "date": d_str, "year": dt.year, "month": dt.month,
