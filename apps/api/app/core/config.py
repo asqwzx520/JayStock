@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # Data sources
     finmind_token: str = ""
+    finnhub_api_key: str = ""              # Finnhub.io (美股新聞/報價，免費 60req/min)
+    enable_mops_scraper: bool = True       # 公開資訊觀測站爬蟲開關
 
     # Email Digest (SMTP)
     digest_smtp_host: str = "smtp.gmail.com"
