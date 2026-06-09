@@ -3,9 +3,10 @@ import asyncio
 import logging
 from datetime import date, timedelta
 from fastapi import APIRouter, Query, HTTPException, Request
-import httpx
+
 from app.services.stock_list import search_stocks, get_stock_list
 from app.services.finmind_service import fetch_institutional
+from app.services.twse_service import fetch_t86_for_date as twse_fetch_t86
 from app.services.market_service import (
     fetch_indices,
     fetch_market_breadth,
@@ -13,6 +14,7 @@ from app.services.market_service import (
     fetch_market_ranking,
 )
 from app.core.rate_limit import limiter
+from app.core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +33,11 @@ _MAJOR_STOCKS = [
     "3008", "2379", "2357", "2395",
 ]
 
+
 @router.get("/market/indices")
 @limiter.limit("30/minute")
 async def get_market_indices(request: Request):
-    """
-    取得大盤指數（台股加權 + 美股三大指數 + 那指期貨 + 費半）
-    資料來源：Yahoo Finance（yfinance）
-    """
+    """大盤指數（台股加權 + 美股三大指數 + 那指期貨 + 費半）"""
     data = await fetch_indices()
     return {"indices": data}
 
@@ -45,10 +45,6 @@ async def get_market_indices(request: Request):
 @router.get("/market/breadth")
 @limiter.limit("30/minute")
 async def get_market_breadth(request: Request):
-    """
-    取得市場廣度統計：漲跌家數、漲停/跌停家數
-    資料來源：TWSE afterTrading/MI_INDEX（盤後），fallback 為 screener 近似值
-    """
     data = await fetch_market_breadth()
     if not data:
         raise HTTPException(status_code=503, detail="Market breadth data temporarily unavailable")
@@ -58,10 +54,6 @@ async def get_market_breadth(request: Request):
 @router.get("/market/sectors")
 @limiter.limit("30/minute")
 async def get_sector_heatmap(request: Request):
-    """
-    取得各產業板塊熱力圖資料（平均漲跌幅 + 漲跌家數）
-    基於 screener 快取的 70 檔股票，分 11 個產業計算
-    """
     data = await fetch_sector_heatmap()
     return {"sectors": data}
 
@@ -70,31 +62,27 @@ async def get_sector_heatmap(request: Request):
 @limiter.limit("60/minute")
 async def stock_search(
     request: Request,
-    q: str = Query(..., min_length=1, description="Search query (symbol or name)"),
+    q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(20, ge=1, le=50),
 ):
     results = await search_stocks(q, limit)
     return {"query": q, "count": len(results), "data": results}
 
 
-_FOREIGN = {"Foreign_Investor", "Foreign_Dealer_Self"}
-_TRUST   = {"Investment_Trust"}
-_DEALER  = {"Dealer_self", "Dealer_Hedging"}
+# ─────────────────────────────────────────────────────────────
+# Market chips summary（法人動向）
+# ─────────────────────────────────────────────────────────────
+
+_FOREIGN_FM = {"Foreign_Investor", "Foreign_Dealer_Self"}
+_TRUST_FM   = {"Investment_Trust"}
+_DEALER_FM  = {"Dealer_self", "Dealer_Hedging"}
 
 
 def _classify_finmind(name: str) -> str:
-    if name in _FOREIGN: return "foreign"
-    if name in _TRUST:   return "trust"
-    if name in _DEALER:  return "dealer"
+    if name in _FOREIGN_FM: return "foreign"
+    if name in _TRUST_FM:   return "trust"
+    if name in _DEALER_FM:  return "dealer"
     return "unknown"
-
-
-async def _fetch_one_finmind(sym: str, start: date, end: date) -> tuple[str, list]:
-    try:
-        rows = await fetch_institutional(sym, start=start, end=end)
-        return sym, rows
-    except Exception:
-        return sym, []
 
 
 def _top_movers(by_symbol: dict, key: str, n: int = 10):
@@ -108,49 +96,69 @@ def _top_movers(by_symbol: dict, key: str, n: int = 10):
     return buyers, sellers
 
 
-def _t86_int(s) -> int:
-    try:
-        return int(str(s).replace(",", "").strip())
-    except (TypeError, ValueError):
-        return 0
-
-
-async def _fetch_t86_for_date(target_date: date) -> tuple[str, dict[str, dict]]:
+async def _from_supabase_chips(target: date) -> tuple[str, dict[str, dict]]:
     """
-    TWSE T86 單日全市場三大法人。
+    從 chips_daily 讀取最近一個交易日的全市場法人。
     回傳 (date_str, {symbol: {foreign_net, trust_net, dealer_net}})
-    空資料代表假日或資料尚未釋出。
     """
-    tw_date = target_date.strftime("%Y%m%d")
-    url = f"https://www.twse.com.tw/fund/T86?response=json&date={tw_date}&selectType=ALL"
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Referer": "https://www.twse.com.tw/",
-    }
+    db = get_supabase()
+    if db is None:
+        return "", {}
+    start = (target - timedelta(days=7)).isoformat()
     try:
-        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            resp.raise_for_status()
-            payload = resp.json()
-        if payload.get("stat") != "OK" or not payload.get("data"):
-            return target_date.isoformat(), {}
-        result: dict[str, dict] = {}
-        for row in payload["data"]:
-            sym = str(row[0]).strip()
-            if not sym or not all(c.isdigit() for c in sym):
-                continue
-            result[sym] = {
-                "foreign_net": _t86_int(row[4]),
-                "trust_net":   _t86_int(row[7]),
-                "dealer_net":  _t86_int(row[8]),
-            }
-        return target_date.isoformat(), result
-    except Exception as exc:
-        logger.debug("[market chips] T86 %s failed: %s", target_date, exc)
-        return target_date.isoformat(), {}
+        resp = (
+            db.table("chips_daily")
+            .select("date, symbol, foreign_buy, foreign_sell, trust_buy, trust_sell, dealer_buy, dealer_sell")
+            .gte("date", start)
+            .lte("date", target.isoformat())
+            .in_("symbol", _MAJOR_STOCKS)
+            .execute()
+        )
+        rows = resp.data or []
+    except Exception as e:
+        logger.warning("[market.chips] supabase failed: %s", e)
+        return "", {}
+
+    if not rows:
+        return "", {}
+
+    # 取最新日期
+    latest = max(r["date"] for r in rows)
+    result: dict[str, dict] = {}
+    for r in rows:
+        if r["date"] != latest:
+            continue
+        sym = r["symbol"]
+        result[sym] = {
+            "foreign_net": int(r["foreign_buy"] or 0) - int(r["foreign_sell"] or 0),
+            "trust_net":   int(r["trust_buy"]   or 0) - int(r["trust_sell"]   or 0),
+            "dealer_net":  int(r["dealer_buy"]  or 0) - int(r["dealer_sell"]  or 0),
+        }
+    return latest, result
+
+
+async def _from_t86_live(target: date) -> tuple[str, dict[str, dict]]:
+    """T86 live 全市場（用新 twse_service 取，schema 用欄位名匹配）"""
+    for offset in range(0, 6):
+        d = target - timedelta(days=offset)
+        if d.weekday() >= 5:
+            continue
+        try:
+            day_data = await twse_fetch_t86(d)
+        except Exception as e:
+            logger.debug("[market.chips] t86 %s failed: %s", d, e)
+            day_data = {}
+        if day_data:
+            return d.isoformat(), day_data
+    return "", {}
+
+
+async def _fetch_one_finmind(sym: str, start: date, end: date) -> tuple[str, list]:
+    try:
+        rows = await fetch_institutional(sym, start=start, end=end)
+        return sym, rows
+    except Exception:
+        return sym, []
 
 
 @router.get("/market/chips/summary")
@@ -173,21 +181,16 @@ async def get_market_chips_summary(
     if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
         return cached["data"]
 
-    # ── Step 1: TWSE T86（全市場一次 call，往前找最近有資料的交易日）─────
-    t86_data: dict[str, dict] = {}
-    display_date = cache_key
-    for offset in range(0, 6):
-        d = target - timedelta(days=offset)
-        if d.weekday() >= 5:   # 跳過週末
-            continue
-        day_str, day_data = await _fetch_t86_for_date(d)
-        if day_data:
-            t86_data    = day_data
-            display_date = day_str
-            break
+    # ── Step 1: Supabase chips_daily（由 daily_chips_full job 寫入）────────
+    display_date, t86_data = await _from_supabase_chips(target)
 
-    # ── Step 2: 從 T86 建立 by_symbol（只保留主要股票）───────────────────
-    # Build symbol→name map
+    # ── Step 2: T86 live fallback（Supabase 空 / 冷啟動）─────────────────
+    if not t86_data:
+        display_date, t86_full = await _from_t86_live(target)
+        # 只保留 _MAJOR_STOCKS
+        t86_data = {sym: t86_full[sym] for sym in _MAJOR_STOCKS if sym in t86_full}
+
+    # ── 建立 by_symbol ────────────────────────────────────────────────────
     try:
         stock_list = await get_stock_list()
         name_map = {s["symbol"]: s["name"] for s in stock_list}
@@ -195,10 +198,7 @@ async def get_market_chips_summary(
         name_map = {}
 
     by_symbol: dict[str, dict] = {}
-    for sym in _MAJOR_STOCKS:
-        nets = t86_data.get(sym)
-        if nets is None:
-            continue
+    for sym, nets in t86_data.items():
         by_symbol[sym] = {
             "name":        name_map.get(sym, sym),
             "date":        display_date,
@@ -207,15 +207,14 @@ async def get_market_chips_summary(
             "dealer_net":  nets["dealer_net"],
         }
 
-    # ── Step 3: FinMind fallback（T86 完全失敗時）────────────────────────
+    # ── Step 3: FinMind 最終 fallback ────────────────────────────────────
     if not by_symbol:
-        logger.warning("[market chips] T86 empty, falling back to FinMind for %d stocks", len(_MAJOR_STOCKS))
+        logger.warning("[market.chips] all primary sources empty, falling back to FinMind")
         start_fb = target - timedelta(days=5)
-        batch_size = 10
-        for i in range(0, len(_MAJOR_STOCKS), batch_size):
-            batch = _MAJOR_STOCKS[i:i + batch_size]
+        for i in range(0, len(_MAJOR_STOCKS), 10):
+            batch = _MAJOR_STOCKS[i:i + 10]
             results = await asyncio.gather(
-                *[_fetch_one_finmind(sym, start_fb, target) for sym in batch],
+                *[_fetch_one_finmind(s, start_fb, target) for s in batch],
                 return_exceptions=False,
             )
             for sym, rows in results:
@@ -242,18 +241,19 @@ async def get_market_chips_summary(
             detail=f"No market chips data available near {cache_key}",
         )
 
-    # Use the most common date across stocks as the display date
+    # 統一日期（多檢核可能不同源 → 取 mode）
     from collections import Counter
-    date_counts = Counter(v["date"] for v in by_symbol.values())
-    display_date = date_counts.most_common(1)[0][0]
+    date_counts = Counter(v["date"] for v in by_symbol.values() if v.get("date"))
+    if date_counts:
+        display_date = date_counts.most_common(1)[0][0]
 
     total_foreign = sum(v["foreign_net"] for v in by_symbol.values())
     total_trust   = sum(v["trust_net"]   for v in by_symbol.values())
     total_dealer  = sum(v["dealer_net"]  for v in by_symbol.values())
 
-    foreign_buyers,  foreign_sellers  = _top_movers(by_symbol, "foreign_net", top_n)
-    trust_buyers,    trust_sellers    = _top_movers(by_symbol, "trust_net",   top_n)
-    dealer_buyers,   dealer_sellers   = _top_movers(by_symbol, "dealer_net",  top_n)
+    foreign_buyers, foreign_sellers = _top_movers(by_symbol, "foreign_net", top_n)
+    trust_buyers,   trust_sellers   = _top_movers(by_symbol, "trust_net",   top_n)
+    dealer_buyers,  dealer_sellers  = _top_movers(by_symbol, "dealer_net",  top_n)
 
     result = {
         "date": display_date,
@@ -274,11 +274,6 @@ async def get_market_chips_summary(
 @router.get("/market/ranking")
 @limiter.limit("20/minute")
 async def get_market_ranking(request: Request):
-    """
-    熱門排行榜：漲幅 Top 20 / 跌幅 Top 20 / 爆量 Top 20
-    資料來源：screener 快取 + mis.twse 即時補全
-    快取 TTL：3 分鐘
-    """
     data = await fetch_market_ranking()
     if not data:
         raise HTTPException(status_code=503, detail="Ranking data unavailable")

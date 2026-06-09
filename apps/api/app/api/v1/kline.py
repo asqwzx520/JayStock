@@ -393,8 +393,19 @@ async def get_us_kline(
         return {"symbol": sym, "period": period, "count": len(rows), "data": rows}
 
     # 在 thread executor 中呼叫 yfinance（避免 blocking event loop）
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     rows = await loop.run_in_executor(None, _yf_fetch_kline_sync, sym, period)
+
+    # yfinance 在 Render IP 被擋時 fallback YF v8/chart 直連
+    if not rows:
+        try:
+            from app.services.yf_direct import fetch_kline as yf_direct_fetch
+            yf_period_days = {"daily": 730, "weekly": 3650, "monthly": 7300}.get(period, 730)
+            end_d   = date.today()
+            start_d = end_d - timedelta(days=yf_period_days)
+            rows = await yf_direct_fetch(sym, start_d, end_d)
+        except Exception as exc:
+            logger.warning("[kline/us] yf_direct fallback failed %s: %s", sym, exc)
 
     if not rows:
         raise HTTPException(status_code=404, detail=f"No US kline data for {sym}")

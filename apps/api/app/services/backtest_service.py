@@ -98,9 +98,62 @@ def _fetch_ohlcv_httpx(yf_symbol: str, start: str, end: str) -> list[dict]:
         return []
 
 
+def _fetch_ohlcv_from_supabase(yf_symbol: str, start: str, end: str) -> list[dict]:
+    """從 kline_daily 讀（4 位數台股代號優先；.TW 後綴會 strip）"""
+    try:
+        from app.core.supabase_client import get_supabase
+        db = get_supabase()
+        if db is None:
+            return []
+        # 從 yf_symbol 反推原始 symbol
+        bare = yf_symbol.replace(".TW", "").replace(".TWO", "")
+        resp = (
+            db.table("kline_daily")
+            .select("date, open, high, low, close, volume")
+            .eq("symbol", bare)
+            .gte("date", start)
+            .lte("date", end)
+            .order("date")
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return []
+        return [
+            {
+                "date":   r["date"],
+                "open":   float(r["open"])  if r.get("open")  is not None else 0.0,
+                "high":   float(r["high"])  if r.get("high")  is not None else 0.0,
+                "low":    float(r["low"])   if r.get("low")   is not None else 0.0,
+                "close":  float(r["close"]) if r.get("close") is not None else 0.0,
+                "volume": int(r["volume"] or 0),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.debug("[backtest] supabase read %s failed: %s", yf_symbol, e)
+        return []
+
+
 @ttl_cache(ttl=86_400)
 def _fetch_ohlcv_sync(yf_symbol: str, start: str, end: str) -> list[dict]:
-    """同步 yfinance 抓取（包在 sync 函數供 ttl_cache 裝飾）。yfinance 失敗時走 httpx 直連。"""
+    """
+    OHLCV 多源 fallback：
+    1. Supabase kline_daily（Tier 1 寫入）
+    2. httpx 直連 YF v8/chart
+    3. yfinance lib
+    """
+    # 1. Supabase
+    rows = _fetch_ohlcv_from_supabase(yf_symbol, start, end)
+    if rows:
+        return rows
+
+    # 2. httpx 直連 YF（在 Render 上比 yfinance lib 穩）
+    rows = _fetch_ohlcv_httpx(yf_symbol, start, end)
+    if rows:
+        return rows
+
+    # 3. yfinance lib 保底（本地開發環境通常 OK）
     try:
         import yfinance as yf
         df = yf.download(
@@ -108,23 +161,19 @@ def _fetch_ohlcv_sync(yf_symbol: str, start: str, end: str) -> list[dict]:
             auto_adjust=True, progress=False, threads=False,
         )
         if not df.empty:
-            # 展平 MultiIndex columns（yfinance >=0.2.x 有時會產生）
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
             df.index = pd.to_datetime(df.index)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             df.columns = ["open", "high", "low", "close", "volume"]
-            records = [
+            return [
                 {"date": idx.strftime("%Y-%m-%d"), **row.to_dict()}
                 for idx, row in df.iterrows()
             ]
-            if records:
-                return records
     except Exception as exc:
-        logger.warning("[backtest] yfinance %s failed, trying httpx: %s", yf_symbol, exc)
+        logger.warning("[backtest] yfinance %s failed: %s", yf_symbol, exc)
 
-    # Fallback: direct httpx (no FinMind quota used)
-    return _fetch_ohlcv_httpx(yf_symbol, start, end)
+    return []
 
 
 def _to_df(records: list[dict]) -> pd.DataFrame:

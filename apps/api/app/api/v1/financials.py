@@ -290,26 +290,116 @@ async def _fetch_financials_tw_finmind(symbol: str) -> dict[str, Any]:
     }
 
 
+async def _fetch_financials_from_supabase(symbol: str) -> dict[str, Any] | None:
+    """讀 Supabase financials_quarterly（由 daily_financials_tier1 寫入），組成年度 + 季度 EPS"""
+    from app.core.supabase_client import get_supabase
+    db = get_supabase()
+    if db is None:
+        return None
+    try:
+        resp = (
+            db.table("financials_quarterly")
+            .select("year, quarter, revenue, gross_profit, operating_income, net_income, eps, equity, total_assets")
+            .eq("symbol", symbol)
+            .order("year", desc=True)
+            .order("quarter", desc=True)
+            .limit(40)   # 最近 10 年
+            .execute()
+        )
+        rows = resp.data or []
+    except Exception as e:
+        logger.warning("[financials] supabase %s failed: %s", symbol, e)
+        return None
+    if not rows:
+        return None
+
+    def _s(v, d=2):
+        try:
+            return round(float(v), d) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    # 取每年最新季當該年的累計（台股財報為 YTD，Q4 = 全年）
+    by_year: dict[int, dict] = {}
+    for r in rows:
+        yr = r["year"]
+        if yr not in by_year or r["quarter"] > by_year[yr]["quarter"]:
+            by_year[yr] = r
+
+    annual = []
+    for yr in sorted(by_year):
+        q = by_year[yr]
+        rev = _s(q.get("revenue"))
+        ni  = _s(q.get("net_income"))
+        gp  = _s(q.get("gross_profit"))
+        oi  = _s(q.get("operating_income"))
+        annual.append({
+            "year":             yr,
+            "revenue":          rev,
+            "net_income":       ni,
+            "gross_profit":     gp,
+            "operating_income": oi,
+            "eps":              _s(q.get("eps")),
+            "gross_margin":     round(gp / rev, 4) if rev and gp and rev > 0 else None,
+            "net_margin":       round(ni / rev, 4) if rev and ni and rev > 0 else None,
+            "operating_margin": round(oi / rev, 4) if rev and oi and rev > 0 else None,
+            "operating_cf":     None,
+            "capex":            None,
+            "free_cf":          None,
+        })
+
+    quarterly_eps = [
+        {"year": r["year"], "month": r["quarter"] * 3, "eps": _s(r.get("eps")), "net_income": _s(r.get("net_income"))}
+        for r in sorted(rows, key=lambda x: (x["year"], x["quarter"]))
+        if r.get("eps") is not None or r.get("net_income") is not None
+    ][-8:]
+
+    return {
+        "symbol":        symbol,
+        "currency":      "TWD",
+        "unit":          "億",
+        "divisor":       1e8,
+        "annual":        annual[-10:],
+        "quarterly_eps": quarterly_eps,
+    }
+
+
 @router.get("/financials/{symbol}")
 @limiter.limit("20/minute")
 async def get_financials(request: Request, symbol: str):
     """
     取得個股財務報表趨勢（5年年度 + 8季EPS）
-    台股：FinMind（公開資訊觀測站，比 yfinance 更準確）
+    台股：Supabase（MOPS 寫入）→ FinMind fallback
     美股：yfinance
     """
     sym = validate_symbol(symbol)
 
     if _is_tw(sym):
-        # 台股：FinMind
+        # 1. Supabase（MOPS Tier1 寫入）
+        data = await _fetch_financials_from_supabase(sym)
+        if data and data.get("annual"):
+            return data
+        # 2. FinMind 保底
         data = await _fetch_financials_tw_finmind(sym)
-        if not data:
-            raise HTTPException(status_code=404, detail=f"無法取得 {sym} 財務資料（FinMind 無資料）")
-        return data
+        if data and data.get("annual"):
+            return data
+        # 3. 全失敗 → 回空殼而非 404，前端可顯示「暫無資料」
+        return {
+            "symbol":        sym,
+            "currency":      "TWD",
+            "unit":          "億",
+            "divisor":       1e8,
+            "annual":        [],
+            "quarterly_eps": [],
+            "status":        "unavailable",
+        }
     else:
         # 美股：yfinance
         loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, _fetch_financials_sync, sym)
         if not data:
-            raise HTTPException(status_code=404, detail=f"無法取得 {sym} 財務資料")
+            return {
+                "symbol": sym, "currency": "USD", "unit": "M", "divisor": 1e6,
+                "annual": [], "quarterly_eps": [], "status": "unavailable",
+            }
         return data
