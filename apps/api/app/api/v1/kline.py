@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query, Request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import asyncio
 import logging
 import time
+
+import httpx
 
 from app.services.finmind_service import (
     fetch_daily_kline as finmind_fetch_kline,
@@ -14,6 +16,80 @@ from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_TZ_TAIPEI = timezone(timedelta(hours=8))
+_YF_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
+
+
+def _is_tw_symbol(symbol: str) -> bool:
+    return symbol[:4].isdigit() if len(symbol) >= 4 else symbol.isdigit()
+
+
+async def _fetch_kline_yf_direct(symbol: str, start: date, end: date) -> list[dict]:
+    """
+    直連 Yahoo Finance v8/chart API 取得台股日K（不走 yfinance 庫）。
+    先試 .TW，失敗再試 .TWO（TPEX 股票）。
+    """
+    days = (end - start).days
+    if days <= 30:    range_str = "1mo"
+    elif days <= 90:  range_str = "3mo"
+    elif days <= 180: range_str = "6mo"
+    elif days <= 365: range_str = "1y"
+    else:             range_str = "2y"
+
+    for suffix in (".TW", ".TWO"):
+        yf_sym = f"{symbol}{suffix}"
+        url    = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_sym}"
+        params = {"interval": "1d", "range": range_str, "events": ""}
+        try:
+            async with httpx.AsyncClient(
+                headers=_YF_HEADERS, timeout=14, follow_redirects=True
+            ) as client:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            results = data.get("chart", {}).get("result") or []
+            if not results:
+                continue
+            r          = results[0]
+            timestamps = r.get("timestamp") or []
+            quote      = (r.get("indicators", {}).get("quote") or [{}])[0]
+            opens   = quote.get("open",   [])
+            highs   = quote.get("high",   [])
+            lows    = quote.get("low",    [])
+            closes  = quote.get("close",  [])
+            volumes = quote.get("volume", [])
+
+            rows: list[dict] = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i] if i < len(closes) else None
+                if c is None:
+                    continue
+                d = datetime.fromtimestamp(ts, tz=_TZ_TAIPEI).date()
+                if d < start or d > end:
+                    continue
+                rows.append({
+                    "date":     d.isoformat(),
+                    "open":     float(opens[i])   if i < len(opens)   and opens[i]   else float(c),
+                    "high":     float(highs[i])   if i < len(highs)   and highs[i]   else float(c),
+                    "low":      float(lows[i])    if i < len(lows)    and lows[i]    else float(c),
+                    "close":    float(c),
+                    "volume":   int(volumes[i])   if i < len(volumes) and volumes[i] else 0,
+                    "turnover": 0,
+                })
+            if rows:
+                logger.debug("[kline] YF direct OK: %s (%d bars)", yf_sym, len(rows))
+                return rows
+        except Exception as exc:
+            logger.debug("[kline] YF direct %s failed: %s", yf_sym, exc)
+
+    return []
 
 
 async def _kline_from_supabase(
@@ -109,15 +185,25 @@ async def get_kline(
     # 1. 嘗試從 Supabase 快取讀取
     rows = await _kline_from_supabase(sym, start, end)
 
-    # 2. Cache miss → 直接打 FinMind，完成後 fire-and-forget 寫回 Supabase
+    # 2. Cache miss → 先試 Yahoo Finance 直連，再試 FinMind
     if rows is None:
-        logger.debug(f"[kline] {sym} cache miss，呼叫 FinMind")
-        try:
-            rows = await finmind_fetch_kline(sym, start, end)
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
+        logger.debug("[kline] %s cache miss", sym)
+
+        # 2a. YF direct httpx（台股優先，不耗 FinMind quota）
+        if _is_tw_symbol(sym):
+            rows = await _fetch_kline_yf_direct(sym, start, end) or None
+
+        # 2b. FinMind fallback（美股 / YF 失敗時）
+        if not rows:
+            try:
+                rows = await finmind_fetch_kline(sym, start, end)
+            except Exception as e:
+                if rows is None:
+                    raise HTTPException(status_code=502, detail=f"K線資料暫時無法取得: {e}")
+
         # 寫穿快取（fire-and-forget，不阻塞 response）
-        asyncio.create_task(_upsert_kline_cache(sym, rows))
+        if rows:
+            asyncio.create_task(_upsert_kline_cache(sym, rows))
 
     if not rows:
         raise HTTPException(status_code=404, detail=f"No kline data for {sym}")

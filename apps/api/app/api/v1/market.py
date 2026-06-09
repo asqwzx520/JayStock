@@ -1,7 +1,9 @@
 import time
 import asyncio
+import logging
 from datetime import date, timedelta
 from fastapi import APIRouter, Query, HTTPException, Request
+import httpx
 from app.services.stock_list import search_stocks, get_stock_list
 from app.services.finmind_service import fetch_institutional
 from app.services.market_service import (
@@ -11,6 +13,8 @@ from app.services.market_service import (
     fetch_market_ranking,
 )
 from app.core.rate_limit import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,11 +30,6 @@ _MAJOR_STOCKS = [
     "2884", "2885", "2880", "5871", "2890", "2892",
     "3008", "2379", "2357", "2395",
 ]
-
-_FOREIGN = {"Foreign_Investor", "Foreign_Dealer_Self"}
-_TRUST   = {"Investment_Trust"}
-_DEALER  = {"Dealer_self", "Dealer_Hedging"}
-
 
 @router.get("/market/indices")
 @limiter.limit("30/minute")
@@ -78,11 +77,24 @@ async def stock_search(
     return {"query": q, "count": len(results), "data": results}
 
 
-def _classify(name: str) -> str:
+_FOREIGN = {"Foreign_Investor", "Foreign_Dealer_Self"}
+_TRUST   = {"Investment_Trust"}
+_DEALER  = {"Dealer_self", "Dealer_Hedging"}
+
+
+def _classify_finmind(name: str) -> str:
     if name in _FOREIGN: return "foreign"
     if name in _TRUST:   return "trust"
     if name in _DEALER:  return "dealer"
     return "unknown"
+
+
+async def _fetch_one_finmind(sym: str, start: date, end: date) -> tuple[str, list]:
+    try:
+        rows = await fetch_institutional(sym, start=start, end=end)
+        return sym, rows
+    except Exception:
+        return sym, []
 
 
 def _top_movers(by_symbol: dict, key: str, n: int = 10):
@@ -96,12 +108,49 @@ def _top_movers(by_symbol: dict, key: str, n: int = 10):
     return buyers, sellers
 
 
-async def _fetch_one(sym: str, start: date, end: date) -> tuple[str, list]:
+def _t86_int(s) -> int:
     try:
-        rows = await fetch_institutional(sym, start=start, end=end)
-        return sym, rows
-    except Exception:
-        return sym, []
+        return int(str(s).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _fetch_t86_for_date(target_date: date) -> tuple[str, dict[str, dict]]:
+    """
+    TWSE T86 單日全市場三大法人。
+    回傳 (date_str, {symbol: {foreign_net, trust_net, dealer_net}})
+    空資料代表假日或資料尚未釋出。
+    """
+    tw_date = target_date.strftime("%Y%m%d")
+    url = f"https://www.twse.com.tw/fund/T86?response=json&date={tw_date}&selectType=ALL"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://www.twse.com.tw/",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+        if payload.get("stat") != "OK" or not payload.get("data"):
+            return target_date.isoformat(), {}
+        result: dict[str, dict] = {}
+        for row in payload["data"]:
+            sym = str(row[0]).strip()
+            if not sym or not all(c.isdigit() for c in sym):
+                continue
+            result[sym] = {
+                "foreign_net": _t86_int(row[4]),
+                "trust_net":   _t86_int(row[7]),
+                "dealer_net":  _t86_int(row[8]),
+            }
+        return target_date.isoformat(), result
+    except Exception as exc:
+        logger.debug("[market chips] T86 %s failed: %s", target_date, exc)
+        return target_date.isoformat(), {}
 
 
 @router.get("/market/chips/summary")
@@ -124,44 +173,68 @@ async def get_market_chips_summary(
     if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
         return cached["data"]
 
-    # Build symbol→name map from TWSE stock list
+    # ── Step 1: TWSE T86（全市場一次 call，往前找最近有資料的交易日）─────
+    t86_data: dict[str, dict] = {}
+    display_date = cache_key
+    for offset in range(0, 6):
+        d = target - timedelta(days=offset)
+        if d.weekday() >= 5:   # 跳過週末
+            continue
+        day_str, day_data = await _fetch_t86_for_date(d)
+        if day_data:
+            t86_data    = day_data
+            display_date = day_str
+            break
+
+    # ── Step 2: 從 T86 建立 by_symbol（只保留主要股票）───────────────────
+    # Build symbol→name map
     try:
         stock_list = await get_stock_list()
         name_map = {s["symbol"]: s["name"] for s in stock_list}
     except Exception:
         name_map = {}
 
-    # Fetch latest available trading day: query a 5-day window to handle weekends/holidays
-    start = target - timedelta(days=5)
-
-    # Parallel fetch for all major stocks (batches of 10 to avoid overwhelming FinMind)
     by_symbol: dict[str, dict] = {}
-    batch_size = 10
-    for i in range(0, len(_MAJOR_STOCKS), batch_size):
-        batch = _MAJOR_STOCKS[i:i + batch_size]
-        results = await asyncio.gather(
-            *[_fetch_one(sym, start, target) for sym in batch],
-            return_exceptions=False,
-        )
-        for sym, rows in results:
-            # Keep only the most recent date's data
-            if not rows:
-                continue
-            latest_date = max(r["date"] for r in rows)
-            day_rows = [r for r in rows if r["date"] == latest_date]
-            actual_date = latest_date  # track what date we got
+    for sym in _MAJOR_STOCKS:
+        nets = t86_data.get(sym)
+        if nets is None:
+            continue
+        by_symbol[sym] = {
+            "name":        name_map.get(sym, sym),
+            "date":        display_date,
+            "foreign_net": nets["foreign_net"],
+            "trust_net":   nets["trust_net"],
+            "dealer_net":  nets["dealer_net"],
+        }
 
-            for row in day_rows:
-                cat = _classify(row.get("name", ""))
-                if cat == "unknown":
+    # ── Step 3: FinMind fallback（T86 完全失敗時）────────────────────────
+    if not by_symbol:
+        logger.warning("[market chips] T86 empty, falling back to FinMind for %d stocks", len(_MAJOR_STOCKS))
+        start_fb = target - timedelta(days=5)
+        batch_size = 10
+        for i in range(0, len(_MAJOR_STOCKS), batch_size):
+            batch = _MAJOR_STOCKS[i:i + batch_size]
+            results = await asyncio.gather(
+                *[_fetch_one_finmind(sym, start_fb, target) for sym in batch],
+                return_exceptions=False,
+            )
+            for sym, rows in results:
+                if not rows:
                     continue
-                if sym not in by_symbol:
-                    by_symbol[sym] = {
-                        "name": name_map.get(sym, sym), "date": actual_date,
-                        "foreign_net": 0, "trust_net": 0, "dealer_net": 0,
-                    }
-                net = int(row.get("buy", 0)) - int(row.get("sell", 0))
-                by_symbol[sym][f"{cat}_net"] += net
+                latest_date = max(r["date"] for r in rows)
+                for row in rows:
+                    if row["date"] != latest_date:
+                        continue
+                    cat = _classify_finmind(row.get("name", ""))
+                    if cat == "unknown":
+                        continue
+                    if sym not in by_symbol:
+                        by_symbol[sym] = {
+                            "name": name_map.get(sym, sym), "date": latest_date,
+                            "foreign_net": 0, "trust_net": 0, "dealer_net": 0,
+                        }
+                    net = int(row.get("buy", 0)) - int(row.get("sell", 0))
+                    by_symbol[sym][f"{cat}_net"] += net
 
     if not by_symbol:
         raise HTTPException(

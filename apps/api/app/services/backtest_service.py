@@ -40,27 +40,91 @@ TRADING_DAYS   = 252
 
 # ── 歷史 OHLCV 抓取（24h 快取）────────────────────────────────────────────────
 
+def _fetch_ohlcv_httpx(yf_symbol: str, start: str, end: str) -> list[dict]:
+    """
+    直連 Yahoo Finance v8/chart API（同步 httpx）。
+    作為 yfinance 的保底 fallback，不耗 FinMind quota。
+    """
+    import httpx as _httpx
+    from datetime import datetime, timezone, timedelta
+
+    start_dt = datetime.strptime(start, "%Y-%m-%d")
+    end_dt   = datetime.strptime(end,   "%Y-%m-%d")
+    days     = (end_dt - start_dt).days
+    range_str = "2y" if days > 730 else ("1y" if days > 365 else ("6mo" if days > 180 else "3mo"))
+
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}"
+    params = {"interval": "1d", "range": range_str, "events": ""}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+    }
+    tz = timezone(timedelta(hours=8))
+    try:
+        resp = _httpx.get(url, params=params, headers=headers, timeout=20, follow_redirects=True)
+        resp.raise_for_status()
+        data    = resp.json()
+        results = data.get("chart", {}).get("result") or []
+        if not results:
+            return []
+        r          = results[0]
+        timestamps = r.get("timestamp") or []
+        quote      = (r.get("indicators", {}).get("quote") or [{}])[0]
+        opens   = quote.get("open",   [])
+        highs   = quote.get("high",   [])
+        lows    = quote.get("low",    [])
+        closes  = quote.get("close",  [])
+        volumes = quote.get("volume", [])
+        rows: list[dict] = []
+        for i, ts in enumerate(timestamps):
+            c = closes[i] if i < len(closes) else None
+            if c is None:
+                continue
+            d = datetime.fromtimestamp(ts, tz=tz).date().isoformat()
+            if d < start or d > end:
+                continue
+            rows.append({
+                "date":   d,
+                "open":   float(opens[i])   if i < len(opens)   and opens[i]   else float(c),
+                "high":   float(highs[i])   if i < len(highs)   and highs[i]   else float(c),
+                "low":    float(lows[i])    if i < len(lows)    and lows[i]    else float(c),
+                "close":  float(c),
+                "volume": int(volumes[i])   if i < len(volumes) and volumes[i] else 0,
+            })
+        logger.debug("[backtest] httpx fetched %d bars for %s", len(rows), yf_symbol)
+        return rows
+    except Exception as exc:
+        logger.warning("[backtest] httpx fallback %s failed: %s", yf_symbol, exc)
+        return []
+
+
 @ttl_cache(ttl=86_400)
 def _fetch_ohlcv_sync(yf_symbol: str, start: str, end: str) -> list[dict]:
-    """同步 yfinance 抓取（包在 sync 函數供 ttl_cache 裝飾）"""
-    import yfinance as yf
-    df = yf.download(
-        yf_symbol, start=start, end=end,
-        auto_adjust=True, progress=False, threads=False,
-    )
-    if df.empty:
-        return []
-    # 展平 MultiIndex columns（yfinance >=0.2.x 有時會產生）
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df.index = pd.to_datetime(df.index)
-    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-    df.columns = ["open", "high", "low", "close", "volume"]
-    records = [
-        {"date": idx.strftime("%Y-%m-%d"), **row.to_dict()}
-        for idx, row in df.iterrows()
-    ]
-    return records
+    """同步 yfinance 抓取（包在 sync 函數供 ttl_cache 裝飾）。yfinance 失敗時走 httpx 直連。"""
+    try:
+        import yfinance as yf
+        df = yf.download(
+            yf_symbol, start=start, end=end,
+            auto_adjust=True, progress=False, threads=False,
+        )
+        if not df.empty:
+            # 展平 MultiIndex columns（yfinance >=0.2.x 有時會產生）
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df.index = pd.to_datetime(df.index)
+            df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+            df.columns = ["open", "high", "low", "close", "volume"]
+            records = [
+                {"date": idx.strftime("%Y-%m-%d"), **row.to_dict()}
+                for idx, row in df.iterrows()
+            ]
+            if records:
+                return records
+    except Exception as exc:
+        logger.warning("[backtest] yfinance %s failed, trying httpx: %s", yf_symbol, exc)
+
+    # Fallback: direct httpx (no FinMind quota used)
+    return _fetch_ohlcv_httpx(yf_symbol, start, end)
 
 
 def _to_df(records: list[dict]) -> pd.DataFrame:

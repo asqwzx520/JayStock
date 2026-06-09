@@ -3,6 +3,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 import asyncio
 import logging
 
+import httpx
+
 from app.services.finmind_service import fetch_institutional, fetch_margin, fetch_broker_data
 from app.core.supabase_client import get_supabase, get_supabase_admin
 from app.core.validators import validate_symbol
@@ -11,6 +13,76 @@ from app.core.broker_types import classify_broker, is_known_daytrade, detect_day
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _fetch_chips_from_t86(symbol: str, n_days: int = 60) -> list[dict] | None:
+    """
+    從 TWSE T86 批量端點取得單支股票的法人籌碼（最近 n_days 交易日）。
+    格式與 Supabase chips_daily 相同，供 _build_response_data 使用。
+    """
+    today = date.today()
+    # 準備候選日期
+    candidates: list[date] = []
+    d = today
+    while len(candidates) < n_days + 10:
+        d -= timedelta(days=1)
+        if d.weekday() < 5:
+            candidates.append(d)
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://www.twse.com.tw/",
+    }
+
+    sem = asyncio.Semaphore(5)
+    rows: list[dict] = []
+
+    async def _one_day(td: date) -> dict | None:
+        tw_date = td.strftime("%Y%m%d")
+        url = f"https://www.twse.com.tw/fund/T86?response=json&date={tw_date}&selectType=ALL"
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                    resp = await client.get(url, headers=headers)
+                    resp.raise_for_status()
+                    payload = resp.json()
+                if payload.get("stat") != "OK" or not payload.get("data"):
+                    return None
+                for row in payload["data"]:
+                    if str(row[0]).strip() == symbol:
+                        def _i(s):
+                            try: return int(str(s).replace(",", ""))
+                            except: return 0
+                        fn = _i(row[4])
+                        tn = _i(row[7])
+                        dn = _i(row[8])
+                        return {
+                            "date":        td.isoformat(),
+                            "foreign_buy":  max(fn, 0),
+                            "foreign_sell": max(-fn, 0),
+                            "trust_buy":    max(tn, 0),
+                            "trust_sell":   max(-tn, 0),
+                            "dealer_buy":   max(dn, 0),
+                            "dealer_sell":  max(-dn, 0),
+                        }
+                return None
+            except Exception:
+                return None
+
+    tasks   = [_one_day(d) for d in candidates[:n_days + 10]]
+    results = await asyncio.gather(*tasks)
+    good    = 0
+    for r in results:
+        if r is not None:
+            rows.append(r)
+            good += 1
+        if good >= n_days:
+            break
+
+    return rows if rows else None
 
 _FOREIGN = {"Foreign_Investor", "Foreign_Dealer_Self"}
 _TRUST   = {"Investment_Trust"}
@@ -361,16 +433,29 @@ async def get_chips(
     if cached is not None:
         data = _build_response_data(cached, days)
     else:
+        raw_fm: list[dict] = []
         try:
-            raw = await fetch_institutional(sym, start=start, end=end)
+            raw_fm = await fetch_institutional(sym, start=start, end=end)
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"FinMind error: {e}")
-        if not raw:
-            raise HTTPException(status_code=404, detail=f"No chips data for {sym}")
-        # 聚合後同時快取：fire-and-forget 不阻塞 response
-        by_date = _aggregate_finmind_chips(raw)
-        asyncio.create_task(_upsert_chips_cache(sym, by_date))
-        data = _build_response_data(list(by_date.values()), days)
+            logger.warning("[chips] FinMind %s failed: %s", sym, e)
+
+        if raw_fm:
+            # FinMind 成功
+            by_date = _aggregate_finmind_chips(raw_fm)
+            asyncio.create_task(_upsert_chips_cache(sym, by_date))
+            data = _build_response_data(list(by_date.values()), days)
+        else:
+            # FinMind 失敗 → TWSE T86 fallback（只對台股有效）
+            logger.info("[chips] trying T86 fallback for %s", sym)
+            t86_rows = await _fetch_chips_from_t86(sym, n_days=days)
+            if t86_rows:
+                # T86 資料已是 {date, foreign_buy/sell, ...} 格式
+                data = _build_response_data(t86_rows, days)
+                # 快取到 Supabase
+                by_date = {r["date"]: r for r in t86_rows}
+                asyncio.create_task(_upsert_chips_cache(sym, by_date))
+            else:
+                raise HTTPException(status_code=404, detail=f"No chips data for {sym}")
 
     if not data:
         raise HTTPException(status_code=404, detail=f"No chips data for {sym}")

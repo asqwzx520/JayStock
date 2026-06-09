@@ -49,6 +49,7 @@ export default function StockNews({ symbol }: StockNewsProps) {
   const [importance,        setImportance]        = useState<Importance>("全部");
   const [activeCategories,  setActiveCategories]  = useState<string[]>([]);
   const [keyword,           setKeyword]           = useState("");
+  const [chineseOnly,       setChineseOnly]       = useState(false); // 預設顯示全部語言
 
   const load = useCallback(async () => {
     setLoading(true); setError(false);
@@ -71,9 +72,12 @@ export default function StockNews({ symbol }: StockNewsProps) {
     );
   };
 
+  const chineseCount = news.filter(n => n.is_chinese).length;
+  const englishCount = news.length - chineseCount;
+
   // 篩選邏輯（全前端）
   const filtered = news
-    .filter(n => n.is_chinese)                                     // 固定只顯示中文
+    .filter(n => !chineseOnly || n.is_chinese)                     // 可切換中文過濾
     .filter(n => importance === "全部" || n.importance === importance)
     .filter(n =>
       activeCategories.length === 0 ||
@@ -115,6 +119,20 @@ export default function StockNews({ symbol }: StockNewsProps) {
               );
             })}
           </div>
+
+          {/* 僅中文 toggle */}
+          <button
+            onClick={() => setChineseOnly(v => !v)}
+            title={chineseOnly ? `顯示全部（含 ${englishCount} 篇英文）` : "切換為僅顯示中文新聞"}
+            className="px-2 py-0.5 rounded text-[10px] font-medium transition-all"
+            style={{
+              background: chineseOnly ? "rgba(34,197,94,0.15)" : "var(--bg-elevated)",
+              color:      chineseOnly ? "#4ADE80"              : "var(--text-tertiary)",
+              border:     `1px solid ${chineseOnly ? "rgba(34,197,94,0.4)" : "var(--border)"}`,
+            }}
+          >
+            {chineseOnly ? "🀄 僅中文" : `全部(${news.length})`}
+          </button>
 
           {/* 搜尋框 */}
           <input

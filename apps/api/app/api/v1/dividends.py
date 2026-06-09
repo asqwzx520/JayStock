@@ -152,7 +152,7 @@ async def get_dividends(request: Request, symbol: str):
     美股：GET /api/v1/dividends/AAPL
     """
     sym = validate_symbol(symbol)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     data = await loop.run_in_executor(None, _fetch_dividends_sync, sym)
     if not data:
         # 台股在 Render 上 yfinance 可能被擋，回傳空列表而非 404

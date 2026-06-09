@@ -117,8 +117,49 @@ async def _fetch_twii_from_twse() -> dict:
         return {}
 
 
+async def _fetch_index_yf_direct(ticker_sym: str) -> dict:
+    """
+    直連 Yahoo Finance v8/chart API 取得指數報價。
+    適用於 yfinance 庫被擋時的備援（S&P500、NASDAQ、DOW、SOX、NQ期貨）。
+    """
+    url    = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_sym}"
+    params = {"interval": "1d", "range": "5d", "events": ""}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            data    = resp.json()
+        results = data.get("chart", {}).get("result") or []
+        if not results:
+            return {}
+        meta_d     = results[0].get("meta", {})
+        price      = meta_d.get("regularMarketPrice")
+        prev_close = meta_d.get("previousClose") or meta_d.get("chartPreviousClose")
+        if price and prev_close and float(prev_close) != 0:
+            change     = round(float(price) - float(prev_close), 2)
+            change_pct = round(change / float(prev_close) * 100, 2)
+            return {
+                "price":      round(float(price), 2),
+                "change":     change,
+                "change_pct": change_pct,
+            }
+    except Exception as exc:
+        logger.debug("[market] YF direct %s failed: %s", ticker_sym, exc)
+    return {}
+
+
 async def fetch_indices() -> list[dict]:
-    """取得各大盤指數（帶 TTL 快取）"""
+    """
+    取得各大盤指數（帶 TTL 快取）。
+    路由：yfinance → YF直連httpx → TWSE MIS（僅TWII）
+    """
     now = time.time()
     if _indices_cache.get("data") and now - _indices_cache.get("ts", 0) < _INDICES_TTL:
         return _indices_cache["data"]
@@ -135,9 +176,13 @@ async def fetch_indices() -> list[dict]:
         if isinstance(q, Exception) or not q:
             q = {}
 
-        # 台股加權指數：yfinance 在 Render 上可能被擋，改用 TWSE 備援
+        # 台股加權指數：yfinance 被擋 → TWSE MIS 即時源
         if meta["id"] == "TWII" and not q:
             q = await _fetch_twii_from_twse()
+
+        # 所有指數：yfinance 被擋 → YF 直連 httpx（瀏覽器 UA）
+        if not q:
+            q = await _fetch_index_yf_direct(meta["ticker"])
 
         results.append({
             "id":         meta["id"],
