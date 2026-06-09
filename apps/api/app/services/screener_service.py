@@ -1,40 +1,33 @@
 """
-選股器服務
+選股器服務 (v2)
 
 股票池：台灣主要上市股 ~127 檔
-  半導體 / IC / 電子 / 電信 / 金融 / 傳產 / 高殖利率 / 生技 / ETF
-快取 TTL：30 分鐘（技術面）/ 24h（基本面）
-並行策略：asyncio.Semaphore(10) — 保護 FinMind API，避免 rate-limit
+快取 TTL：30 分鐘
 
-技術指標
-  rsi14        : Wilder RSI-14
-  ma20         : 20 日均線（算術）
-  ma5          : 5 日均線
-  vol_ratio    : 今日量 / 前 20 日均量
-  above_ma20   : 收盤 > MA20
-  ma20_breakout: 今日突破 MA20（昨收 <= MA20 且今收 > MA20）
-  near_high20  : 收盤在 20 日高點 97% 以上
-  near_low20   : 收盤在 20 日低點 105% 以下
-  foreign_streak / trust_streak / dealer_streak : 連續買超/賣超天數
-  foreign_net_today / trust_net_today : 最新一日法人淨買量
+資料來源（v2）
+  法人籌碼：TWSE T86 批量端點
+              https://www.twse.com.tw/fund/T86?response=json&date=YYYYMMDD&selectType=ALL
+              一次 call 取得全市場當日三大法人，20 trading days = 20 次 API call
+              （原本：127 stocks × fetch_institutional = 127 次 FinMind call）
 
-基本面指標（yfinance，24h TTL）
-  pe             : 本益比（trailing P/E）
-  dividend_yield : 殖利率 %
-  gross_margin   : 毛利率 %
-  market_cap_b   : 市值（億台幣）
-  roe            : ROE %
-  eps_growth     : EPS 年成長率 %
-  revenue_growth : 年營收成長率 %
+  日 K 行情：Yahoo Finance Chart API v8 直連（純 httpx，不用 yfinance 庫）
+              https://query1.finance.yahoo.com/v8/finance/chart/{sym}.TW?interval=1d&range=3mo
+              瀏覽器 User-Agent，Render IP 不被識別為 yfinance bot
+              （原本：127 stocks × fetch_daily_kline = 127 次 FinMind call）
+
+  保底 fallback（每股最多 2 次 FinMind call，僅在上兩路都失敗時觸發）：
+              fetch_daily_kline + fetch_institutional
+
+換算：舊版最壞情況 254 FinMind calls/refresh → 新版 ~0–10 FinMind calls/refresh
 """
 
 import asyncio
 import logging
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from app.services.finmind_service import fetch_daily_kline, fetch_institutional
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +73,23 @@ _UNIVERSE: list[str] = [
 ]
 
 # ── 快取狀態 ──────────────────────────────────────────────────────────────────
-_metrics:     dict[str, dict] = {}   # symbol → 已計算指標
-_updated_at:  float           = 0.0  # epoch seconds
-_CACHE_TTL                    = 1800  # 30 分鐘
-_refresh_lock = asyncio.Lock()
+_metrics:     dict[str, dict] = {}
+_updated_at:  float           = 0.0
+_CACHE_TTL                    = 1800   # 30 分鐘
+_refresh_lock  = asyncio.Lock()
 _is_refreshing = False
+
+_TZ_TAIPEI = timezone(timedelta(hours=8))
+
+# ── HTTP headers ──────────────────────────────────────────────────────────────
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8",
+}
 
 
 def get_cache_info() -> dict:
@@ -132,18 +137,17 @@ def _vol_ratio(volumes: list[int], period: int = 20) -> float:
     return round(volumes[-1] / avg, 2) if avg > 0 else 1.0
 
 
-# ── 法人籌碼解析 ──────────────────────────────────────────────────────────────
+# ── 法人籌碼解析（FinMind fallback 用） ──────────────────────────────────────
 
 _FOREIGN_NAMES = {"Foreign_Investor", "Foreign_Dealer_Self"}
 _TRUST_NAMES   = {"Investment_Trust"}
 _DEALER_NAMES  = {"Dealer_self", "Dealer_Hedging"}
 
 
-def _parse_institutional(raw: list[dict]) -> dict:
+def _parse_institutional(raw: list[dict]) -> dict[str, dict[str, int]]:
     """
     將 FinMind 逐筆法人資料聚合成：
-      { date: { foreign: net, trust: net, dealer: net } }
-    再返回：{ date_list, nets_by_cat }
+      { date_str: { foreign: net, trust: net, dealer: net } }
     """
     by_date: dict[str, dict[str, int]] = {}
     for row in raw:
@@ -162,7 +166,6 @@ def _parse_institutional(raw: list[dict]) -> dict:
         if d not in by_date:
             by_date[d] = {"foreign": 0, "trust": 0, "dealer": 0}
         by_date[d][cat] += buy - sell
-
     return by_date
 
 
@@ -185,9 +188,160 @@ def _streak(by_date: dict[str, dict[str, int]], cat: str) -> dict:
     return {"days": count, "direction": direction}
 
 
+# ── TWSE T86 批量法人資料 ─────────────────────────────────────────────────────
+
+def _t86_int(s) -> int:
+    """TWSE T86 欄位：移除千分位逗號後轉 int"""
+    try:
+        return int(str(s).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _fetch_t86_bulk(n_days: int = 20) -> dict[str, dict[str, dict[str, int]]]:
+    """
+    取得最近 n_days 個交易日的全市場三大法人資料。
+
+    回傳：{ symbol → { date_str → { foreign, trust, dealer } } }
+
+    TWSE T86 一次 call 回傳「全市場當日」所有股票，
+    20 個交易日只需 20 次 HTTP call（vs 原本 127 次 FinMind per-stock call）。
+    """
+    # 生成候選日期（從昨天往回推 35 個日曆天，確保能涵蓋 20 個交易日）
+    today = date.today()
+    candidates: list[date] = []
+    d = today
+    while len(candidates) < 35:
+        d -= timedelta(days=1)
+        if d.weekday() < 5:   # 排除週六(5)、週日(6)
+            candidates.append(d)
+
+    sem = asyncio.Semaphore(5)   # TWSE 建議不超過 5 並行
+
+    async def _fetch_one_day(
+        trading_date: date,
+        client: httpx.AsyncClient,
+    ) -> tuple[str, dict[str, dict[str, int]]]:
+        date_key = trading_date.isoformat()
+        tw_date  = trading_date.strftime("%Y%m%d")
+        url = (
+            "https://www.twse.com.tw/fund/T86"
+            f"?response=json&date={tw_date}&selectType=ALL"
+        )
+        async with sem:
+            try:
+                resp = await client.get(url, timeout=12)
+                resp.raise_for_status()
+                payload = resp.json()
+                if payload.get("stat") != "OK" or not payload.get("data"):
+                    return date_key, {}
+                day: dict[str, dict[str, int]] = {}
+                for row in payload["data"]:
+                    sym = str(row[0]).strip()
+                    # 只保留純數字代號（排除標頭列或特殊代碼）
+                    if not sym or not all(c.isdigit() for c in sym):
+                        continue
+                    day[sym] = {
+                        "foreign": _t86_int(row[4]),   # 外陸資買賣超股數
+                        "trust":   _t86_int(row[7]),   # 投信買賣超股數
+                        "dealer":  _t86_int(row[8]),   # 自營商買賣超股數
+                    }
+                return date_key, day
+            except Exception as exc:
+                logger.debug("[screener] T86 %s failed: %s", trading_date, exc)
+                return date_key, {}
+
+    by_symbol: dict[str, dict[str, dict[str, int]]] = {}
+    successful = 0
+
+    async with httpx.AsyncClient(
+        headers={**_BROWSER_HEADERS, "Referer": "https://www.twse.com.tw/"},
+        follow_redirects=True,
+    ) as client:
+        tasks = [_fetch_one_day(d, client) for d in candidates]
+        fetched = await asyncio.gather(*tasks)
+
+    # 只保留有資料的日期，且最多取 n_days 個交易日
+    for date_key, day_data in sorted(fetched, key=lambda x: x[0], reverse=True):
+        if not day_data:
+            continue
+        if successful >= n_days:
+            break
+        successful += 1
+        for sym, nets in day_data.items():
+            by_symbol.setdefault(sym, {})[date_key] = nets
+
+    logger.info("[screener] T86 bulk: %d trading days, %d symbols", successful, len(by_symbol))
+    return by_symbol
+
+
+# ── Yahoo Finance Chart API v8 直連 ──────────────────────────────────────────
+
+async def _fetch_yf_ohlcv_direct(
+    yf_symbol: str,
+    client: httpx.AsyncClient,
+) -> list[dict]:
+    """
+    直連 Yahoo Finance v8/chart API（純 httpx，非 yfinance 庫）。
+    瀏覽器 UA 大幅降低被 Render IP block 的機率。
+
+    回傳：[{"date": "YYYY-MM-DD", "open": f, "high": f, "low": f, "close": f, "volume": i}, ...]
+    """
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}"
+    params = {"interval": "1d", "range": "3mo", "events": ""}
+    headers = {**_BROWSER_HEADERS, "Accept": "application/json"}
+
+    try:
+        resp = await client.get(url, params=params, headers=headers, timeout=14)
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("chart", {}).get("result") or []
+        if not results:
+            return []
+        r         = results[0]
+        timestamps = r.get("timestamp") or []
+        quote      = (r.get("indicators", {}).get("quote") or [{}])[0]
+        opens   = quote.get("open",   [])
+        highs   = quote.get("high",   [])
+        lows    = quote.get("low",    [])
+        closes  = quote.get("close",  [])
+        volumes = quote.get("volume", [])
+
+        bars: list[dict] = []
+        for i, ts in enumerate(timestamps):
+            c = closes[i] if i < len(closes) else None
+            if c is None:
+                continue
+            o = opens[i]   if i < len(opens)   and opens[i]   is not None else c
+            h = highs[i]   if i < len(highs)   and highs[i]   is not None else c
+            l = lows[i]    if i < len(lows)    and lows[i]    is not None else c
+            v = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
+            bars.append({
+                "date":   datetime.fromtimestamp(ts, tz=_TZ_TAIPEI).date().isoformat(),
+                "open":   float(o),
+                "high":   float(h),
+                "low":    float(l),
+                "close":  float(c),
+                "volume": int(v),
+            })
+        return bars
+
+    except Exception as exc:
+        logger.debug("[screener] YF direct %s failed: %s", yf_symbol, exc)
+        return []
+
+
 # ── 單檔指標計算 ──────────────────────────────────────────────────────────────
 
-def _compute_metrics(symbol: str, kline: list[dict], inst_raw: list[dict]) -> Optional[dict]:
+def _compute_metrics(
+    symbol: str,
+    kline: list[dict],
+    by_date: dict[str, dict[str, int]],
+) -> Optional[dict]:
+    """
+    kline   : OHLCV list（已排序）
+    by_date : { date_str → { foreign, trust, dealer } }  已解析的法人淨買超
+    """
     if len(kline) < 5:
         return None
 
@@ -199,31 +353,26 @@ def _compute_metrics(symbol: str, kline: list[dict], inst_raw: list[dict]) -> Op
     change_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0.0
 
     ma20_val  = _ma(closes,      20)
-    ma20_prev = _ma(closes[:-1], 20)   # 昨日 MA20
+    ma20_prev = _ma(closes[:-1], 20)
     ma5_val   = _ma(closes,       5)
 
-    rsi14   = _rsi(closes)
-    vol_r   = _vol_ratio(volumes)
+    rsi14 = _rsi(closes)
+    vol_r = _vol_ratio(volumes)
 
     recent_20 = closes[-20:] if len(closes) >= 20 else closes
-    high20    = max(recent_20)
-    low20     = min(recent_20)
+    high20 = max(recent_20)
+    low20  = min(recent_20)
 
-    by_date = _parse_institutional(inst_raw)
     sorted_dates = sorted(by_date.keys())
-
     f_streak = _streak(by_date, "foreign")
     t_streak = _streak(by_date, "trust")
     d_streak = _streak(by_date, "dealer")
 
-    if sorted_dates:
-        last_nets = by_date[sorted_dates[-1]]
-    else:
-        last_nets = {"foreign": 0, "trust": 0, "dealer": 0}
+    last_nets = by_date[sorted_dates[-1]] if sorted_dates else {"foreign": 0, "trust": 0, "dealer": 0}
 
     return {
         "symbol":            symbol,
-        "name":              symbol,            # 由 refresh_cache 覆寫
+        "name":              symbol,
         "price":             round(price, 2),
         "change_pct":        change_pct,
         "rsi14":             rsi14,
@@ -242,46 +391,91 @@ def _compute_metrics(symbol: str, kline: list[dict], inst_raw: list[dict]) -> Op
     }
 
 
-# ── 快取刷新 ──────────────────────────────────────────────────────────────────
+# ── 單檔 fetch（YF 直連 + T86 預載；FinMind 僅 fallback） ─────────────────────
 
-async def _fetch_one(symbol: str, sem: asyncio.Semaphore) -> tuple[str, Optional[dict]]:
+async def _fetch_one(
+    symbol: str,
+    sem: asyncio.Semaphore,
+    yf_client: httpx.AsyncClient,
+    inst_by_date: dict[str, dict[str, int]],  # 已從 T86 取得的法人資料
+) -> tuple[str, Optional[dict]]:
     async with sem:
         try:
-            end   = date.today()
-            start = end - timedelta(days=60)
-            kline, inst = await asyncio.gather(
-                fetch_daily_kline(symbol,    start=start, end=end),
-                fetch_institutional(symbol,  start=start, end=end),
-            )
-            m = _compute_metrics(symbol, kline, inst)
+            # ── 1. OHLCV：嘗試 .TW，失敗再試 .TWO，都失敗才用 FinMind ──
+            kline = await _fetch_yf_ohlcv_direct(f"{symbol}.TW", yf_client)
+            if len(kline) < 10:
+                kline = await _fetch_yf_ohlcv_direct(f"{symbol}.TWO", yf_client)
+            if len(kline) < 10:
+                # FinMind fallback（消耗 1 quota）
+                try:
+                    from app.services.finmind_service import fetch_daily_kline
+                    end   = date.today()
+                    start = end - timedelta(days=90)
+                    kline = await fetch_daily_kline(symbol, start=start, end=end)
+                    logger.debug("[screener] YF fallback→FinMind kline: %s", symbol)
+                except Exception as fe:
+                    logger.warning("[screener] kline fallback failed %s: %s", symbol, fe)
+                    kline = []
+
+            # ── 2. 法人：使用 T86 預載資料；若完全沒有才 FinMind fallback ──
+            by_date = inst_by_date
+            if not by_date:
+                try:
+                    from app.services.finmind_service import fetch_institutional
+                    end   = date.today()
+                    start = end - timedelta(days=30)
+                    raw   = await fetch_institutional(symbol, start=start, end=end)
+                    by_date = _parse_institutional(raw)
+                    logger.debug("[screener] T86 fallback→FinMind inst: %s", symbol)
+                except Exception as fe:
+                    logger.debug("[screener] inst fallback failed %s: %s", symbol, fe)
+                    by_date = {}
+
+            m = _compute_metrics(symbol, kline, by_date)
             return symbol, m
+
         except Exception as exc:
-            logger.warning("screener: skip %s — %s", symbol, exc)
+            logger.warning("[screener] skip %s — %s", symbol, exc)
             return symbol, None
 
+
+# ── 快取刷新 ──────────────────────────────────────────────────────────────────
 
 async def refresh_cache(universe: Optional[list[str]] = None) -> None:
     global _metrics, _updated_at, _is_refreshing
     if _is_refreshing:
         return
     async with _refresh_lock:
-        if not _is_stale():          # double-check after acquiring lock
+        if not _is_stale():
             return
         _is_refreshing = True
         try:
             pool = universe or _UNIVERSE
-            sem  = asyncio.Semaphore(10)
-            tasks   = [_fetch_one(s, sem) for s in pool]
-            results = await asyncio.gather(*tasks)
 
-            # 嘗試從 TWSE 取得股票名稱（失敗不影響核心功能）
+            # ── Step 1：TWSE T86 批量法人（約 20 次 HTTP，全市場） ───────────
+            t86_data = await _fetch_t86_bulk(n_days=20)
+
+            # ── Step 2：YF 直連 OHLCV（127 次 httpx，共用同一個 client） ────
+            sem = asyncio.Semaphore(20)   # YF 較寬鬆，20 並行
+            async with httpx.AsyncClient(
+                headers=_BROWSER_HEADERS,
+                follow_redirects=True,
+                timeout=16,
+            ) as yf_client:
+                tasks = [
+                    _fetch_one(s, sem, yf_client, t86_data.get(s, {}))
+                    for s in pool
+                ]
+                results = await asyncio.gather(*tasks)
+
+            # ── Step 3：補股票名稱（TWSE 一次 bulk，失敗不影響核心） ─────────
             names: dict[str, str] = {}
             try:
                 from app.services.twse_fetcher import fetch_quotes
                 quotes = await fetch_quotes(pool)
                 names  = {s: q.get("name", s) for s, q in quotes.items()}
             except Exception as e:
-                logger.warning("screener: name fetch failed — %s", e)
+                logger.warning("[screener] name fetch failed: %s", e)
 
             new_metrics: dict[str, dict] = {}
             for sym, m in results:
@@ -292,11 +486,13 @@ async def refresh_cache(universe: Optional[list[str]] = None) -> None:
 
             _metrics    = new_metrics
             _updated_at = time.time()
-            logger.info("screener cache refreshed: %d / %d stocks", len(_metrics), len(pool))
+            logger.info(
+                "[screener] cache refreshed: %d / %d stocks (T86: %d syms)",
+                len(_metrics), len(pool), len(t86_data),
+            )
         finally:
             _is_refreshing = False
 
-        # 技術面快取刷新後，在背景觸發基本面刷新（不阻塞）
         pool = universe or _UNIVERSE
         asyncio.create_task(_trigger_fund_refresh(pool))
 
@@ -307,7 +503,7 @@ async def _trigger_fund_refresh(pool: list[str]) -> None:
         from app.services.fundamental_cache_service import refresh_fund_cache
         await refresh_fund_cache(pool)
     except Exception as exc:
-        logger.warning("fundamental cache refresh failed: %s", exc)
+        logger.warning("[screener] fundamental cache refresh failed: %s", exc)
 
 
 async def get_metrics() -> dict[str, dict]:
@@ -318,7 +514,6 @@ async def get_metrics() -> dict[str, dict]:
     if not _metrics or _is_stale():
         await refresh_cache()
 
-    # 嘗試合併基本面資料（快取未就緒則靜默跳過）
     try:
         from app.services.fundamental_cache_service import get_fund_data
         fund = get_fund_data()
