@@ -30,10 +30,12 @@ export function useKeyboardShortcuts({
   onFocusSearch,
 }: UseKeyboardShortcutsOptions) {
   // 用 ref 避免 handler 裡的 closure stale
-  const symRef = useRef(currentSymbol);
+  const symRef  = useRef(currentSymbol);
   const listRef = useRef(watchlistSymbols);
-  symRef.current = currentSymbol;
-  listRef.current = watchlistSymbols;
+
+  // ⚠️ react-hooks/refs：ref.current 賦值必須在 effect 裡，不能在 render body
+  useEffect(() => { symRef.current  = currentSymbol;    }, [currentSymbol]);
+  useEffect(() => { listRef.current = watchlistSymbols; }, [watchlistSymbols]);
 
   useEffect(() => {
     function isTyping(e: KeyboardEvent): boolean {
