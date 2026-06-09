@@ -551,6 +551,46 @@ export function getStockNews(symbol: string) {
   return fetcher<StockNewsResponse>(`/api/v1/news/${encodeURIComponent(symbol)}`);
 }
 
+// ── Ownership (TDCC 股權分散) ────────────────────────────────────────────────
+export interface OwnershipPoint {
+  week_date:         string;
+  retail_pct:        number | null;
+  major_pct:         number | null;
+  shareholder_count: number | null;
+  major_count:       number | null;
+}
+
+export interface OwnershipResponse {
+  symbol:  string;
+  weeks:   number;
+  latest:  OwnershipPoint;
+  history: OwnershipPoint[];
+}
+
+export function getOwnership(symbol: string, weeks: number = 12) {
+  return fetcher<OwnershipResponse>(`/api/v1/ownership/${encodeURIComponent(symbol)}?weeks=${weeks}`);
+}
+
+// ── Monthly Revenue (MOPS 月營收) ────────────────────────────────────────────
+export interface RevenueRow {
+  year:    number;
+  month:   number;
+  revenue: number;
+  yoy_pct: number | null;
+  mom_pct: number | null;
+}
+
+export interface RevenueResponse {
+  symbol: string;
+  count:  number;
+  data:   RevenueRow[];
+  status?: string;
+}
+
+export function getRevenue(symbol: string, months: number = 24) {
+  return fetcher<RevenueResponse>(`/api/v1/revenue/${encodeURIComponent(symbol)}?months=${months}`);
+}
+
 // ── Price Alert Notifications ────────────────────────────────────────────────
 export interface AlertNotification {
   id:         string;

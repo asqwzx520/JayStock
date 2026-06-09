@@ -50,6 +50,16 @@ export default function StockNews({ symbol }: StockNewsProps) {
   const [activeCategories,  setActiveCategories]  = useState<string[]>([]);
   const [keyword,           setKeyword]           = useState("");
   const [chineseOnly,       setChineseOnly]       = useState(false); // 預設顯示全部語言
+  const [activeSources,     setActiveSources]     = useState<string[]>([]); // 新聞來源篩選
+
+  // 來源代號 → 顯示名稱（與後端 source 欄位對應）
+  const SOURCE_LABELS: Record<string, string> = {
+    yahoo:   "Yahoo",
+    anue:    "鉅亨",
+    moneydj: "MoneyDJ",
+    google:  "Google",
+    finnhub: "Finnhub",
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setError(false);
@@ -75,9 +85,13 @@ export default function StockNews({ symbol }: StockNewsProps) {
   const chineseCount = news.filter(n => n.is_chinese).length;
   const englishCount = news.length - chineseCount;
 
+  // 統計可用來源（後端 type 欄位帶 source 代號）
+  const availableSources = Array.from(new Set(news.map(n => n.type).filter(Boolean)));
+
   // 篩選邏輯（全前端）
   const filtered = news
     .filter(n => !chineseOnly || n.is_chinese)                     // 可切換中文過濾
+    .filter(n => activeSources.length === 0 || activeSources.includes(n.type))
     .filter(n => importance === "全部" || n.importance === importance)
     .filter(n =>
       activeCategories.length === 0 ||
@@ -88,6 +102,12 @@ export default function StockNews({ symbol }: StockNewsProps) {
       )
     )
     .filter(n => !keyword.trim() || n.title.includes(keyword.trim()));
+
+  const toggleSource = (src: string) => {
+    setActiveSources(prev =>
+      prev.includes(src) ? prev.filter(s => s !== src) : [...prev, src]
+    );
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -177,6 +197,40 @@ export default function StockNews({ symbol }: StockNewsProps) {
             </button>
           )}
         </div>
+
+        {/* Row 3：新聞來源 chip（多選，只在有 ≥2 個來源時顯示） */}
+        {availableSources.length >= 2 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] mr-1" style={{ color: "var(--text-tertiary)" }}>來源：</span>
+            {availableSources.map(src => {
+              const active = activeSources.includes(src);
+              const label  = SOURCE_LABELS[src] || src;
+              return (
+                <button
+                  key={src}
+                  onClick={() => toggleSource(src)}
+                  className="px-2 py-0.5 rounded text-[10px] font-medium transition-all"
+                  style={{
+                    background: active ? "rgba(168,85,247,0.18)" : "var(--bg-elevated)",
+                    color:      active ? "#C084FC"               : "var(--text-tertiary)",
+                    border:     `1px solid ${active ? "rgba(168,85,247,0.4)" : "var(--border)"}`,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {activeSources.length > 0 && (
+              <button
+                onClick={() => setActiveSources([])}
+                className="px-1.5 py-0.5 text-[10px] rounded transition-opacity"
+                style={{ color: "var(--text-tertiary)", opacity: 0.6 }}
+              >
+                清除
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── 新聞列表 ────────────────────────────────────────────────────── */}

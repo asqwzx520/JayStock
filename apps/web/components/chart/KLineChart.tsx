@@ -644,8 +644,18 @@ export default function KLineChart({
         timeVisible:    isIntraday,
         secondsVisible: false,
       },
-      handleScroll: true,
-      handleScale:  true,
+      handleScroll: {
+        mouseWheel:         true,
+        pressedMouseMove:   true,
+        horzTouchDrag:      true,
+        vertTouchDrag:      true,
+      },
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: true },
+        mouseWheel:           true,
+        pinch:                true,
+      },
+      kineticScroll: { touch: true, mouse: false },
     });
 
     chartRef.current = chart;
