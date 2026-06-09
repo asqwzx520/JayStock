@@ -1,5 +1,36 @@
 import type { Metadata, Viewport } from "next";
+import { Space_Grotesk, IBM_Plex_Mono, Syne, Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
+
+// ── Google Fonts（next/font 避免 FOUC + 自動 preload）────────────────────────
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--loaded-space-grotesk",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--loaded-ibm-plex-mono",
+  display: "swap",
+});
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--loaded-syne",
+  display: "swap",
+});
+
+const notoSansTC = Noto_Sans_TC({
+  subsets: ["chinese-traditional"],
+  weight: ["400", "500", "700"],
+  variable: "--loaded-noto-sans-tc",
+  display: "swap",
+});
+
 import FeedbackWidget         from "@/components/ui/FeedbackWidget";
 import AlertsToast            from "@/components/ui/AlertsToast";
 import SessionProviderWrapper from "@/components/auth/SessionProviderWrapper";
@@ -101,7 +132,11 @@ export default async function RootLayout({
   try { session = await auth(); } catch {}
 
   return (
-    <html lang="zh-TW" suppressHydrationWarning className="h-full antialiased">
+    <html
+      lang="zh-TW"
+      suppressHydrationWarning
+      className={`h-full antialiased ${spaceGrotesk.variable} ${ibmPlexMono.variable} ${syne.variable} ${notoSansTC.variable}`}
+    >
       {/* overflow-hidden / h-full is controlled per-route via data-layout */}
       <body className="h-full">
         {/* 防 FOUC：在 React hydration 前讀 localStorage 並設 data-theme */}

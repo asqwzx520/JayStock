@@ -538,19 +538,19 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
           borderColor: "var(--border)",
         }}
       >
-        {/* Logo — 漸層發光版 */}
+        {/* Logo — V2 電光青藍版 */}
         <div className="flex items-center gap-2 shrink-0">
           <span
             style={{
-              fontFamily: "var(--font-mono)",
+              fontFamily: "var(--font-display)",
               fontWeight: 800,
-              fontSize: "14px",
-              letterSpacing: "2px",
-              background: "linear-gradient(135deg, #60a5fa 0%, #818cf8 50%, #a78bfa 100%)",
+              fontSize: "17px",
+              letterSpacing: "-0.5px",
+              background: "linear-gradient(135deg, var(--color-brand) 0%, #7B7FFF 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
-              filter: "drop-shadow(0 0 6px rgba(99,102,241,0.5))",
+              filter: "drop-shadow(0 0 8px rgba(0,212,255,0.35))",
             }}
           >
             JAYSTOCK
@@ -561,7 +561,7 @@ export default function Header({ onSelectStock, currentSymbol, currentName }: He
               height: "6px",
               borderRadius: "50%",
               background: "var(--color-down)",
-              boxShadow: "0 0 8px var(--color-down), 0 0 16px rgba(34,197,94,0.4)",
+              boxShadow: "0 0 8px var(--color-down-glow, rgba(46,213,115,0.5)), 0 0 16px rgba(46,213,115,0.3)",
               animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite",
             }}
             title="市場資料更新中"
