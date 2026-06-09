@@ -118,13 +118,22 @@ async def fetch_all_daily_quotes() -> dict[str, dict]:
             except (ValueError, TypeError):
                 vol = None
 
+            close  = _safe_float(r.get("ClosingPrice")  or r.get("收盤價"))
+            change = _safe_float(r.get("Change")        or r.get("漲跌價差"))
+            prev   = (close or 0.0) - (change or 0.0)
+            change_pct: float | None = None
+            if prev and prev != 0.0 and change is not None:
+                change_pct = round((change / prev) * 100, 2)
+
             result[sym] = {
-                "open":   _safe_float(r.get("OpeningPrice")  or r.get("開盤價")),
-                "high":   _safe_float(r.get("HighestPrice")  or r.get("最高價")),
-                "low":    _safe_float(r.get("LowestPrice")   or r.get("最低價")),
-                "close":  _safe_float(r.get("ClosingPrice")  or r.get("收盤價")),
-                "volume": vol,
-                "change": _safe_float(r.get("Change")        or r.get("漲跌價差")),
+                "name":       str(r.get("Name") or r.get("股票名稱") or sym).strip(),
+                "open":       _safe_float(r.get("OpeningPrice")  or r.get("開盤價")),
+                "high":       _safe_float(r.get("HighestPrice")  or r.get("最高價")),
+                "low":        _safe_float(r.get("LowestPrice")   or r.get("最低價")),
+                "close":      close,
+                "volume":     vol,
+                "change":     change,
+                "change_pct": change_pct,
             }
 
         logger.info("[TWSE OpenAPI] STOCK_DAY_ALL loaded: %d symbols", len(result))

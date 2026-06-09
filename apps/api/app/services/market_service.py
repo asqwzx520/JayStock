@@ -275,18 +275,43 @@ async def _breadth_from_screener() -> dict:
 # ── 產業板塊熱力圖 ───────────────────────────────────────────────────────────
 
 async def fetch_sector_heatmap() -> list[dict]:
-    """計算各產業板塊平均漲跌幅（使用 screener 快取）"""
+    """計算各產業板塊平均漲跌幅。
+
+    資料優先順序：
+      1. screener._metrics（有技術指標，最完整）
+      2. TWSE OpenAPI STOCK_DAY_ALL（盤後，cold start 時的 fallback）
+    """
     now = time.time()
     if _sectors_cache.get("data") and now - _sectors_cache.get("ts", 0) < _SECTORS_TTL:
         return _sectors_cache["data"]
 
+    # ── 嘗試 screener 快取（有技術指標，最完整）───────────────────────────────
     try:
-        # 直接讀取已快取的 _metrics，不觸發刷新
         from app.services import screener_service  # type: ignore
         metrics: dict = screener_service._metrics  # type: ignore[attr-defined]
     except Exception as exc:
         logger.warning("sector heatmap: screener metrics unavailable — %s", exc)
         metrics = {}
+
+    # ── Cold start fallback：screener 尚未運行時改用 TWSE OpenAPI ─────────────
+    if not metrics:
+        try:
+            from app.services.twse_openapi_service import fetch_all_daily_quotes
+            daily = await fetch_all_daily_quotes()
+            metrics = {}
+            for sym, q in daily.items():
+                change_pct = q.get("change_pct")
+                if change_pct is None:
+                    continue
+                metrics[sym] = {
+                    "name":       q.get("name", sym),
+                    "price":      q.get("close") or 0.0,
+                    "change_pct": change_pct,
+                    "vol_ratio":  1.0,
+                }
+            logger.info("sector heatmap: using TWSE OpenAPI fallback (%d symbols)", len(metrics))
+        except Exception as exc:
+            logger.warning("sector heatmap: TWSE OpenAPI fallback failed — %s", exc)
 
     sectors: list[dict] = []
     for sector_name, syms in _SECTOR_MAP.items():
@@ -622,11 +647,81 @@ def _parse_news_item(item: dict) -> dict:
         }
 
 
+def _fetch_news_rss_sync(ticker_sym: str) -> list[dict]:
+    """
+    透過 Yahoo Finance RSS 抓新聞（httpx 直接呼叫，不走 yfinance Python 函式庫）。
+    適用於 .TW 台股；Render IP 上比 yfinance 可靠。
+    """
+    import xml.etree.ElementTree as ET
+    import httpx as _httpx
+    import email.utils as _email_utils
+
+    url = (
+        f"https://feeds.finance.yahoo.com/rss/2.0/headline"
+        f"?s={ticker_sym}&region=TW&lang=zh-TW"
+    )
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/rss+xml, application/xml, text/xml",
+    }
+    try:
+        resp = _httpx.get(url, headers=headers, timeout=10, follow_redirects=True)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+        channel = root.find("channel")
+        if channel is None:
+            return []
+
+        items: list[dict] = []
+        for item in channel.findall("item")[:20]:
+            title_el     = item.find("title")
+            link_el      = item.find("link")
+            pub_el       = item.find("pubDate")
+            source_el    = item.find("source")
+            desc_el      = item.find("description")
+
+            title     = (title_el.text or "").strip()     if title_el  is not None else ""
+            link      = (link_el.text  or "").strip()     if link_el   is not None else ""
+            publisher = (source_el.text or "Yahoo Finance").strip() if source_el is not None else "Yahoo Finance"
+
+            published_at = 0
+            if pub_el is not None and pub_el.text:
+                try:
+                    published_at = int(_email_utils.parsedate_to_datetime(pub_el.text).timestamp())
+                except Exception:
+                    pass
+
+            if not title:
+                continue
+
+            items.append({
+                "title":        title,
+                "publisher":    publisher,
+                "link":         link,
+                "published_at": published_at,
+                "thumbnail":    None,
+                "type":         "STORY",
+                "importance":   _score_importance(title, publisher),
+                "is_chinese":   _is_chinese(title),
+            })
+
+        logger.debug("news RSS %s: got %d items", ticker_sym, len(items))
+        return items
+    except Exception as exc:
+        logger.debug("news RSS %s error: %s", ticker_sym, exc)
+        return []
+
+
 def _fetch_news_sync(ticker_sym: str) -> list[dict]:
     """
     同步從 yfinance 抓個股新聞（在 executor 執行）。
     yfinance 1.x 新增 get_news()；舊版用 .news 屬性。
     兩者都嘗試，取非空的那個。
+    台股（.TW）若 yfinance 回傳空，自動改走 Yahoo Finance RSS。
     """
     try:
         import yfinance as yf
@@ -652,10 +747,17 @@ def _fetch_news_sync(ticker_sym: str) -> list[dict]:
                 pass
 
         logger.debug("news fetch %s: got %d items", ticker_sym, len(raw))
-        return [_parse_news_item(item) for item in raw[:20]]
+        if raw:
+            return [_parse_news_item(item) for item in raw[:20]]
     except Exception as exc:
         logger.debug("news fetch %s error: %s", ticker_sym, exc)
-        return []
+
+    # ③ yfinance 失敗或回傳空 → 台股改走 Yahoo Finance RSS
+    if ticker_sym.upper().endswith(".TW") or ticker_sym.upper().endswith(".TWO"):
+        logger.debug("news yfinance empty for %s — trying RSS fallback", ticker_sym)
+        return _fetch_news_rss_sync(ticker_sym)
+
+    return []
 
 
 async def _news_from_supabase(symbol: str) -> list[dict] | None:
