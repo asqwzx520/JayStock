@@ -108,7 +108,11 @@ stock-platform/
 - **切換 Tab**：自選股 ↔ 熱門排行
 
 ##### 2.1.3 RightPanel (`RightPanel.tsx`)
-- 右側分析面板
+- 右側報價面板（`hidden lg:flex`，1024px+ 顯示）
+- 大字股價 + 漲跌幅 badge（含 glow 特效）
+- 今日行情卡：開 / 高 / 低 / 昨收 / 成交量 / 委買 / 委賣
+- 振幅 / 與昨收差 %
+- 由 `page.tsx` 傳入 `quote` prop
 
 ---
 
@@ -220,6 +224,7 @@ stock-platform/
 ##### 2.4.1 ChipsPanel (`ChipsPanel.tsx`)
 - 三大法人日線圖（外資/投信/自營商 買賣超 bar）
 - 連買/連賣天數 streak 徽章
+- **三大法人 · 近30日明細表格**（`DailyChipsTable`）：日期 / 外資淨買 / 投信淨買 / 自營淨買 / 三大合計，正紅負綠，最新在前
 - 累計買超折線（cumulative series）
 - 籌碼評分（0–100，`ChipsScore`）
 - 分點券商籌碼（`BrokerChipsResponse`）：外資/投信/當沖 Top 買/賣

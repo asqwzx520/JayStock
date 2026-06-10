@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-09（Sprint 6 完成 + TWSE OpenAPI PE/PB 批量取代 yfinance）  
-> **當前版本：** commit `fa919ce`（TWSE OpenAPI 全市場 PE/PB/殖利率一次拉取；`twse_openapi_service.py` 新增；`fundamental.py` 整合）  
+> **更新日期：** 2026-06-11（30日籌碼明細表 + RightPanel 1024px 整合）  
+> **當前版本：** commit `2c5d003`（ChipsPanel 三大法人近30日明細表格；page.tsx 引入 RightPanel lg breakpoint）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -135,7 +135,7 @@
 | ~~**外資持股比例趨勢**~~ | 近 12 月折線 + 股價疊圖 | ✅ 已完成（`foreign_holding.py`，TWSE） |
 | ~~**月營收走勢**~~ | 24 個月折線 + YoY 柱狀 | ✅ 已完成（後端 `monthly_revenue_service.py` MOPS IFRS；前端 `AnalysisPanel` `MonthlyRevenueSection`：摘要卡片+折線圖+YoY柱狀圖+明細表） |
 | ~~**財務歷史 10 年**~~ | 損益表 + 現金流 10 年 | ✅ 已完成（`financials.py`） |
-| **個股 30 日籌碼詳情表格** | 三大法人日報表 | 有 API 但 UI 未完整呈現 |
+| ~~**個股 30 日籌碼詳情表格**~~ | 三大法人日報表 | ✅ 已完成（`2c5d003`，ChipsPanel 近30日明細表格，外資/投信/自營/合計，正紅負綠） |
 | **連續買超/賣超天數標籤** | 標示「外資連 N 日買超」| 已有 streak badge，但 Watchlist 列表未顯示 |
 | **美股完整支援** | Polygon.io 整合 | Sprint 3 已加 S&P 500 搜尋 + `/kline/us/` yfinance K 線；無五檔委買委賣/即時行情 |
 | ~~**SMTP 盤前 AI 推播**~~ | 每日 8AM Email | ✅ 已完成（改用 Resend API，`1361516`）|
@@ -358,9 +358,9 @@
 - `page.tsx` 所有 11 個動態 import 均已套用對應 Skeleton fallback
 - KLine inline 載入也改用 `ChartSkeleton`（animate-pulse 假K棒 + 假成交量）
 
-**D. RightPanel 修復**（待做）
-- `hidden xl:block` → `hidden lg:block`
-- 讓 1024px 以上螢幕都能看到右側面板
+**D. RightPanel 修復**（✅ 已完成 `2c5d003`）
+- `page.tsx` 引入 RightPanel，加入主佈局 `</main>` 後
+- 元件使用 `hidden lg:flex`，1024px+ 顯示大字股價 + 今日行情 + 振幅
 
 ### ~~第 4 步：行動版 RWD~~ ✅ 已完成（`1960da0`）
 > 三段式 RWD 佈局已實作：底部 Tab bar + 左側欄折疊抽屜，台灣 60%+ 投資人用手機看盤。
@@ -427,10 +427,11 @@
 
 ---
 
-## ✅ 近期完成（2026-06-09）
+## ✅ 近期完成（2026-06-11）
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `2c5d003` | **30日籌碼明細表 + RightPanel 整合**：`ChipsPanel.tsx` 新增「三大法人 · 近30日明細」Section（每日外資/投信/自營/合計淨買賣數字表格，最新在前，正紅負綠千分位）；`page.tsx` 引入 `RightPanel` 並加入主佈局（lg breakpoint 1024px+），顯示大字股價 + 今日行情卡 + 振幅區間；確認基本面摘要列已存在（市值/本益比/EPS/殖利率/52W/Beta/產業）| ✅ Local |
 | `fa919ce` | **TWSE OpenAPI 批量基本面**：新增 `twse_openapi_service.py`（`BWIBBU_ALL` 一次拉 ~1700 支 PE/PB/殖利率，TTL 4h；`STOCK_DAY_ALL` 全市場日行情快照 TTL 5min）；`fundamental.py` 台股改走 TWSE 批量查詢（單股 O(1)），FinMind `TaiwanStockPER` per-symbol 呼叫全部取代 | ✅ Live |
 | `7caeeb4` | **Sprint 6：Screener 基本面篩選**：股票池 70→127；`fundamental_cache_service.py`（yfinance 批量 24h TTL）；`RunRequest` 10 個基本面條件欄；`_matches()` 過濾；前端展開式面板 + 動態結果欄（7 個欄位按條件啟用顯示） | ✅ Live |
 | `5a31945` | **Sprint 5：K線圖表全面強化** — Tab 改名「K線」；左側欄 OHLCV 十字線（`onCrosshairMove` prop → `hoveredBar` state，滑鼠離開恢復報價）；全螢幕按鈕（右下角 ⛶ → `FullscreenChartModal`，含完整工具列，ESC/✕ 關閉）；Ctrl+Z 無限 undo（`undoStackRef<Drawing[][]>`，symbol 切換清空）；指標參數 Legend+Popover（MA/EMA/BOLL/VWAP 等可點 ✎ 調參數，`IndicatorParamPopover.tsx`，`lib/indicatorParams.ts` localStorage 持久化）；子指標獨立面板（`SubIndicatorPanel.tsx`，`SUB_PANEL_INDICATORS` = MACD/RSI/KD/WR/OBV/ATR/ADX/SRSI，各自獨立 createChart 實例，不擋成交量）；可拖動分界線（`ResizeDivider.tsx`，主圖最小 30%，子指標最小 5%，高度比例 localStorage 持久化）；跨面板時間軸同步（`subscribeVisibleLogicalRangeChange` + `isSyncingRef`）；`ChartWithPanels.tsx` 統一管理，page.tsx 替換 KLineChart 呼叫 | ✅ Local |
@@ -501,4 +502,4 @@
 
 ---
 
-*最後更新：2026-06-09 by Claude（Sprint 1~6 完成；Sprint 6 Screener 基本面篩選 + TWSE OpenAPI 批量基本面；commit `fa919ce`；整體評分 96/100）*
+*最後更新：2026-06-11 by Claude（30日籌碼明細表 + RightPanel 1024px 整合；commit `2c5d003`；整體評分 96/100）*
