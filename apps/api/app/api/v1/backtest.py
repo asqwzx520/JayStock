@@ -10,7 +10,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.rate_limit import limiter
@@ -158,7 +158,7 @@ async def get_presets():
 @limiter.limit("5/minute")   # 回測 CPU 較重，限流保護
 async def run_backtest_endpoint(
     request: Request,
-    body: BacktestRequest,
+    body: BacktestRequest = Body(...),
 ):
     """
     執行回測。
