@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/layout/Header";
 import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
@@ -17,16 +17,6 @@ import AlertModal         from "@/components/ui/AlertModal";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
-const ChartWithPanels = dynamic(
-  () => import("@/components/chart/ChartWithPanels"),
-  { ssr: false, loading: () => <ChartSkeleton /> }
-);
-
-const FullscreenChartModal = dynamic(
-  () => import("@/components/chart/FullscreenChartModal"),
-  { ssr: false }
-);
-
 const ChipsPanel = dynamic(
   () => import("@/components/chips/ChipsPanel"),
   { ssr: false, loading: () => <ChartSkeleton /> }
@@ -89,11 +79,13 @@ const WorkspaceModal = dynamic(
 import {
   getQuote,
   getKline,
+  getUsKline,
   getIntradayKline,
   getChips,
   getFundamental,
   getStockVerdict,
   getPatterns,
+  watchlistApi,
   INTRADAY_PERIODS,
   type Quote,
   type KlineBar,
@@ -103,10 +95,22 @@ import {
   type FundamentalData,
   type CandlePattern,
 } from "@/lib/api";
-import { loadParams, saveParams } from "@/lib/indicatorParams";
-import type { IndicatorParams } from "@/lib/indicatorParams";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
+import { withCache } from "@/lib/clientCache";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { loadParams, saveParams } from "@/lib/indicatorParams";
+import type { IndicatorParams } from "@/lib/indicatorParams";
+
+const ChartWithPanels = dynamic(
+  () => import("@/components/chart/ChartWithPanels"),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+
+const FullscreenChartModal = dynamic(
+  () => import("@/components/chart/FullscreenChartModal"),
+  { ssr: false }
+);
 
 const isIntradayPeriod = (p: string): p is IntradayPeriod =>
   (INTRADAY_PERIODS as string[]).includes(p);
@@ -139,6 +143,7 @@ function FundItem({ label, value, color }: { label: string; value: string; color
 export default function Home() {
   const [symbol, setSymbol]       = useState(readInitSymbol);  // 支援 /stock/[symbol] 導入
   const [stockName, setStockName] = useState("台積電");
+  const [market, setMarket]       = useState<"TW" | "US">("TW");  // 目前股票市場
   const [quote, setQuote]         = useState<Quote | null>(null);
 
   // K線（日K = KlineBar[], 分K = IntradayBar[]）
@@ -157,6 +162,11 @@ export default function Home() {
   // 主 tab
   const [viewTab, setViewTab] = useState<ViewTab>("kline");
 
+  // keep-alive：記錄已訪問過的 tab，掛載後不再銷毀
+  const [mountedTabs, setMountedTabs] = useState<Set<ViewTab>>(
+    () => new Set<ViewTab>(["kline", "home", "analysis"])
+  );
+
   // 基本面資料
   const [fundamental, setFundamental] = useState<FundamentalData | null>(null);
 
@@ -172,12 +182,15 @@ export default function Home() {
   const [drawingClearKey, setDrawingClearKey] = useState(0);
   const [alertModalOpen, setAlertModalOpen]   = useState(false);
 
-  // 指標參數（MA 週期、BOLL std 等），存 localStorage
+  // 指標參數（含 MA 週期、BOLL std 等），存 localStorage
   const [indicatorParams, setIndicatorParams] = useState<IndicatorParams>(() => loadParams());
   const handleParamsChange = useCallback((p: IndicatorParams) => {
     saveParams(p);
     setIndicatorParams(p);
   }, []);
+
+  // 十字線懸停 bar（左側欄顯示 OHLCV）
+  const [hoveredBar, setHoveredBar] = useState<ChartBar | null>(null);
 
   // 全螢幕模式
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
@@ -189,23 +202,48 @@ export default function Home() {
   // 手機版：已移除 LeftPanel Drawer，保留狀態供底部 nav 用
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
 
-  // ── 載入 K 線（自動分流：分K / 日週月K）──────────────────────
+  // 自選股清單（供鍵盤快捷鍵 ↑↓ 切換）
+  const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
+  useEffect(() => {
+    watchlistApi.get()
+      .then(state => {
+        // items is Record<groupId, WatchlistItem[]>
+        const syms = Object.values(state.items).flatMap(arr => arr.map(i => i.symbol));
+        setWatchlistSymbols(syms);
+      })
+      .catch(() => {});
+  }, []);
+
+  // market ref：讓 loadKline callback 讀最新值，不需加入依賴陣列
+  const marketRef = useRef(market);
+  useEffect(() => { marketRef.current = market; });
+
+  // ── 載入 K 線（自動分流：分K / 日週月K / 美股 yfinance）──────────────
   const loadKline = useCallback(async (sym: string, prd: string) => {
     setLoading(true); setError("");
     try {
-      if (isIntradayPeriod(prd)) {
-        // 分K：呼叫 /kline/{symbol}/intraday
+      const mkt = marketRef.current;
+
+      if (mkt === "US") {
+        // 美股：直接呼叫 /kline/us/{symbol}（TTL 1h 後端快取）
+        const klineTtl = (prd === "quarterly" || prd === "yearly") ? 30 * 60_000 : 3 * 60_000;
+        const k = await withCache(`kline_us:${sym}:${prd}`, () => getUsKline(sym, prd), klineTtl);
+        setKlineData(k.data as KlineBar[]);
+        setQuote(null);  // 美股不做即時報價 WebSocket，清除舊 quote
+      } else if (isIntradayPeriod(prd)) {
+        // 分K：呼叫 /kline/{symbol}/intraday（TTL 1 分鐘）
         const [q, k] = await Promise.all([
-          getQuote(sym).catch(() => null),
-          getIntradayKline(sym, prd),
+          withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
+          withCache(`kline_intraday:${sym}:${prd}`, () => getIntradayKline(sym, prd), 60_000),
         ]);
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as IntradayBar[]);
       } else {
-        // 日/週/月 K
+        // 日/週/月 K（TTL 3 分鐘）；季K/年K 歷史資料不易變，TTL 30 分鐘
+        const klineTtl = (prd === "quarterly" || prd === "yearly") ? 30 * 60_000 : 3 * 60_000;
         const [q, k] = await Promise.all([
-          getQuote(sym).catch(() => null),
-          getKline(sym, prd),
+          withCache(`quote:${sym}`, () => getQuote(sym), 60_000).catch(() => null),
+          withCache(`kline:${sym}:${prd}`, () => getKline(sym, prd), klineTtl),
         ]);
         if (q) { setQuote(q); setStockName(q.name); }
         setKlineData(k.data as KlineBar[]);
@@ -242,24 +280,26 @@ export default function Home() {
   }, [symbol, indicators, period, loadKlineChips]);
 
 
-  // 即時報價：WebSocket（盤中 5s，盤外 30s）
-  const { quotes: wsQuotes } = useStockWebSocket([symbol]);
+  // 即時報價：WebSocket（盤中 5s，盤外 30s）；美股不連線
+  const { quotes: wsQuotes } = useStockWebSocket(market === "US" ? [] : [symbol]);
   useEffect(() => {
+    if (market === "US") return;   // 美股不套用 WS 報價
     const q = wsQuotes[symbol];
     if (q) setQuote(q);
-  }, [wsQuotes, symbol]);
+  }, [wsQuotes, symbol, market]);
 
-  // 基本面：symbol 變動時重載（後端 TTL=1h，不影響效能）
+  // 基本面：symbol 變動時重載（前端 TTL 1h，與後端一致）
   useEffect(() => {
     setFundamental(null);
-    getFundamental(symbol).then(setFundamental).catch(() => {});
+    withCache(`fundamental:${symbol}`, () => getFundamental(symbol), 3_600_000)
+      .then(setFundamental).catch(() => {});
     setVerdict(null);   // 換股時清除舊評價
   }, [symbol]);
 
-  // K 線型態：symbol 變動時重載（後端 TTL=5min）
+  // K 線型態：symbol 變動時重載（前端 TTL 5min，與後端一致）
   useEffect(() => {
-    setPatterns([]);
-    getPatterns(symbol).then((r) => setPatterns(r.patterns)).catch(() => {});
+    withCache(`patterns:${symbol}`, () => getPatterns(symbol), 5 * 60_000)
+      .then((r) => setPatterns(r.patterns)).catch(() => {});
   }, [symbol]);
 
   async function fetchVerdict() {
@@ -275,14 +315,37 @@ export default function Home() {
     }
   }
 
-  function handleSelectStock(sym: string, name?: string) {
+  function handleSelectStock(sym: string, name?: string, mkt?: "TW" | "US") {
     setSymbol(sym);
     if (name) setStockName(name);
+    // 更新市場（美股隱藏籌碼 Tab）
+    setMarket(mkt ?? "TW");
+  }
+
+  // ── 鍵盤快捷鍵 ────────────────────────────────────────────────
+  useKeyboardShortcuts({
+    watchlistSymbols,
+    currentSymbol: symbol,
+    onSymbolChange: (sym) => {
+      setSymbol(sym);
+      switchTab("kline");
+    },
+    onFocusSearch: () => {
+      (document.getElementById("stock-search-input") as HTMLInputElement | null)?.focus();
+    },
+  });
+
+  function switchTab(tab: ViewTab) {
+    setViewTab(tab);
+    setMountedTabs(prev => {
+      if (prev.has(tab)) return prev;
+      return new Set([...prev, tab]);
+    });
   }
 
   return (
     <>
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <Header
         onSelectStock={handleSelectStock}
         currentSymbol={symbol}
@@ -301,12 +364,15 @@ export default function Home() {
               height: "36px",
             }}
           >
-            {visibleTabs.map((tab) => {
+            {/* 美股隱藏籌碼 / 回測（無台灣本地籌碼資料）*/}
+            {visibleTabs
+              .filter(tab => market !== "US" || (tab.id !== "chips" && tab.id !== "backtest"))
+              .map((tab) => {
               const isActive = viewTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setViewTab(tab.id)}
+                  onClick={() => switchTab(tab.id)}
                   className="shrink-0 flex items-center px-4 transition-colors"
                   style={{
                     height: "100%",
@@ -343,62 +409,60 @@ export default function Home() {
           {/* ── Row 2：圖表工具列（走勢圖/籌碼 才顯示）── */}
           {(viewTab === "kline" || viewTab === "chips") && (
             <div
-              className="shrink-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 border-b overflow-x-auto"
+              className="shrink-0 flex items-center border-b"
               style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
             >
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                {/* 代碼 + 報價 — 衝擊版 */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span
-                    className="num font-bold"
-                    style={{ fontSize: "12px", color: "var(--color-brand)", letterSpacing: "0.06em" }}
-                  >
-                    {symbol}
-                  </span>
-                  <span className="font-semibold" style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                    {stockName}
-                  </span>
-                  {quote && (() => {
-                    const isUp   = quote.change > 0;
-                    const isDown = quote.change < 0;
-                    const col    = isUp ? "var(--color-up)" : isDown ? "var(--color-down)" : "var(--color-flat)";
-                    const glow   = isUp
-                      ? { textShadow: "0 0 10px rgba(239,68,68,0.65), 0 0 24px rgba(239,68,68,0.3)" }
-                      : isDown
-                      ? { textShadow: "0 0 10px rgba(34,197,94,0.65), 0 0 24px rgba(34,197,94,0.3)" }
-                      : {};
-                    return (
-                      <div className="flex items-baseline gap-1.5">
-                        <span
-                          className="num font-bold"
-                          style={{ fontSize: "20px", letterSpacing: "-0.5px", color: col, ...glow }}
-                        >
-                          {quote.price.toFixed(2)}
+              {/* ── 可橫向滾動區塊（股票資訊、週期、繪圖工具、指標）── */}
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 overflow-x-auto">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap shrink-0">
+                  {/* 代碼 + 報價 */}
+                  <div className="flex items-baseline gap-2">
+                    <span className="num text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                      {symbol}
+                    </span>
+                    <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {stockName}
+                    </span>
+                    {/* 美股市場標示 */}
+                    {market === "US" && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                        style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
+                      >
+                        🇺🇸 US
+                      </span>
+                    )}
+                    {quote && (
+                      <span
+                        className="num text-base font-bold"
+                        style={{
+                          color: quote.change > 0
+                            ? "var(--color-up)"
+                            : quote.change < 0
+                            ? "var(--color-down)"
+                            : "var(--color-flat)",
+                        }}
+                      >
+                        {quote.price.toFixed(2)}
+                        <span className="text-xs ml-1.5">
+                          {quote.change > 0 ? "+" : ""}
+                          {quote.change_pct.toFixed(2)}%
                         </span>
-                        <span
-                          className="num"
-                          style={{ fontSize: "12px", fontWeight: 600, color: col, opacity: 0.85, ...glow }}
-                        >
-                          {isUp ? "▲" : isDown ? "▼" : ""}
-                          {quote.change > 0 ? "+" : ""}{quote.change_pct.toFixed(2)}%
-                        </span>
-                      </div>
-                    );
-                  })()}
-                </div>
+                      </span>
+                    )}
+                  </div>
 
-                {/* 分隔線 */}
-                <div className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} />
+                  {/* 分隔線 */}
+                  <div className="w-px h-4 shrink-0" style={{ background: "var(--border)" }} />
 
-                {/* K線：週期 + 圖形種類 */}
-                {viewTab === "kline" ? (
-                  <>
-                    <PeriodSelector active={period} onChange={setPeriod} />
-                    <ChartTypeSelector active={chartType} onChange={setChartType} />
-                  </>
-                ) : (
-                  /* 籌碼：天數 + 子 tab + streak */
-                  <>
+                  {/* K線：週期 + 圖形種類 */}
+                  {viewTab === "kline" ? (
+                    <>
+                      <PeriodSelector active={period} onChange={setPeriod} />
+                      <ChartTypeSelector active={chartType} onChange={setChartType} />
+                    </>
+                  ) : (
+                    /* 籌碼：天數 */
                     <div className="flex items-center gap-1">
                       {CHIPS_DAYS.map((d) => (
                         <button
@@ -414,39 +478,65 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
+                  )}
+                </div>
 
-                  </>
+                {viewTab === "kline" && (
+                  <div className="shrink-0 flex items-center gap-2">
+                    <DrawingToolbar
+                      active={activeTool}
+                      onChange={setActiveTool}
+                      onClearAll={() => setDrawingClearKey((k) => k + 1)}
+                      onAlertClick={() => setAlertModalOpen(true)}
+                    />
+                    <IndicatorSelector active={indicators} onChange={setIndicators} />
+                    {/* 🤖 AI 一句話評價按鈕 */}
+                    <button
+                      onClick={fetchVerdict}
+                      disabled={verdictLoading}
+                      title="AI 一句話評價"
+                      className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
+                      style={{
+                        background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
+                        border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
+                        color:       verdict ? "var(--color-brand)" : "var(--text-secondary)",
+                        opacity:     verdictLoading ? 0.6 : 1,
+                      }}
+                    >
+                      {verdictLoading ? (
+                        <span className="animate-spin text-[12px]">⟳</span>
+                      ) : (
+                        "🤖"
+                      )}
+                      <span className="hidden sm:inline">AI 評價</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
+              {/* ── 全螢幕按鈕：永遠固定在最右側，不參與橫向捲動 ── */}
               {viewTab === "kline" && (
-                <div className="flex items-center gap-2">
-                  <DrawingToolbar
-                    active={activeTool}
-                    onChange={setActiveTool}
-                    onClearAll={() => setDrawingClearKey((k) => k + 1)}
-                    onAlertClick={() => setAlertModalOpen(true)}
-                  />
-                  <IndicatorSelector active={indicators} onChange={setIndicators} />
-                  {/* 🤖 AI 一句話評價按鈕 */}
+                <div className="shrink-0 flex items-center px-2 py-1.5 border-l"
+                     style={{ borderColor: "var(--border)" }}>
                   <button
-                    onClick={fetchVerdict}
-                    disabled={verdictLoading}
-                    title="AI 一句話評價"
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors"
+                    onClick={() => setFullscreenOpen(true)}
+                    title="全螢幕 K 線圖（放大）"
+                    className="flex items-center justify-center px-2 py-1 rounded transition-colors"
                     style={{
-                      background:  verdict ? "rgba(59,130,246,0.12)" : "var(--bg-elevated)",
-                      border:      `1px solid ${verdict ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
-                      color:       verdict ? "var(--color-brand)" : "var(--text-secondary)",
-                      opacity:     verdictLoading ? 0.6 : 1,
+                      background: "var(--bg-elevated)",
+                      border:     "1px solid var(--border)",
+                      color:      "var(--text-secondary)",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
                   >
-                    {verdictLoading ? (
-                      <span className="animate-spin text-[12px]">⟳</span>
-                    ) : (
-                      "🤖"
-                    )}
-                    <span className="hidden sm:inline">AI 評價</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                      <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                    </svg>
                   </button>
                 </div>
               )}
@@ -521,39 +611,37 @@ export default function Home() {
           <div className="flex-1 min-h-0 relative">
 
             {/* 首頁：280px 自選股側欄 + 右側儀錶板 */}
-            {viewTab === "home" && (
-              <div className="flex h-full min-h-0">
-                {/* 自選股側欄（桌面版顯示）*/}
-                <aside
-                  className="hidden md:block shrink-0 border-r overflow-hidden"
-                  style={{
-                    width: "280px",
-                    background: "var(--bg-surface)",
-                    borderColor: "var(--border)",
+            <div className={viewTab !== "home" ? "hidden" : "flex h-full min-h-0"}>
+              {/* 自選股側欄（桌面版顯示）*/}
+              <aside
+                className="hidden md:block shrink-0 border-r overflow-hidden"
+                style={{
+                  width: "280px",
+                  background: "var(--bg-surface)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                <WatchlistSidebar
+                  currentSymbol={symbol}
+                  onSelectStock={(sym) => {
+                    handleSelectStock(sym, "");
+                    switchTab("kline");
                   }}
-                >
-                  <WatchlistSidebar
-                    currentSymbol={symbol}
-                    onSelectStock={(sym) => {
-                      handleSelectStock(sym, "");
-                      setViewTab("kline");
-                    }}
-                  />
-                </aside>
-                {/* 右側儀錶板 */}
-                <div className="flex-1 min-w-0 min-h-0">
-                  <HomeDashboard
-                    onSelectStock={(sym) => {
-                      handleSelectStock(sym, "");
-                      setViewTab("kline");
-                    }}
-                  />
-                </div>
+                />
+              </aside>
+              {/* 右側儀錶板 */}
+              <div className="flex-1 min-w-0 min-h-0">
+                <HomeDashboard
+                  onSelectStock={(sym) => {
+                    handleSelectStock(sym, "");
+                    switchTab("kline");
+                  }}
+                />
               </div>
-            )}
+            </div>
 
-            {/* K 線 — 左側資訊欄 + 圖表 */}
-            {viewTab === "kline" && (
+            {/* K 線 — 左側資訊欄 + 圖表（永遠掛載，keep-alive）*/}
+            <div className={viewTab !== "kline" ? "hidden" : "flex flex-1 h-full min-w-0 min-h-0 overflow-hidden"}>
               <div className="flex flex-1 h-full min-w-0 min-h-0 overflow-hidden">
 
                 {/* 左側資訊欄（190px，桌面版才顯示）*/}
@@ -565,6 +653,34 @@ export default function Home() {
                     borderColor: "var(--border)",
                   }}
                 >
+                  {/* 十字線懸停：顯示當根 K 線 OHLCV */}
+                  {hoveredBar && (
+                    <div className="p-3 pb-0 flex flex-col gap-1.5">
+                      <div className="text-[9px] font-bold tracking-widest mb-1"
+                           style={{ color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                        K線資料
+                      </div>
+                      {[
+                        { label: "日期", value: String(("time" in hoveredBar ? hoveredBar.time : (hoveredBar as {date: string}).date) ?? "") },
+                        { label: "開",   value: hoveredBar.open.toFixed(2),  color: hoveredBar.open  >= hoveredBar.close ? "var(--color-down)" : "var(--color-up)" },
+                        { label: "高",   value: hoveredBar.high.toFixed(2),  color: "var(--color-up)" },
+                        { label: "低",   value: hoveredBar.low.toFixed(2),   color: "var(--color-down)" },
+                        { label: "收",   value: hoveredBar.close.toFixed(2), color: hoveredBar.close >= hoveredBar.open  ? "var(--color-up)" : "var(--color-down)" },
+                        { label: "量",   value: hoveredBar.volume >= 1_000_000
+                            ? `${(hoveredBar.volume / 1_000_000).toFixed(1)}M`
+                            : hoveredBar.volume >= 1_000
+                            ? `${(hoveredBar.volume / 1_000).toFixed(1)}K`
+                            : String(hoveredBar.volume) },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="flex justify-between items-center py-0.5 border-b"
+                             style={{ borderColor: "var(--border)", fontSize: "11.5px" }}>
+                          <span style={{ color: "var(--text-tertiary)" }}>{label}</span>
+                          <span className="num font-semibold" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
+                        </div>
+                      ))}
+                      <div className="my-2 border-t" style={{ borderColor: "var(--border)" }} />
+                    </div>
+                  )}
                   {quote ? (
                     <div className="p-3 flex flex-col gap-4">
                       {/* ① 即時報價 */}
@@ -677,7 +793,7 @@ export default function Home() {
                 </aside>
 
                 {/* 圖表區 */}
-                <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden relative">
+                <div className="flex-1 relative min-w-0 min-h-0">
                   {loading && klineData.length === 0 && <ChartSkeleton />}
                   {error && (
                     <div className="absolute inset-0 flex items-center justify-center z-10"
@@ -686,7 +802,7 @@ export default function Home() {
                     </div>
                   )}
                   {klineData.length > 0 && (
-                    <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden relative">
+                    <>
                       <ChartWithPanels
                         data={klineData}
                         indicators={indicators}
@@ -698,6 +814,7 @@ export default function Home() {
                         patternMarkers={patterns}
                         indicatorParams={indicatorParams}
                         onParamsChange={handleParamsChange}
+                        onCrosshairMove={setHoveredBar}
                         onFullscreen={() => setFullscreenOpen(true)}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
@@ -713,72 +830,86 @@ export default function Home() {
                           ))}
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* 籌碼面板（垂直滾動，6 區塊）*/}
-            {viewTab === "chips" && (
-              <ChipsPanel
-                symbol={symbol}
-                days={chipsDays}
-                onDaysChange={setChipsDays}
-              />
+            {/* 籌碼面板（首次訪問才掛載，之後 keep-alive）*/}
+            {mountedTabs.has("chips") && (
+              <div className={viewTab !== "chips" ? "hidden" : "flex-1 min-h-0"}>
+                <ChipsPanel
+                  symbol={symbol}
+                  days={chipsDays}
+                  onDaysChange={setChipsDays}
+                />
+              </div>
             )}
 
             {/* 熱門排行 */}
-            {viewTab === "ranking" && (
-              <div className="flex-1 overflow-y-auto">
+            {mountedTabs.has("ranking") && (
+              <div className={viewTab !== "ranking" ? "hidden" : "flex-1 overflow-y-auto"}>
                 <HotRanking onSelectSymbol={(sym) => {
                   handleSelectStock(sym, "");
-                  setViewTab("kline");
+                  switchTab("kline");
                 }} />
               </div>
             )}
 
-            {/* M5 市場儀錶板（廣度 + 板塊 + 法人） */}
-            {viewTab === "market" && (
-              <MarketDashboard onSelectStock={(sym, name) => {
-                handleSelectStock(sym, name);
-                setViewTab("kline");
-              }} />
+            {/* M5 市場儀錶板 */}
+            {mountedTabs.has("market") && (
+              <div className={viewTab !== "market" ? "hidden" : "flex-1 min-h-0"}>
+                <MarketDashboard onSelectStock={(sym, name) => {
+                  handleSelectStock(sym, name);
+                  switchTab("kline");
+                }} />
+              </div>
             )}
 
             {/* 選股器 */}
-            {viewTab === "screener" && (
-              <ScreenerPanel
-                onSelectStock={(sym, name) => {
-                  handleSelectStock(sym, name);
-                  setViewTab("kline");
-                }}
-              />
+            {mountedTabs.has("screener") && (
+              <div className={viewTab !== "screener" ? "hidden" : "flex-1 min-h-0"}>
+                <ScreenerPanel
+                  onSelectStock={(sym, name) => {
+                    handleSelectStock(sym, name);
+                    switchTab("kline");
+                  }}
+                />
+              </div>
             )}
 
             {/* 個股新聞 */}
-            {viewTab === "news" && (
-              <StockNews symbol={symbol} />
+            {mountedTabs.has("news") && (
+              <div className={viewTab !== "news" ? "hidden" : "flex-1 min-h-0"}>
+                <StockNews symbol={symbol} />
+              </div>
             )}
 
             {/* 回測 */}
-            {viewTab === "backtest" && (
-              <BacktestPanel symbol={symbol} />
+            {mountedTabs.has("backtest") && (
+              <div className={viewTab !== "backtest" ? "hidden" : "flex-1 min-h-0"}>
+                <BacktestPanel symbol={symbol} />
+              </div>
             )}
 
-            {/* 分析 */}
-            {viewTab === "analysis" && (
+            {/* 分析（初始即掛載，keep-alive）*/}
+            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 min-h-0"}>
               <AnalysisPanel symbol={symbol} />
-            )}
+            </div>
 
             {/* 多股比較 */}
-            {viewTab === "compare" && (
-              <CompareChart initialSymbol={symbol} />
+            {mountedTabs.has("compare") && (
+              <div className={viewTab !== "compare" ? "hidden" : "flex-1 min-h-0"}>
+                <CompareChart initialSymbol={symbol} />
+              </div>
             )}
 
             {/* 財報/除權息月曆 */}
-            {viewTab === "calendar" && (
-              <CalendarView />
+            {mountedTabs.has("calendar") && (
+              <div className={viewTab !== "calendar" ? "hidden" : "flex-1 min-h-0"}>
+                <CalendarView />
+              </div>
             )}
 
           </div>
@@ -809,7 +940,7 @@ export default function Home() {
       >
         {/* 首頁 */}
         <button
-          onClick={() => { setViewTab("home"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("home"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "home" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="首頁"
@@ -823,7 +954,7 @@ export default function Home() {
 
         {/* 走勢圖 */}
         <button
-          onClick={() => { setViewTab("kline"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("kline"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "kline" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="走勢圖"
@@ -836,7 +967,7 @@ export default function Home() {
 
         {/* 分析 */}
         <button
-          onClick={() => { setViewTab("analysis"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("analysis"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "analysis" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="分析"
@@ -851,7 +982,7 @@ export default function Home() {
 
         {/* 大盤 */}
         <button
-          onClick={() => { setViewTab("market"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("market"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "market" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="大盤"
@@ -867,7 +998,7 @@ export default function Home() {
 
         {/* 選股 */}
         <button
-          onClick={() => { setViewTab("screener"); setLeftPanelOpen(false); }}
+          onClick={() => { switchTab("screener"); setLeftPanelOpen(false); }}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
           style={{ color: !leftPanelOpen && viewTab === "screener" ? "var(--color-brand)" : "var(--text-tertiary)" }}
           aria-label="選股"
@@ -879,6 +1010,15 @@ export default function Home() {
         </button>
       </nav>
     </div>
+
+    {/* 🔔 Alert Modal */}
+    {alertModalOpen && (
+      <AlertModal
+        symbol={symbol}
+        name={stockName}
+        onClose={() => setAlertModalOpen(false)}
+      />
+    )}
 
     {/* 🖥 全螢幕 K 線圖 Modal */}
     {fullscreenOpen && klineData.length > 0 && (
@@ -897,16 +1037,7 @@ export default function Home() {
         onIndicatorsChange={setIndicators}
         onChartTypeChange={setChartType}
         onParamsChange={handleParamsChange}
-        onPeriodChange={setPeriod}
-      />
-    )}
-
-    {/* 🔔 Alert Modal */}
-    {alertModalOpen && (
-      <AlertModal
-        symbol={symbol}
-        name={stockName}
-        onClose={() => setAlertModalOpen(false)}
+        onPeriodChange={(p) => { setPeriod(p); loadKline(symbol, p); }}
       />
     )}
     </>
