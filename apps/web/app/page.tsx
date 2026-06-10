@@ -17,9 +17,14 @@ import AlertModal         from "@/components/ui/AlertModal";
 
 // ── Heavy components: lazy-loaded to reduce initial JS bundle ────────────────
 // TradingView Lightweight Charts (~400 KB), ECharts-based charts, etc.
-const KLineChart = dynamic(
-  () => import("@/components/chart/KLineChart"),
+const ChartWithPanels = dynamic(
+  () => import("@/components/chart/ChartWithPanels"),
   { ssr: false, loading: () => <ChartSkeleton /> }
+);
+
+const FullscreenChartModal = dynamic(
+  () => import("@/components/chart/FullscreenChartModal"),
+  { ssr: false }
 );
 
 const ChipsPanel = dynamic(
@@ -98,6 +103,8 @@ import {
   type FundamentalData,
   type CandlePattern,
 } from "@/lib/api";
+import { loadParams, saveParams } from "@/lib/indicatorParams";
+import type { IndicatorParams } from "@/lib/indicatorParams";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
 import type { ChartBar } from "@/components/chart/KLineChart";
 
@@ -164,6 +171,16 @@ export default function Home() {
   const [activeTool, setActiveTool]       = useState<DrawingTool>("cursor");
   const [drawingClearKey, setDrawingClearKey] = useState(0);
   const [alertModalOpen, setAlertModalOpen]   = useState(false);
+
+  // 指標參數（MA 週期、BOLL std 等），存 localStorage
+  const [indicatorParams, setIndicatorParams] = useState<IndicatorParams>(() => loadParams());
+  const handleParamsChange = useCallback((p: IndicatorParams) => {
+    saveParams(p);
+    setIndicatorParams(p);
+  }, []);
+
+  // 全螢幕模式
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   // 自訂工作區 Modal
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -537,7 +554,7 @@ export default function Home() {
 
             {/* K 線 — 左側資訊欄 + 圖表 */}
             {viewTab === "kline" && (
-              <div className="flex h-full min-h-0 overflow-hidden">
+              <div className="flex flex-1 h-full min-w-0 min-h-0 overflow-hidden">
 
                 {/* 左側資訊欄（190px，桌面版才顯示）*/}
                 <aside
@@ -660,7 +677,7 @@ export default function Home() {
                 </aside>
 
                 {/* 圖表區 */}
-                <div className="flex-1 relative min-w-0 min-h-0">
+                <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden relative">
                   {loading && klineData.length === 0 && <ChartSkeleton />}
                   {error && (
                     <div className="absolute inset-0 flex items-center justify-center z-10"
@@ -669,8 +686,8 @@ export default function Home() {
                     </div>
                   )}
                   {klineData.length > 0 && (
-                    <>
-                      <KLineChart
+                    <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden relative">
+                      <ChartWithPanels
                         data={klineData}
                         indicators={indicators}
                         chipsData={klineChipsData}
@@ -679,6 +696,9 @@ export default function Home() {
                         clearKey={drawingClearKey}
                         symbol={symbol}
                         patternMarkers={patterns}
+                        indicatorParams={indicatorParams}
+                        onParamsChange={handleParamsChange}
+                        onFullscreen={() => setFullscreenOpen(true)}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
                         <div className="pointer-events-none absolute z-10 left-2 flex flex-col"
@@ -693,7 +713,7 @@ export default function Home() {
                           ))}
                         </div>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -859,6 +879,27 @@ export default function Home() {
         </button>
       </nav>
     </div>
+
+    {/* 🖥 全螢幕 K 線圖 Modal */}
+    {fullscreenOpen && klineData.length > 0 && (
+      <FullscreenChartModal
+        data={klineData}
+        indicators={indicators}
+        chipsData={klineChipsData}
+        chartType={chartType}
+        activeTool={activeTool}
+        clearKey={drawingClearKey}
+        symbol={symbol}
+        patternMarkers={patterns}
+        indicatorParams={indicatorParams}
+        period={period}
+        onClose={() => setFullscreenOpen(false)}
+        onIndicatorsChange={setIndicators}
+        onChartTypeChange={setChartType}
+        onParamsChange={handleParamsChange}
+        onPeriodChange={setPeriod}
+      />
+    )}
 
     {/* 🔔 Alert Modal */}
     {alertModalOpen && (
