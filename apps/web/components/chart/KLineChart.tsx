@@ -220,6 +220,8 @@ interface KLineChartProps {
   onCrosshairMove?:  (bar: ChartBar | null) => void;
   /** 全螢幕按鈕；不提供則隱藏 */
   onFullscreen?:     () => void;
+  /** ESC 等事件通知父層切換繪圖工具 */
+  onToolChange?:     (tool: DrawingTool) => void;
 }
 
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
@@ -271,6 +273,7 @@ export default function KLineChart({
   onParamsChange,
   onCrosshairMove,
   onFullscreen,
+  onToolChange,
 }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
@@ -288,6 +291,10 @@ export default function KLineChart({
 
   // ── 十字線懸停的 bar（只用 setter，值透過 onCrosshairMove 傳給父層）─────
   const [, setHoveredBar] = useState<ChartBar | null>(null);
+
+  // stable ref for onToolChange so ESC handler doesn't need it in deps
+  const onToolChangeRef = useRef(onToolChange);
+  useEffect(() => { onToolChangeRef.current = onToolChange; }, [onToolChange]);
 
   // ── Drawing canvas ────────────────────────────────────────────────────────
   const canvasRef      = useRef<HTMLCanvasElement>(null);
@@ -616,6 +623,7 @@ export default function KLineChart({
       }
       setTextOverlay(null);
       setTextDraft("");
+      onToolChangeRef.current?.("cursor");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -937,7 +945,15 @@ export default function KLineChart({
   // Disable chart pan/zoom while a drawing tool is active
   useEffect(() => {
     if (!chartRef.current) return;
-    chartRef.current.applyOptions({ handleScroll: activeTool === "cursor", handleScale: activeTool === "cursor" });
+    const enabled = activeTool === "cursor";
+    chartRef.current.applyOptions({
+      handleScroll: enabled
+        ? { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true }
+        : false,
+      handleScale: enabled
+        ? { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true }
+        : false,
+    });
   }, [activeTool]);
 
   // Clear all drawings when clearKey changes

@@ -12,7 +12,6 @@ import type { IndicatorType, ChartType, DrawingTool } from "@/components/chart/K
 import type { Period }                   from "@/components/chart/PeriodSelector";
 import IndicatorSelector  from "@/components/chart/IndicatorSelector";
 import PeriodSelector     from "@/components/chart/PeriodSelector";
-import ChartTypeSelector  from "@/components/chart/ChartTypeSelector";
 import DrawingToolbar     from "@/components/chart/DrawingToolbar";
 import AlertModal         from "@/components/ui/AlertModal";
 
@@ -460,7 +459,6 @@ export default function Home() {
                   {viewTab === "kline" ? (
                     <>
                       <PeriodSelector active={period} onChange={setPeriod} />
-                      <ChartTypeSelector active={chartType} onChange={setChartType} />
                     </>
                   ) : (
                     /* 籌碼：天數 */
@@ -515,32 +513,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* ── 全螢幕按鈕：永遠固定在最右側，不參與橫向捲動 ── */}
-              {viewTab === "kline" && (
-                <div className="shrink-0 flex items-center px-2 py-1.5 border-l"
-                     style={{ borderColor: "var(--border)" }}>
-                  <button
-                    onClick={() => setFullscreenOpen(true)}
-                    title="全螢幕 K 線圖（放大）"
-                    className="flex items-center justify-center px-2 py-1 rounded transition-colors"
-                    style={{
-                      background: "var(--bg-elevated)",
-                      border:     "1px solid var(--border)",
-                      color:      "var(--text-secondary)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
-                      <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
-                      <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
-                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
-                    </svg>
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -615,7 +587,7 @@ export default function Home() {
             <div className={viewTab !== "home" ? "hidden" : "flex h-full min-h-0"}>
               {/* 自選股側欄（桌面版顯示）*/}
               <aside
-                className="hidden md:block shrink-0 border-r overflow-hidden"
+                className="hidden md:flex flex-col shrink-0 border-r overflow-y-auto"
                 style={{
                   width: "280px",
                   background: "var(--bg-surface)",
@@ -631,7 +603,7 @@ export default function Home() {
                 />
               </aside>
               {/* 右側儀錶板 */}
-              <div className="flex-1 min-w-0 min-h-0">
+              <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
                 <HomeDashboard
                   onSelectStock={(sym) => {
                     handleSelectStock(sym, "");
@@ -817,6 +789,7 @@ export default function Home() {
                         onParamsChange={handleParamsChange}
                         onCrosshairMove={setHoveredBar}
                         onFullscreen={() => setFullscreenOpen(true)}
+                        onToolChange={setActiveTool}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
                         <div className="pointer-events-none absolute z-10 left-2 flex flex-col"
@@ -895,7 +868,7 @@ export default function Home() {
             )}
 
             {/* 分析（初始即掛載，keep-alive）*/}
-            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 min-h-0"}>
+            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 min-h-0 overflow-y-auto"}>
               <AnalysisPanel symbol={symbol} />
             </div>
 

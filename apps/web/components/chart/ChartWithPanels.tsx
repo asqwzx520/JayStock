@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ChartBar, ChartType, DrawingTool, IndicatorType } from "@/components/chart/KLineChart";
 import KLineChart, { SUB_PANEL_INDICATORS } from "@/components/chart/KLineChart";
 import SubIndicatorPanel, { type SubIndicatorType } from "@/components/chart/SubIndicatorPanel";
@@ -41,6 +41,8 @@ interface ChartWithPanelsProps {
   onCrosshairMove?:  (bar: ChartBar | null) => void;
   /** 主圖右下角 ⛶ 按鈕觸發；不提供則隱藏按鈕（例如在 Fullscreen modal 內部）*/
   onFullscreen?:     () => void;
+  /** ESC 等事件通知父層切換工具（例如切回 cursor）*/
+  onToolChange?:     (tool: DrawingTool) => void;
 }
 
 // ── 台股盤中時間判斷（UTC+8，09:00–13:30，週一~五）────────────────────────────
@@ -72,7 +74,7 @@ function checkMarketOpen(): boolean {
 export default function ChartWithPanels({
   data, indicators, chipsData, chartType, activeTool, clearKey,
   symbol, patternMarkers, indicatorParams, onParamsChange, onCrosshairMove,
-  onFullscreen,
+  onFullscreen, onToolChange,
 }: ChartWithPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -86,8 +88,9 @@ export default function ChartWithPanels({
   }, [symbol]);
 
   // 目前活躍的子指標（保持順序）
-  const subIndicators = indicators.filter(
-    (ind): ind is SubIndicatorType => (SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind)
+  const subIndicators = useMemo(
+    () => indicators.filter((ind): ind is SubIndicatorType => (SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind)),
+    [indicators]
   );
 
   // 高度比例 Map（百分比，各值加總 ≈ 100）
@@ -173,7 +176,10 @@ export default function ChartWithPanels({
   }, [containerH, subIndicators, setHeights]);
 
   // 主圖指標（不含 sub-panel 類型）
-  const mainIndicators = indicators.filter(ind => !(SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind));
+  const mainIndicators = useMemo(
+    () => indicators.filter(ind => !(SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind)),
+    [indicators]
+  );
 
   return (
     <div
@@ -208,6 +214,7 @@ export default function ChartWithPanels({
           onParamsChange={onParamsChange}
           onCrosshairMove={onCrosshairMove}
           onFullscreen={onFullscreen}
+          onToolChange={onToolChange}
         />
       </div>
 
