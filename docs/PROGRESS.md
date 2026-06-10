@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（回測 422 Bug 修復）  
-> **當前版本：** commit `acce6c6`（backtest.py 移除 `from __future__ import annotations` + `Body(...)` 明確聲明，修復 POST 422 Unprocessable Entity）  
+> **更新日期：** 2026-06-11（UI 修復：拖曳 bug / toolbar 精簡 / 滾動修復 / LeftPanel 清理）  
+> **當前版本：** commit `7718cfb`（移除 LeftPanel 熱門排行子 tab、工具列全螢幕按鈕、ChartTypeSelector；修 drag-revert bug；首頁/分析面板 overflow 修復）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -45,6 +45,11 @@
 - [x] **ChartWithPanels**（新）：統一管理主圖 + 所有子指標面板，page.tsx 用 ChartWithPanels 替換原 KLineChart 呼叫
 - [x] **MACD/KD/RSI 子指標面板修復**（2026-06-11）：根路由 `/` (app/page.tsx) 原直接使用 KLineChart，子面板從未存在；改用 ChartWithPanels，子指標正常顯示
 - [x] **app/page.tsx ← dashboard 完整同步**（2026-06-11）：美股支援、withCache 前端快取、keep-alive tabs、hoveredBar OHLCV 側欄、鍵盤快捷鍵全數移入根路由；/dashboard 路由退役
+- [x] **工具列精簡**（2026-06-11）：移除工具列全螢幕按鈕（⛶ 保留在圖表右下角）、移除 ChartTypeSelector（蠟燭為預設，不再需要切換）
+- [x] **K線拖曳回朔 Bug 修復**（2026-06-11）：`applyOptions` 改傳完整 `handleScroll`/`handleScale` 物件（含明確的 `pressedMouseMove: true`），解決滾輪放大後拖曳恢復舊視角問題
+- [x] **ESC → 游標工具**（2026-06-11）：ChartWithPanels 傳遞 `onToolChange={setActiveTool}`，ESC 鍵可正確切回 cursor 模式
+- [x] **首頁 / 分析面板滾動修復**（2026-06-11）：HomeDashboard 容器加 `overflow-y-auto`（重要日期/自訂警示規則可捲動）、AnalysisPanel 容器同步修復；LeftPanel 自選股側欄改 `overflow-y-auto`
+- [x] **LeftPanel 移除熱門排行子 tab**（2026-06-11）：左側自選股側欄移除「熱門排行」切換（與主導航「排行」Tab 100% 重複），HotRanking dynamic import 與 panelMode state 一併清除
 
 ### 自選股（M2）
 - [x] Watchlist CRUD（前後端完整）
