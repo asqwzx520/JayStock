@@ -28,7 +28,8 @@ interface SubIndicatorPanelProps {
   indicator:      SubIndicatorType;
   data:            ChartBar[];
   params:          IndicatorParams;
-  height:          number;           // px
+  /** 可選；不傳則填滿父容器（建議用 flex 分配）*/
+  height?:         number;
   showTimeAxis?:   boolean;          // 只有最下面一個面板顯示
   syncRange?:      { from: number; to: number } | null;
   onRangeChange?:  (range: { from: number; to: number }) => void;
@@ -205,7 +206,10 @@ export default function SubIndicatorPanel({
     : indicator;
 
   return (
-    <div className="relative flex flex-col overflow-hidden" style={{ height: `${height}px` }}>
+    <div
+      className="relative flex flex-col overflow-hidden h-full"
+      style={height !== undefined ? { height: `${height}px` } : undefined}
+    >
       {/* 指標名稱標籤 */}
       <div
         className="absolute top-1 left-2 z-10 text-[9px] font-semibold pointer-events-none"

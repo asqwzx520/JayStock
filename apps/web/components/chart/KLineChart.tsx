@@ -218,6 +218,8 @@ interface KLineChartProps {
   onParamsChange?:   (p: IndicatorParams) => void;
   /** 十字線移動時回呼對應 bar；滑鼠離開時傳 null */
   onCrosshairMove?:  (bar: ChartBar | null) => void;
+  /** 全螢幕按鈕；不提供則隱藏 */
+  onFullscreen?:     () => void;
 }
 
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
@@ -268,6 +270,7 @@ export default function KLineChart({
   indicatorParams: paramsProp,
   onParamsChange,
   onCrosshairMove,
+  onFullscreen,
 }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
@@ -1224,7 +1227,7 @@ export default function KLineChart({
       >
         <button
           onClick={() => handleZoom(0.7)}
-          title="放大"
+          title="放大可視範圍"
           className="flex items-center justify-center rounded transition-all hover:opacity-100"
           style={ZOOM_BTN_STYLE}
         >
@@ -1232,7 +1235,7 @@ export default function KLineChart({
         </button>
         <button
           onClick={() => handleZoom(1.4)}
-          title="縮小"
+          title="縮小可視範圍"
           className="flex items-center justify-center rounded transition-all hover:opacity-100"
           style={ZOOM_BTN_STYLE}
         >
@@ -1244,8 +1247,18 @@ export default function KLineChart({
           className="flex items-center justify-center rounded transition-all hover:opacity-100"
           style={ZOOM_BTN_STYLE}
         >
-          ⛶
+          ⇔
         </button>
+        {onFullscreen && (
+          <button
+            onClick={onFullscreen}
+            title="全螢幕"
+            className="flex items-center justify-center rounded transition-all hover:opacity-100"
+            style={ZOOM_BTN_STYLE}
+          >
+            ⛶
+          </button>
+        )}
       </div>
 
       {/* ── 指標 Legend（左上角，可點擊編輯參數）────────────────────────── */}

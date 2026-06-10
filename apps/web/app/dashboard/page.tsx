@@ -815,6 +815,7 @@ export default function Home() {
                         indicatorParams={indicatorParams}
                         onParamsChange={handleParamsChange}
                         onCrosshairMove={setHoveredBar}
+                        onFullscreen={() => setFullscreenOpen(true)}
                       />
                       {indicators.includes("CHIPS") && klineChipsData.length > 0 && (
                         <div className="pointer-events-none absolute z-10 left-2 flex flex-col"

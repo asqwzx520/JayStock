@@ -39,6 +39,8 @@ interface ChartWithPanelsProps {
   indicatorParams:   IndicatorParams;
   onParamsChange:    (p: IndicatorParams) => void;
   onCrosshairMove?:  (bar: ChartBar | null) => void;
+  /** 主圖右下角 ⛶ 按鈕觸發；不提供則隱藏按鈕（例如在 Fullscreen modal 內部）*/
+  onFullscreen?:     () => void;
 }
 
 // ── 台股盤中時間判斷（UTC+8，09:00–13:30，週一~五）────────────────────────────
@@ -70,6 +72,7 @@ function checkMarketOpen(): boolean {
 export default function ChartWithPanels({
   data, indicators, chipsData, chartType, activeTool, clearKey,
   symbol, patternMarkers, indicatorParams, onParamsChange, onCrosshairMove,
+  onFullscreen,
 }: ChartWithPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -172,14 +175,11 @@ export default function ChartWithPanels({
   // 主圖指標（不含 sub-panel 類型）
   const mainIndicators = indicators.filter(ind => !(SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind));
 
-  // 扣掉所有 divider 才是可分配給圖表面板的高度
-  const DIVIDER_PX = 5;
-  const totalDividerPx = subIndicators.length * DIVIDER_PX;
-  const availableH = Math.max(containerH - totalDividerPx, 200);
-  const mainPx = Math.round((heights.main / 100) * availableH);
-
   return (
-    <div ref={containerRef} className="relative flex flex-col w-full h-full min-h-0">
+    <div
+      ref={containerRef}
+      className="relative flex flex-col w-full h-full min-h-0 overflow-hidden"
+    >
       {/* ── 盤中延遲提示 badge ─────────────────────────────────────────── */}
       {marketOpen && (
         <span
@@ -190,8 +190,11 @@ export default function ChartWithPanels({
           🟡 盤中延遲約 5 秒
         </span>
       )}
-      {/* ── 主圖 ───────────────────────────────────────────────────────── */}
-      <div style={{ height: `${mainPx}px`, flexShrink: 0, minHeight: 0 }}>
+      {/* ── 主圖（用 flex-grow 比例分配高度，避免 overflow）─────────────── */}
+      <div
+        className="min-h-0"
+        style={{ flex: `${Math.max(heights.main, 30)} 1 0`, flexShrink: 1 }}
+      >
         <KLineChart
           data={data}
           indicators={mainIndicators}
@@ -204,30 +207,31 @@ export default function ChartWithPanels({
           indicatorParams={indicatorParams}
           onParamsChange={onParamsChange}
           onCrosshairMove={onCrosshairMove}
+          onFullscreen={onFullscreen}
         />
       </div>
 
-      {/* ── 子指標面板（各自獨立，可拖分界線）──────────────────────────── */}
+      {/* ── 子指標面板（用 flex 比例分配，divider 內含於 wrapper）──────── */}
       {subIndicators.map((ind, i) => {
         const pct = heights[ind] ?? 18;
-        const px  = Math.max(Math.round((pct / 100) * availableH), 60);
         const isLast = i === subIndicators.length - 1;
         return (
           <div
             key={ind}
-            className="flex flex-col"
-            style={{ flexShrink: 0, height: `${px + DIVIDER_PX}px` }}
+            className="flex flex-col min-h-0"
+            style={{ flex: `${Math.max(pct, 8)} 1 0`, minHeight: "70px" }}
           >
             <ResizeDivider onDrag={(delta) => handleDrag(i, delta)} />
-            <SubIndicatorPanel
-              indicator={ind}
-              data={data}
-              params={indicatorParams}
-              height={px}
-              showTimeAxis={isLast}
-              syncRange={syncRange}
-              onRangeChange={setSyncRange}
-            />
+            <div className="flex-1 min-h-0">
+              <SubIndicatorPanel
+                indicator={ind}
+                data={data}
+                params={indicatorParams}
+                showTimeAxis={isLast}
+                syncRange={syncRange}
+                onRangeChange={setSyncRange}
+              />
+            </div>
           </div>
         );
       })}
