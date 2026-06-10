@@ -641,8 +641,8 @@ export default function Home() {
             </div>
 
             {/* K 線 — 左側資訊欄 + 圖表（永遠掛載，keep-alive）*/}
-            <div className={viewTab !== "kline" ? "hidden" : "flex h-full min-h-0 overflow-hidden"}>
-              <div className="flex h-full min-h-0 overflow-hidden">
+            <div className={viewTab !== "kline" ? "hidden" : "flex flex-1 h-full min-w-0 min-h-0 overflow-hidden"}>
+              <div className="flex flex-1 h-full min-w-0 min-h-0 overflow-hidden">
 
                 {/* 左側資訊欄（190px，桌面版才顯示）*/}
                 <aside
