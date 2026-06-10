@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockPulse — Design Upgrade Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   STOCKPULSE — DESIGN SYSTEM V2
+   Aesthetic: "Deep Space Terminal"
+   深邃宇宙終端 — 超暗底色 + 電光青藍 + 精工數字
+   ============================================================ */
+
+:root {
+  /* ── 新品牌色：電光青藍（取代普通藍）── */
+  --color-brand:         #00D4FF;   /* 電光青 */
+  --color-brand-dim:     #0099CC;
+  --color-brand-subtle:  rgba(0, 212, 255, 0.08);
+  --color-brand-border:  rgba(0, 212, 255, 0.25);
+  --color-brand-glow:    rgba(0, 212, 255, 0.4);
+
+  /* ── 行情色（台灣習慣：紅漲綠跌）── */
+  --color-up:            #FF4757;   /* 更飽和的上漲紅 */
+  --color-up-subtle:     rgba(255, 71, 87, 0.1);
+  --color-up-glow:       rgba(255, 71, 87, 0.5);
+  --color-down:          #2ED573;   /* 亮眼下跌綠 */
+  --color-down-subtle:   rgba(46, 213, 115, 0.1);
+  --color-down-glow:     rgba(46, 213, 115, 0.5);
+  --color-flat:          #57606F;
+
+  /* ── 法人三色（更鮮明）── */
+  --color-foreign:       #FFB142;   /* 外資 暖金 */
+  --color-trust:         #A29BFE;   /* 投信 淡紫 */
+  --color-dealer:        #00CEC9;   /* 自營 薄荷 */
+
+  /* ── 深空背景層（5層深度）── */
+  --bg-void:    #04060D;   /* 最深：接近黑 */
+  --bg-base:    #070C18;   /* 基底層 */
+  --bg-surface: #0C1628;   /* 表面層 */
+  --bg-raised:  #111E35;   /* 浮起層（卡片）*/
+  --bg-overlay: #172442;   /* 懸浮層（Popover）*/
+  --bg-modal:   rgba(4, 6, 13, 0.92);
+
+  /* ── 邊框（細膩漸層）── */
+  --border-faint:   rgba(0, 212, 255, 0.06);
+  --border:         rgba(0, 212, 255, 0.12);
+  --border-strong:  rgba(0, 212, 255, 0.22);
+  --border-active:  rgba(0, 212, 255, 0.5);
+
+  /* ── 文字（冷白調）── */
+  --text-primary:   #E8F4FF;
+  --text-secondary: #7A9CC8;
+  --text-tertiary:  #3D5A80;
+  --text-disabled:  #243047;
+
+  /* ── 字型 ── */
+  --font-ui:    "Space Grotesk", "Noto Sans TC", sans-serif;
+  --font-display: "Syne", "Space Grotesk", sans-serif;
+  --font-mono:  "IBM Plex Mono", "JetBrains Mono", monospace;
+
+  /* ── 圓角（稍微寬一些，不失專業）── */
+  --r-xs:  3px;
+  --r-sm:  5px;
+  --r-md:  8px;
+  --r-lg:  12px;
+  --r-xl:  16px;
+
+  /* ── 過渡 ── */
+  --t-fast: 100ms ease;
+  --t-base: 180ms ease;
+  --t-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   RESET + BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* 全域噪點紋理 overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* 等寬數字 */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ============================================================
+   SECTION LABELS
+   ============================================================ */
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   PART 1 — DESIGN TOKENS SHOWCASE
+   ============================================================ */
+.showcase {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 48px 32px;
+}
+
+.showcase-title {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  background: linear-gradient(135deg, var(--color-brand) 0%, #7B7FFF 50%, #FF6B9D 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.showcase-subtitle {
+  color: var(--text-secondary);
+  font-size: 15px;
+  margin-bottom: 48px;
+  font-weight: 400;
+}
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.token-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.token-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-brand), transparent);
+  opacity: 0.6;
+}
+
+/* ============================================================
+   PART 2 — DASHBOARD REDESIGN PREVIEW
+   ============================================================ */
+.preview-section {
+  margin-bottom: 64px;
+}
+
+.preview-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-brand);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-title::before {
+  content: '';
+  width: 20px;
+  height: 2px;
+  background: var(--color-brand);
+}
+
+/* ─── HEADER ─── */
+.header {
+  height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 頂部細線 */
+.header::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--color-brand) 30%,
+    rgba(123, 127, 255, 0.8) 60%,
+    transparent 100%
+  );
+}
+
+.header-logo {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--color-brand) 0%, #7B7FFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  flex-shrink: 0;
+}
+
+.search-bar {
+  flex: 1;
+  max-width: 340px;
+  height: 32px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  cursor: text;
+  transition: border-color var(--t-base), box-shadow var(--t-base);
+}
+
+.search-bar:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border-faint);
+}
+
+.search-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.search-placeholder {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.header-indices {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.index-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.index-name {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.index-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.index-change {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.up   { color: var(--color-up); }
+.down { color: var(--color-down); }
+
+/* ─── DASHBOARD LAYOUT ─── */
+.dashboard {
+  display: flex;
+  height: 580px;
+  background: var(--bg-void);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+/* ─── LEFT SIDEBAR ─── */
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+/* OHLCV display — redesigned */
+.price-display {
+  padding: 14px 14px 0;
+}
+
+.price-main {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--color-up);
+  text-shadow:
+    0 0 12px rgba(255, 71, 87, 0.5),
+    0 0 28px rgba(255, 71, 87, 0.25);
+}
+
+.price-change {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-up);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ohlcv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 14px;
+}
+
+.ohlcv-item {
+  padding: 7px 8px;
+  border-top: 1px solid var(--border-faint);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ohlcv-item:nth-child(odd) {
+  border-right: 1px solid var(--border-faint);
+}
+
+.ohlcv-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.ohlcv-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Hovered bar section */
+.crosshair-section {
+  margin-top: 2px;
+  border-top: 1px solid var(--border-faint);
+}
+
+.crosshair-row {
+  padding: 5px 14px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.crosshair-label {
+  color: var(--text-tertiary);
+}
+
+.crosshair-val {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* Fundamentals block */
+.fund-block {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-faint);
+  margin-top: auto;
+}
+
+.fund-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.fund-row:last-child { border-bottom: none; }
+.fund-label { color: var(--text-tertiary); }
+.fund-val { font-family: var(--font-mono); font-weight: 500; color: var(--text-primary); }
+
+/* ─── CHART AREA ─── */
+.chart-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-void);
+}
+
+/* Toolbar */
+.toolbar {
+  height: 40px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-faint);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.symbol-badge {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+  margin-right: 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+/* Period buttons */
+.period-group {
+  display: flex;
+  gap: 2px;
+}
+
+.period-btn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--t-fast);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+}
+
+.period-btn.active {
+  background: var(--color-brand-subtle);
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+}
+
+.period-btn:not(.active):hover {
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+}
+
+/* Indicator chips in toolbar */
+.ind-chip {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  letter-spacing: 0.02em;
+  transition: all var(--t-fast);
+}
+
+.ind-chip.active {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+}
+
+/* Fullscreen button */
+.fs-btn {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  flex-shrink: 0;
+}
+
+.fs-btn:hover {
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+  box-shadow: 0 0 8px var(--color-brand-glow);
+}
+
+/* Chart canvas mock */
+.chart-canvas {
+  flex: 1;
+  background: var(--bg-void);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Grid lines */
+.chart-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+  background-size: 80px 60px;
+}
+
+/* MA legend overlay */
+.chart-legend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+
+.legend-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--r-xs);
+  background: rgba(7, 12, 24, 0.8);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all var(--t-fast);
+}
+
+.legend-btn:hover {
+  border-color: rgba(255,255,255,0.2);
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* SVG candlestick mock */
+.chart-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Market delay badge */
+.delay-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  background: rgba(0,0,0,0.5);
+  color: rgba(255, 200, 50, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+/* ─── TAB BAR ─── */
+.tab-bar {
+  height: 36px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-faint);
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-btn {
+  flex-shrink: 0;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  border-right: 1px solid var(--border-faint);
+  font-family: var(--font-ui);
+  transition: all var(--t-fast);
+}
+
+.tab-btn.active {
+  color: var(--color-brand);
+  border-bottom-color: var(--color-brand);
+  background: rgba(0, 212, 255, 0.04);
+  font-weight: 600;
+}
+
+.tab-btn:not(.active):hover {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.02);
+}
+
+/* ============================================================
+   PART 3 — SCREENER PANEL REDESIGN
+   ============================================================ */
+.screener {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.screener-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-faint);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.screener-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+/* Template tabs */
+.template-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-faint);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.template-tab {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  transition: all var(--t-fast);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.template-tab.active {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+}
+
+.template-tab-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* NL query input */
+.nl-input-wrap {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.nl-input {
+  width: 100%;
+  height: 38px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0 12px 0 36px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+  transition: all var(--t-base);
+}
+
+.nl-input:focus {
+  border-color: var(--color-brand-border);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08);
+}
+
+.nl-input-wrap {
+  position: relative;
+}
+
+.nl-input-icon {
+  position: absolute;
+  left: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* Fund filters */
+.fund-filters {
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.fund-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fund-toggle-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  transition: all var(--t-fast);
+}
+
+.fund-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fund-item {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+.fund-item-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fund-item-label span {
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.fund-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fund-input {
+  flex: 1;
+  height: 22px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r-xs);
+  padding: 0 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  outline: none;
+  text-align: center;
+  transition: border-color var(--t-fast);
+}
+
+.fund-input:focus {
+  border-color: var(--color-brand-border);
+}
+
+.fund-sep {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+/* Action bar */
+.action-bar {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-faint);
+  display: flex;
+  gap: 8px;
+}
+
+.run-btn {
+  height: 34px;
+  padding: 0 20px;
+  border-radius: var(--r-md);
+  background: var(--color-brand);
+  color: #04060D;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all var(--t-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.run-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 100%);
+}
+
+.run-btn:hover {
+  background: rgba(0, 212, 255, 0.85);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.35), 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.clear-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.clear-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.result-count {
+  margin-left: auto;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  gap: 4px;
+}
+
+.result-count strong {
+  font-family: var(--font-mono);
+  color: var(--color-brand);
+  font-size: 14px;
+}
+
+/* Results table */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.results-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-faint);
+  background: var(--bg-raised);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.results-table th:hover {
+  color: var(--text-secondary);
+}
+
+.results-table th.sort-active {
+  color: var(--color-brand);
+}
+
+.results-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-faint);
+  white-space: nowrap;
+}
+
+.results-table tr {
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+
+.results-table tr:hover td {
+  background: rgba(0, 212, 255, 0.04);
+}
+
+.results-table tr.selected td {
+  background: rgba(0, 212, 255, 0.07);
+}
+
+.score-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.score-track {
+  width: 40px;
+  height: 3px;
+  background: var(--border-faint);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-brand-dim), var(--color-brand));
+}
+
+/* Symbol cell */
+.sym-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.sym-code {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.sym-name {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+/* Watchlist add button */
+.wl-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border-faint);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t-fast);
+  font-family: monospace;
+  line-height: 1;
+}
+
+.wl-btn:hover {
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+  background: var(--color-brand-subtle);
+}
+
+.wl-btn.added {
+  border-color: rgba(46, 213, 115, 0.3);
+  color: var(--color-down);
+  background: rgba(46, 213, 115, 0.08);
+}
+
+/* ============================================================
+   PART 4 — COLOR PALETTE SHOWCASE
+   ============================================================ */
+.palette-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.color-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 80px;
+}
+
+.swatch-block {
+  width: 80px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.swatch-label {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+/* ============================================================
+   PART 5 — COMPARISON TABLE (OLD vs NEW)
+   ============================================================ */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 20px;
+}
+
+.compare-table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.compare-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border-faint);
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+.compare-table tr:hover td { background: rgba(255,255,255,0.015); }
+
+.tag-old {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-faint);
+  font-family: var(--font-mono);
+}
+
+.tag-new {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+  border: 1px solid var(--color-brand-border);
+  font-family: var(--font-mono);
+}
+
+.tag-impact {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.tag-impact.high {
+  background: rgba(255,71,87,0.1);
+  color: var(--color-up);
+  border: 1px solid rgba(255,71,87,0.2);
+}
+
+.tag-impact.mid {
+  background: rgba(255,177,66,0.1);
+  color: var(--color-foreign);
+  border: 1px solid rgba(255,177,66,0.2);
+}
+
+.tag-impact.low {
+  background: rgba(46,213,115,0.1);
+  color: var(--color-down);
+  border: 1px solid rgba(46,213,115,0.2);
+}
+
+/* ============================================================
+   TRANSITIONS / INTERACTIONS DEMO
+   ============================================================ */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-down);
+  animation: glow-pulse 2s ease infinite;
+  box-shadow: 0 0 6px var(--color-down-glow);
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-row {
+  animation: slide-in 0.3s ease forwards;
+}
+
+.anim-row:nth-child(2) { animation-delay: 0.05s; opacity: 0; }
+.anim-row:nth-child(3) { animation-delay: 0.10s; opacity: 0; }
+.anim-row:nth-child(4) { animation-delay: 0.15s; opacity: 0; }
+.anim-row:nth-child(5) { animation-delay: 0.20s; opacity: 0; }
+.anim-row:nth-child(6) { animation-delay: 0.25s; opacity: 0; }
+.anim-row:nth-child(7) { animation-delay: 0.30s; opacity: 0; }
+.anim-row:nth-child(8) { animation-delay: 0.35s; opacity: 0; }
+
+/* CSS snippet code block */
+.code-block {
+  background: var(--bg-void);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.c-comment { color: var(--text-tertiary); }
+.c-key     { color: #A29BFE; }
+.c-val     { color: var(--color-brand); }
+.c-str     { color: var(--color-down); }
+.c-num     { color: var(--color-foreign); }
+
+</style>
+</head>
+<body>
+
+<div class="showcase">
+
+  <!-- ══ TITLE ══════════════════════════════════════════════════════ -->
+  <div class="showcase-title">StockPulse Design V2</div>
+  <div class="showcase-subtitle">
+    「Deep Space Terminal」— 超暗底色 · 電光青藍 · 精工數字排版
+  </div>
+
+  <!-- ══ SECTION 1: HEADER PREVIEW ══════════════════════════════════ -->
+  <div class="preview-section">
+    <div class="preview-title">01 / Header Redesign</div>
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-logo">StockPulse</div>
+      <div class="toolbar-divider"></div>
+
+      <div class="search-bar">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span class="search-placeholder">搜尋股票、ETF… (/ 快捷鍵)</span>
+      </div>
+
+      <div class="header-indices" style="margin-right:16px">
+        <div class="index-item">
+          <div class="index-name">加權指數</div>
+          <div class="index-value up num">22,354.67</div>
+          <div class="index-change up num">▲ 0.42%</div>
+        </div>
+        <div class="toolbar-divider" style="height:32px; align-self:center"></div>
+        <div class="index-item">
+          <div class="index-name">NYSE</div>
+          <div class="index-value down num">19,218.11</div>
+          <div class="index-change down num">▼ 0.18%</div>
+        </div>
+        <div class="toolbar-divider" style="height:32px; align-self:center"></div>
+        <div class="index-item">
+          <div class="index-name">USD/TWD</div>
+          <div class="index-value num" style="color:var(--text-secondary)">31.24</div>
+          <div class="index-change num" style="color:var(--text-tertiary)">— 0.00%</div>
+        </div>
+      </div>
+
+      <div class="live-dot" title="即時連線中"></div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active">走勢圖</button>
+      <button class="tab-btn">籌碼</button>
+      <button class="tab-btn">分析</button>
+      <button class="tab-btn">市場</button>
+      <button class="tab-btn">排行</button>
+      <button class="tab-btn">選股</button>
+      <button class="tab-btn">新聞</button>
+      <button class="tab-btn">回測</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard">
+      <!-- Left Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="section-label" style="margin-bottom:0">2330 · 台積電</div>
+        </div>
+
+        <div class="price-display">
+          <div class="price-main num">1,075.00</div>
+          <div class="price-change num">▲ 20.00 &nbsp; (+1.90%)</div>
+
+          <div class="ohlcv-grid">
+            <div class="ohlcv-item">
+              <div class="ohlcv-label">開盤</div>
+              <div class="ohlcv-value num" style="color:var(--text-primary)">1,060.00</div>
+            </div>
+            <div class="ohlcv-item">
+              <div class="ohlcv-label">最高</div>
+              <div class="ohlcv-value num up">1,082.00</div>
+            </div>
+            <div class="ohlcv-item">
+              <div class="ohlcv-label">最低</div>
+              <div class="ohlcv-value num down">1,058.00</div>
+            </div>
+            <div class="ohlcv-item">
+              <div class="ohlcv-label">成交量</div>
+              <div class="ohlcv-value num" style="color:var(--text-secondary)">44.2K</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Crosshair data -->
+        <div class="crosshair-section" style="margin-top:12px">
+          <div class="section-label" style="padding: 8px 14px 0; margin-bottom:0">K線資料</div>
+          <div class="crosshair-row"><span class="crosshair-label">日期</span><span class="crosshair-val num" style="color:var(--text-secondary)">2024-10-29</span></div>
+          <div class="crosshair-row"><span class="crosshair-label">開</span><span class="crosshair-val num">1,058.00</span></div>
+          <div class="crosshair-row"><span class="crosshair-label">高</span><span class="crosshair-val num up">1,082.00</span></div>
+          <div class="crosshair-row"><span class="crosshair-label">低</span><span class="crosshair-val num down">1,053.00</span></div>
+          <div class="crosshair-row"><span class="crosshair-label">收</span><span class="crosshair-val num up">1,075.00</span></div>
+          <div class="crosshair-row"><span class="crosshair-label">量</span><span class="crosshair-val num" style="color:var(--text-secondary)">44.2K</span></div>
+        </div>
+
+        <!-- Fundamentals -->
+        <div class="fund-block">
+          <div class="section-label">基本面</div>
+          <div class="fund-row"><span class="fund-label">本益比</span><span class="fund-val">31.8</span></div>
+          <div class="fund-row"><span class="fund-label">殖利率</span><span class="fund-val down">0.93%</span></div>
+          <div class="fund-row"><span class="fund-label">Beta</span><span class="fund-val">1.12</span></div>
+        </div>
+      </div>
+
+      <!-- Chart Area -->
+      <div class="chart-area">
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <span class="symbol-badge">2330</span>
+          <span style="font-size:13px; color:var(--text-secondary); font-weight:500">台積電</span>
+          <span class="num" style="font-size:14px; color:var(--color-up); font-weight:700">1,075.00</span>
+          <div class="toolbar-divider"></div>
+          <div class="period-group">
+            <button class="period-btn">分5</button>
+            <button class="period-btn">分15</button>
+            <button class="period-btn">分60</button>
+            <button class="period-btn active">日K</button>
+            <button class="period-btn">週K</button>
+            <button class="period-btn">月K</button>
+          </div>
+          <div class="toolbar-divider"></div>
+          <button class="ind-chip active">MA</button>
+          <button class="ind-chip">BOLL</button>
+          <button class="ind-chip">MACD</button>
+          <button class="ind-chip">RSI</button>
+          <button class="ind-chip">VWAP</button>
+          <button class="fs-btn" title="全螢幕">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+              <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+              <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+              <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Chart canvas -->
+        <div class="chart-canvas">
+          <div class="delay-badge">🟡 盤中延遲約 5 秒</div>
+
+          <div class="chart-legend">
+            <div class="legend-btn">
+              <div class="legend-dot" style="background:#FBBF24"></div>
+              <span style="color:#FBBF24; font-size:10px; font-family: var(--font-mono)">MA5</span>
+            </div>
+            <div class="legend-btn">
+              <div class="legend-dot" style="background:#60A5FA"></div>
+              <span style="color:#60A5FA; font-size:10px; font-family: var(--font-mono)">MA10</span>
+            </div>
+            <div class="legend-btn">
+              <div class="legend-dot" style="background:#A78BFA"></div>
+              <span style="color:#A78BFA; font-size:10px; font-family: var(--font-mono)">MA20</span>
+            </div>
+            <div class="legend-btn">
+              <div class="legend-dot" style="background:#F87171"></div>
+              <span style="color:#F87171; font-size:10px; font-family: var(--font-mono)">MA60 ✎</span>
+            </div>
+          </div>
+
+          <!-- SVG candles mock -->
+          <svg class="chart-svg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet" style="opacity:0.9">
+            <!-- Grid -->
+            <defs>
+              <linearGradient id="up-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FF4757" stop-opacity="1"/>
+                <stop offset="100%" stop-color="#FF4757" stop-opacity="0.7"/>
+              </linearGradient>
+              <linearGradient id="down-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2ED573" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#2ED573" stop-opacity="1"/>
+              </linearGradient>
+            </defs>
+
+            <!-- MA lines -->
+            <polyline points="20,280 60,265 100,250 140,235 180,245 220,230 260,220 300,210 340,215 380,200 420,190 460,195 500,180 540,170 580,165 620,175 660,160 700,155 740,150 780,145" fill="none" stroke="#FBBF24" stroke-width="1.5" opacity="0.8"/>
+            <polyline points="20,290 60,278 100,265 140,252 180,258 220,244 260,236 300,225 340,228 380,215 420,204 460,210 500,196 540,187 580,182 620,190 660,177 700,172 740,167 780,162" fill="none" stroke="#60A5FA" stroke-width="1.5" opacity="0.8"/>
+
+            <!-- Candles (up) -->
+            <g>
+              <line x1="62" y1="240" x2="62" y2="280" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="56" y="252" width="12" height="24" fill="url(#up-grad)" rx="1"/>
+              <line x1="102" y1="230" x2="102" y2="268" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="96" y="238" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <line x1="182" y1="248" x2="182" y2="278" stroke="#2ED573" stroke-width="1.2"/>
+              <rect x="176" y="252" width="12" height="22" fill="url(#down-grad)" rx="1"/>
+              <line x1="222" y1="220" x2="222" y2="258" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="216" y="230" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <line x1="262" y1="210" x2="262" y2="248" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="256" y="218" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <line x1="302" y1="205" x2="302" y2="245" stroke="#2ED573" stroke-width="1.2"/>
+              <rect x="296" y="210" width="12" height="28" fill="url(#down-grad)" rx="1"/>
+              <line x1="342" y1="208" x2="342" y2="248" stroke="#2ED573" stroke-width="1.2"/>
+              <rect x="336" y="215" width="12" height="26" fill="url(#down-grad)" rx="1"/>
+              <line x1="382" y1="192" x2="382" y2="230" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="376" y="200" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <line x1="422" y1="182" x2="422" y2="218" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="416" y="190" width="12" height="20" fill="url(#up-grad)" rx="1"/>
+              <line x1="462" y1="190" x2="462" y2="228" stroke="#2ED573" stroke-width="1.2"/>
+              <rect x="456" y="196" width="12" height="26" fill="url(#down-grad)" rx="1"/>
+              <line x1="502" y1="172" x2="502" y2="210" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="496" y="180" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <line x1="542" y1="162" x2="542" y2="200" stroke="#FF4757" stroke-width="1.2"/>
+              <rect x="536" y="170" width="12" height="22" fill="url(#up-grad)" rx="1"/>
+              <!-- current candle with glow -->
+              <filter id="candle-glow">
+                <feGaussianBlur stdDeviation="2" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <line x1="582" y1="158" x2="582" y2="194" stroke="#FF4757" stroke-width="1.5" filter="url(#candle-glow)"/>
+              <rect x="576" y="165" width="12" height="22" fill="#FF4757" rx="1" opacity="0.95" filter="url(#candle-glow)"/>
+            </g>
+
+            <!-- Volume bars -->
+            <g opacity="0.35">
+              <rect x="56" y="370" width="12" height="30" fill="#FF4757" rx="1"/>
+              <rect x="96" y="365" width="12" height="35" fill="#FF4757" rx="1"/>
+              <rect x="136" y="380" width="12" height="20" fill="#2ED573" rx="1"/>
+              <rect x="176" y="372" width="12" height="28" fill="#2ED573" rx="1"/>
+              <rect x="216" y="360" width="12" height="40" fill="#FF4757" rx="1"/>
+              <rect x="256" y="368" width="12" height="32" fill="#FF4757" rx="1"/>
+              <rect x="296" y="375" width="12" height="25" fill="#2ED573" rx="1"/>
+              <rect x="336" y="372" width="12" height="28" fill="#2ED573" rx="1"/>
+              <rect x="376" y="355" width="12" height="45" fill="#FF4757" rx="1"/>
+              <rect x="416" y="362" width="12" height="38" fill="#FF4757" rx="1"/>
+              <rect x="456" y="370" width="12" height="30" fill="#2ED573" rx="1"/>
+              <rect x="496" y="358" width="12" height="42" fill="#FF4757" rx="1"/>
+              <rect x="536" y="360" width="12" height="40" fill="#FF4757" rx="1"/>
+              <rect x="576" y="350" width="12" height="50" fill="#FF4757" rx="1" opacity="0.7"/>
+            </g>
+
+            <!-- Crosshair -->
+            <line x1="582" y1="0" x2="582" y2="420" stroke="rgba(0,212,255,0.3)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="0" y1="176" x2="800" y2="176" stroke="rgba(0,212,255,0.2)" stroke-width="1" stroke-dasharray="4,4"/>
+            <circle cx="582" cy="176" r="4" fill="#00D4FF" opacity="0.7"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 2: SCREENER PANEL ══════════════════════════════════ -->
+  <div class="preview-section">
+    <div class="preview-title">02 / Screener Panel Redesign</div>
+
+    <div class="screener">
+      <div class="screener-header">
+        <div class="screener-title">AI 選股篩選器</div>
+        <div style="margin-left:auto; font-size:11px; color:var(--text-tertiary); display:flex; align-items:center; gap:6px">
+          <div class="live-dot"></div>
+          127 支股票
+        </div>
+      </div>
+
+      <!-- Template tabs -->
+      <div class="template-tabs">
+        <div class="template-tab active"><div class="template-tab-dot"></div>全部</div>
+        <div class="template-tab">🚀 強勢突破</div>
+        <div class="template-tab">📈 法人買超</div>
+        <div class="template-tab">💎 高殖利率</div>
+        <div class="template-tab">⚡ RSI反彈</div>
+        <div class="template-tab">🧲 均線多排</div>
+        <div class="template-tab">🤖 AI精選</div>
+      </div>
+
+      <!-- NL query -->
+      <div class="nl-input-wrap">
+        <svg class="nl-input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="left:32px; top:50%; transform:translateY(-50%); position:absolute; color:var(--color-brand)">
+          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+        </svg>
+        <input class="nl-input" style="padding-left:36px" placeholder="AI 自然語言篩選，例：外資連買 5 天且 RSI < 40 的半導體…" value="">
+      </div>
+
+      <!-- Fund filters -->
+      <div class="fund-filters">
+        <div class="fund-toggle">
+          <div class="fund-toggle-icon" style="background:var(--color-brand-subtle); border-color:var(--color-brand-border)">▾</div>
+          <span style="color:var(--color-brand)">基本面篩選條件</span>
+          <span style="margin-left:auto; color:var(--text-tertiary); font-size:10px">已啟用 2 項</span>
+        </div>
+        <div class="fund-grid">
+          <div class="fund-item" style="border-color:var(--color-brand-border); background:rgba(0,212,255,0.05)">
+            <div class="fund-item-label">本益比 PE <span>啟用</span></div>
+            <div class="fund-range">
+              <input class="fund-input" value="5">
+              <span class="fund-sep">~</span>
+              <input class="fund-input" value="30">
+            </div>
+          </div>
+          <div class="fund-item" style="border-color:var(--color-brand-border); background:rgba(0,212,255,0.05)">
+            <div class="fund-item-label">殖利率% <span>啟用</span></div>
+            <div class="fund-range">
+              <input class="fund-input" value="3">
+              <span class="fund-sep">~</span>
+              <input class="fund-input" placeholder="—">
+            </div>
+          </div>
+          <div class="fund-item">
+            <div class="fund-item-label">毛利率%</div>
+            <div class="fund-range">
+              <input class="fund-input" placeholder="—">
+              <span class="fund-sep">~</span>
+              <input class="fund-input" placeholder="—">
+            </div>
+          </div>
+          <div class="fund-item">
+            <div class="fund-item-label">市值億</div>
+            <div class="fund-range">
+              <input class="fund-input" placeholder="—">
+              <span class="fund-sep">~</span>
+              <input class="fund-input" placeholder="—">
+            </div>
+          </div>
+          <div class="fund-item">
+            <div class="fund-item-label">ROE%</div>
+            <div class="fund-range"><input class="fund-input" placeholder="— min"></div>
+          </div>
+          <div class="fund-item">
+            <div class="fund-item-label">EPS 成長%</div>
+            <div class="fund-range"><input class="fund-input" placeholder="— min"></div>
+          </div>
+          <div class="fund-item">
+            <div class="fund-item-label">營收成長%</div>
+            <div class="fund-range"><input class="fund-input" placeholder="— min"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action bar -->
+      <div class="action-bar">
+        <button class="run-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          執行篩選
+        </button>
+        <button class="clear-btn">清除條件</button>
+        <div class="result-count">
+          篩選結果&nbsp;<strong>23</strong>&nbsp;支
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div style="overflow-x:auto">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="width:32px"></th>
+              <th>股票</th>
+              <th class="sort-active">評分 ▼</th>
+              <th>收盤</th>
+              <th>漲跌%</th>
+              <th>成交量</th>
+              <th>RSI</th>
+              <th>外資</th>
+              <th>投信</th>
+              <th>PE</th>
+              <th>殖利率%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected anim-row">
+              <td><button class="wl-btn added" title="已加入自選股">✓</button></td>
+              <td><div class="sym-cell"><span class="sym-code">2330</span><span class="sym-name">台積電</span></div></td>
+              <td><div class="score-bar"><div class="score-track"><div class="score-fill" style="width:88%"></div></div><span class="num" style="font-size:11px; color:var(--color-brand)">88</span></div></td>
+              <td class="num">1,075.00</td>
+              <td class="num up">+1.90%</td>
+              <td class="num" style="color:var(--text-secondary)">44.2K</td>
+              <td><span class="num" style="color:var(--color-foreign)">62.3</span></td>
+              <td class="num up">+12.4億</td>
+              <td class="num up">+3.1億</td>
+              <td class="num" style="color:var(--text-secondary)">28.4</td>
+              <td class="num down">1.2%</td>
+            </tr>
+            <tr class="anim-row">
+              <td><button class="wl-btn" title="加入自選股">+</button></td>
+              <td><div class="sym-cell"><span class="sym-code">2454</span><span class="sym-name">聯發科</span></div></td>
+              <td><div class="score-bar"><div class="score-track"><div class="score-fill" style="width:82%"></div></div><span class="num" style="font-size:11px; color:var(--color-brand)">82</span></div></td>
+              <td class="num">1,295.00</td>
+              <td class="num up">+2.37%</td>
+              <td class="num" style="color:var(--text-secondary)">12.1K</td>
+              <td><span class="num" style="color:var(--color-foreign)">58.7</span></td>
+              <td class="num up">+5.2億</td>
+              <td class="num down">-0.4億</td>
+              <td class="num" style="color:var(--text-secondary)">22.1</td>
+              <td class="num down">3.8%</td>
+            </tr>
+            <tr class="anim-row">
+              <td><button class="wl-btn" title="加入自選股">+</button></td>
+              <td><div class="sym-cell"><span class="sym-code">2317</span><span class="sym-name">鴻海</span></div></td>
+              <td><div class="score-bar"><div class="score-track"><div class="score-fill" style="width:74%"></div></div><span class="num" style="font-size:11px; color:var(--color-brand)">74</span></div></td>
+              <td class="num">218.50</td>
+              <td class="num down">-0.68%</td>
+              <td class="num" style="color:var(--text-secondary)">88.3K</td>
+              <td><span class="num" style="color:var(--text-secondary)">44.2</span></td>
+              <td class="num down">-2.8億</td>
+              <td class="num down">-0.1億</td>
+              <td class="num" style="color:var(--text-secondary)">12.4</td>
+              <td class="num down">5.5%</td>
+            </tr>
+            <tr class="anim-row">
+              <td><button class="wl-btn" title="加入自選股">+</button></td>
+              <td><div class="sym-cell"><span class="sym-code">00878</span><span class="sym-name">國泰永續高股息</span></div></td>
+              <td><div class="score-bar"><div class="score-track"><div class="score-fill" style="width:71%"></div></div><span class="num" style="font-size:11px; color:var(--color-brand)">71</span></div></td>
+              <td class="num">22.34</td>
+              <td class="num up">+0.45%</td>
+              <td class="num" style="color:var(--text-secondary)">420K</td>
+              <td><span class="num" style="color:var(--text-secondary)">51.8</span></td>
+              <td class="num up">+18.4億</td>
+              <td class="num up">+2.2億</td>
+              <td class="num" style="color:var(--text-tertiary)">—</td>
+              <td class="num down">7.1%</td>
+            </tr>
+            <tr class="anim-row">
+              <td><button class="wl-btn" title="加入自選股">+</button></td>
+              <td><div class="sym-cell"><span class="sym-code">2412</span><span class="sym-name">中華電</span></div></td>
+              <td><div class="score-bar"><div class="score-track"><div class="score-fill" style="width:65%"></div></div><span class="num" style="font-size:11px; color:var(--color-brand)">65</span></div></td>
+              <td class="num">125.50</td>
+              <td class="num" style="color:var(--color-flat)">0.00%</td>
+              <td class="num" style="color:var(--text-secondary)">8.9K</td>
+              <td><span class="num" style="color:var(--text-secondary)">48.3</span></td>
+              <td class="num down">-1.2億</td>
+              <td class="num up">+0.3億</td>
+              <td class="num" style="color:var(--text-secondary)">24.7</td>
+              <td class="num down">5.8%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 3: COLOR PALETTE ════════════════════════════════════ -->
+  <div class="preview-section">
+    <div class="preview-title">03 / Color System</div>
+
+    <div class="token-card">
+      <div class="section-label" style="margin-bottom:20px">Background Layers — 5層深度系統</div>
+      <div class="palette-row">
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#04060D; outline:1px solid rgba(255,255,255,0.1)"></div>
+          <div class="swatch-label">--bg-void<br>#04060D</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#070C18"></div>
+          <div class="swatch-label">--bg-base<br>#070C18</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#0C1628"></div>
+          <div class="swatch-label">--bg-surface<br>#0C1628</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#111E35"></div>
+          <div class="swatch-label">--bg-raised<br>#111E35</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#172442"></div>
+          <div class="swatch-label">--bg-overlay<br>#172442</div>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:20px; margin-top:24px">Semantic Colors</div>
+      <div class="palette-row">
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#00D4FF; box-shadow:0 0 16px rgba(0,212,255,0.5)"></div>
+          <div class="swatch-label">--color-brand<br>#00D4FF</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#FF4757; box-shadow:0 0 16px rgba(255,71,87,0.5)"></div>
+          <div class="swatch-label">--color-up<br>#FF4757</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#2ED573; box-shadow:0 0 16px rgba(46,213,115,0.5)"></div>
+          <div class="swatch-label">--color-down<br>#2ED573</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#FFB142"></div>
+          <div class="swatch-label">--color-foreign<br>#FFB142</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#A29BFE"></div>
+          <div class="swatch-label">--color-trust<br>#A29BFE</div>
+        </div>
+        <div class="color-swatch">
+          <div class="swatch-block" style="background:#00CEC9"></div>
+          <div class="swatch-label">--color-dealer<br>#00CEC9</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 4: COMPARISON TABLE ════════════════════════════════ -->
+  <div class="preview-section">
+    <div class="preview-title">04 / 升級對照表</div>
+    <div class="token-card" style="padding:0; overflow:hidden">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th style="width:18%">項目</th>
+            <th style="width:25%">現況 (V1)</th>
+            <th style="width:30%">建議升級 (V2)</th>
+            <th style="width:12%">影響</th>
+            <th>說明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>品牌色</strong></td>
+            <td><span class="tag-old">#3B82F6</span> 普通藍</td>
+            <td><span class="tag-new">#00D4FF</span> 電光青藍</td>
+            <td><span class="tag-impact high">高</span></td>
+            <td>區別於大多數平台的 Tailwind 藍，有獨特金融科技感</td>
+          </tr>
+          <tr>
+            <td><strong>背景層次</strong></td>
+            <td><span class="tag-old">#0a0e17 / #0d1220</span> 2層</td>
+            <td><span class="tag-new">5層深度系統</span></td>
+            <td><span class="tag-impact high">高</span></td>
+            <td>卡片、側欄、Popover 有明確的視覺深度，不再平扁</td>
+          </tr>
+          <tr>
+            <td><strong>邊框</strong></td>
+            <td><span class="tag-old">#1a2333</span> 灰色</td>
+            <td><span class="tag-new">rgba(0,212,255,0.12)</span> 青藍半透明</td>
+            <td><span class="tag-impact mid">中</span></td>
+            <td>邊框帶品牌色調，整體更有系統感</td>
+          </tr>
+          <tr>
+            <td><strong>主字型</strong></td>
+            <td><span class="tag-old">Noto Sans TC / Inter</span></td>
+            <td><span class="tag-new">Space Grotesk + Syne (display)</span></td>
+            <td><span class="tag-impact mid">中</span></td>
+            <td>Space Grotesk 數字更緊湊清晰；Syne 用於 Logo/標題更具個性</td>
+          </tr>
+          <tr>
+            <td><strong>數字字型</strong></td>
+            <td><span class="tag-old">JetBrains Mono</span></td>
+            <td><span class="tag-new">IBM Plex Mono</span></td>
+            <td><span class="tag-impact low">低</span></td>
+            <td>IBM Plex Mono 在小字號更清晰，數字字寬更緊湊</td>
+          </tr>
+          <tr>
+            <td><strong>全螢幕按鈕</strong></td>
+            <td><span class="tag-old">藏在可捲工具列裡</span></td>
+            <td><span class="tag-new">固定在工具列最右側</span></td>
+            <td><span class="tag-impact high">高</span></td>
+            <td>✅ 已修復（本 session 完成）</td>
+          </tr>
+          <tr>
+            <td><strong>Glow 效果</strong></td>
+            <td><span class="tag-old">基本 text-shadow</span></td>
+            <td><span class="tag-new">三層 glow + 品牌色 border</span></td>
+            <td><span class="tag-impact mid">中</span></td>
+            <td>活躍按鈕加 box-shadow glow，hover 時更有互動感</td>
+          </tr>
+          <tr>
+            <td><strong>Header 指數</strong></td>
+            <td><span class="tag-old">只有加權指數</span></td>
+            <td><span class="tag-new">加權 + NYSE + USD/TWD + 即時點</span></td>
+            <td><span class="tag-impact mid">中</span></td>
+            <td>提供更豐富的市場 context，符合專業看盤習慣</td>
+          </tr>
+          <tr>
+            <td><strong>Screener 表格</strong></td>
+            <td><span class="tag-old">簡單 tr hover</span></td>
+            <td><span class="tag-new">評分條 + 入場動畫 + 自選股一鍵</span></td>
+            <td><span class="tag-impact high">高</span></td>
+            <td>評分視覺化更直觀；結果載入有 staggered 動畫；+ 按鈕永遠可見</td>
+          </tr>
+          <tr>
+            <td><strong>噪點紋理</strong></td>
+            <td><span class="tag-old">無</span></td>
+            <td><span class="tag-new">body::before SVG noise 1.8% opacity</span></td>
+            <td><span class="tag-impact low">低</span></td>
+            <td>極輕微的紋理讓純黑背景不顯呆板，增加質感</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ SECTION 5: CSS TOKENS TO COPY ═══════════════════════════════ -->
+  <div class="preview-section">
+    <div class="preview-title">05 / globals.css 可直接替換的 Token</div>
+
+    <div class="code-block">
+<span class="c-comment">/* ── 品牌色升級 ── */</span>
+<span class="c-key">--color-brand</span>:       <span class="c-val">#00D4FF</span>;   <span class="c-comment">/* 電光青（取代 #3B82F6）*/</span>
+<span class="c-key">--color-brand-hover</span>:  <span class="c-val">#00B8E6</span>;
+<span class="c-key">--color-up</span>:           <span class="c-val">#FF4757</span>;   <span class="c-comment">/* 更飽和的漲紅 */</span>
+<span class="c-key">--color-down</span>:         <span class="c-val">#2ED573</span>;   <span class="c-comment">/* 更亮的跌綠 */</span>
+
+<span class="c-comment">/* ── 背景層次升級（深色主題）── */</span>
+<span class="c-key">--bg-base</span>:            <span class="c-val">#070C18</span>;
+<span class="c-key">--bg-surface</span>:         <span class="c-val">#0C1628</span>;
+<span class="c-key">--bg-elevated</span>:        <span class="c-val">#111E35</span>;
+
+<span class="c-comment">/* ── 邊框改為品牌色調 ── */</span>
+<span class="c-key">--border</span>:             <span class="c-val">rgba(0, 212, 255, 0.12)</span>;
+<span class="c-key">--border-strong</span>:      <span class="c-val">rgba(0, 212, 255, 0.22)</span>;
+
+<span class="c-comment">/* ── 文字色調整（冷白）── */</span>
+<span class="c-key">--text-primary</span>:       <span class="c-val">#E8F4FF</span>;
+<span class="c-key">--text-secondary</span>:     <span class="c-val">#7A9CC8</span>;
+<span class="c-key">--text-tertiary</span>:      <span class="c-val">#3D5A80</span>;
+
+<span class="c-comment">/* ── 字型升級 ── */</span>
+<span class="c-key">--font-sans</span>:  <span class="c-str">"Space Grotesk"</span>, <span class="c-str">"Noto Sans TC"</span>, system-ui, sans-serif;
+<span class="c-key">--font-mono</span>:  <span class="c-str">"IBM Plex Mono"</span>, <span class="c-str">"JetBrains Mono"</span>, monospace;
+    </div>
+
+    <div style="margin-top:16px; font-size:12px; color:var(--text-tertiary); line-height:1.8; padding:16px; background:var(--bg-raised); border-radius:var(--r-md); border:1px solid var(--border-faint)">
+      <strong style="color:var(--text-secondary)">字型載入（layout.tsx 加入）：</strong><br>
+      <code style="font-family:var(--font-mono); color:var(--color-brand); font-size:11px">
+        &lt;link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=Syne:wght@700;800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"&gt;
+      </code>
+      <br><br>
+      <strong style="color:var(--text-secondary)">或改用 next/font（推薦，避免 FOUC）：</strong><br>
+      <code style="font-family:var(--font-mono); color:var(--color-brand); font-size:11px">
+        import &#123; Space_Grotesk, IBM_Plex_Mono, Syne &#125; from 'next/font/google'
+      </code>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Interactive demos
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    this.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    this.parentElement.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.ind-chip').forEach(btn => {
+  btn.addEventListener('click', function() {
+    this.classList.toggle('active');
+  });
+});
+
+document.querySelectorAll('.template-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    this.parentElement.querySelectorAll('.template-tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.wl-btn').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (!this.classList.contains('added')) {
+      this.classList.add('added');
+      this.textContent = '✓';
+      this.title = '已加入自選股';
+    }
+  });
+});
+
+document.querySelectorAll('.results-table tr').forEach(row => {
+  row.addEventListener('click', function() {
+    this.closest('tbody').querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+    this.classList.add('selected');
+  });
+});
+</script>
+</body>
+</html>
