@@ -222,6 +222,19 @@ interface KLineChartProps {
 
 const MA_COLORS = ["#FBBF24", "#60A5FA", "#A78BFA", "#F87171"];
 
+const ZOOM_BTN_STYLE: React.CSSProperties = {
+  width:      22,
+  height:     22,
+  fontSize:   13,
+  fontWeight: 600,
+  background: "rgba(15,23,42,0.75)",
+  border:     "1px solid rgba(148,163,184,0.35)",
+  color:      "#E2E8F0",
+  opacity:    0.65,
+  lineHeight: 1,
+  cursor:     "pointer",
+};
+
 // ── Pattern marker helpers ────────────────────────────────────────────────────
 
 const PATTERN_COLORS = {
@@ -1209,32 +1222,30 @@ export default function KLineChart({
         className="absolute z-20 flex flex-col gap-0.5"
         style={{ right: 72, bottom: 30 }}
       >
-        {[
-          { label: "+", title: "放大",   onClick: () => handleZoom(0.7) },
-          { label: "−", title: "縮小",   onClick: () => handleZoom(1.4) },
-          { label: "⛶", title: "顯示全部 (Fit)", onClick: handleResetZoom },
-        ].map((btn) => (
-          <button
-            key={btn.title}
-            onClick={btn.onClick}
-            title={btn.title}
-            className="flex items-center justify-center rounded transition-all hover:opacity-100"
-            style={{
-              width:       22,
-              height:      22,
-              fontSize:    13,
-              fontWeight:  600,
-              background:  "rgba(15,23,42,0.75)",
-              border:      "1px solid rgba(148,163,184,0.35)",
-              color:       "#E2E8F0",
-              opacity:     0.65,
-              lineHeight:  1,
-              cursor:      "pointer",
-            }}
-          >
-            {btn.label}
-          </button>
-        ))}
+        <button
+          onClick={() => handleZoom(0.7)}
+          title="放大"
+          className="flex items-center justify-center rounded transition-all hover:opacity-100"
+          style={ZOOM_BTN_STYLE}
+        >
+          +
+        </button>
+        <button
+          onClick={() => handleZoom(1.4)}
+          title="縮小"
+          className="flex items-center justify-center rounded transition-all hover:opacity-100"
+          style={ZOOM_BTN_STYLE}
+        >
+          −
+        </button>
+        <button
+          onClick={() => handleResetZoom()}
+          title="顯示全部 (Fit)"
+          className="flex items-center justify-center rounded transition-all hover:opacity-100"
+          style={ZOOM_BTN_STYLE}
+        >
+          ⛶
+        </button>
       </div>
 
       {/* ── 指標 Legend（左上角，可點擊編輯參數）────────────────────────── */}
