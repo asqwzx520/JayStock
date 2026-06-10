@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（30日籌碼明細表 + RightPanel 1024px 整合）  
-> **當前版本：** commit `2c5d003`（ChipsPanel 三大法人近30日明細表格；page.tsx 引入 RightPanel lg breakpoint）  
+> **更新日期：** 2026-06-11（回測 422 Bug 修復）  
+> **當前版本：** commit `acce6c6`（backtest.py 移除 `from __future__ import annotations` + `Body(...)` 明確聲明，修復 POST 422 Unprocessable Entity）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -431,6 +431,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `acce6c6` | **回測 422 Bug 修復**：`backtest.py` 的 `from __future__ import annotations` 導致所有型別標註成為 lazy 字串；slowapi `@limiter.limit()` 裝飾器包裝後，FastAPI `get_type_hints()` 無法解析 `BacktestRequest`，退回把 `body` 當 query param（422）。修復：移除該 import（screener.py 從未有此行）+ 加 `body: BacktestRequest = Body(...)` 明確聲明。前後 5 分鐘 Playwright 驗證：2330/MA5×MA20/5年，總報酬 +96.67%，CAGR 14.73%，正常返回 200 + 完整回測數據 | ✅ Live |
 | `2c5d003` | **30日籌碼明細表 + RightPanel 整合**：`ChipsPanel.tsx` 新增「三大法人 · 近30日明細」Section（每日外資/投信/自營/合計淨買賣數字表格，最新在前，正紅負綠千分位）；`page.tsx` 引入 `RightPanel` 並加入主佈局（lg breakpoint 1024px+），顯示大字股價 + 今日行情卡 + 振幅區間；確認基本面摘要列已存在（市值/本益比/EPS/殖利率/52W/Beta/產業）| ✅ Local |
 | `fa919ce` | **TWSE OpenAPI 批量基本面**：新增 `twse_openapi_service.py`（`BWIBBU_ALL` 一次拉 ~1700 支 PE/PB/殖利率，TTL 4h；`STOCK_DAY_ALL` 全市場日行情快照 TTL 5min）；`fundamental.py` 台股改走 TWSE 批量查詢（單股 O(1)），FinMind `TaiwanStockPER` per-symbol 呼叫全部取代 | ✅ Live |
 | `7caeeb4` | **Sprint 6：Screener 基本面篩選**：股票池 70→127；`fundamental_cache_service.py`（yfinance 批量 24h TTL）；`RunRequest` 10 個基本面條件欄；`_matches()` 過濾；前端展開式面板 + 動態結果欄（7 個欄位按條件啟用顯示） | ✅ Live |
@@ -479,6 +480,8 @@
 | `GET /api/v1/market/ranking` | 漲跌爆量排行 | ✅ 正常 |
 | `GET /api/v1/news/{symbol}` | 個股新聞 | ✅ 正常（已修復）|
 | `POST /api/v1/screener/run` | AI 選股執行 | ✅ 正常 |
+| `GET /api/v1/backtest/presets` | 6 種策略模板 | ✅ 正常 |
+| `POST /api/v1/backtest/run` | 回測執行（6策略/11指標/4分頁結果）| ✅ 正常（`acce6c6` 修復 422）|
 | `GET/POST /api/v1/watchlist` | 自選股 CRUD | ✅ 正常（Supabase 持久化）|
 | `POST /api/v1/feedback` | Beta 回饋 | ✅ 正常 |
 | `GET /api/v1/alerts` | 設價提醒通知 | ✅ 正常（Supabase + in-memory fallback）|
@@ -502,4 +505,4 @@
 
 ---
 
-*最後更新：2026-06-11 by Claude（30日籌碼明細表 + RightPanel 1024px 整合；commit `2c5d003`；整體評分 96/100）*
+*最後更新：2026-06-11 by Claude（回測 422 Bug 修復；commit `acce6c6`；整體評分 96/100）*
