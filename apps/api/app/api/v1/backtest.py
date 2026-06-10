@@ -4,8 +4,6 @@
 GET  /api/v1/backtest/presets  → 6 種預設策略模板
 POST /api/v1/backtest/run      → 執行回測（最長等待 60 秒）
 """
-from __future__ import annotations
-
 import logging
 from datetime import date, timedelta
 from typing import Any, Optional
