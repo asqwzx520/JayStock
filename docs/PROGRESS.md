@@ -43,6 +43,8 @@
 - [x] **可拖動分界線**：`ResizeDivider` 5px 拖把，滑鼠拖動即時調整主圖/子指標高度比例；主圖最小 30%，子指標最小 5%，比例存 localStorage
 - [x] **跨面板時間軸同步**：`subscribeVisibleLogicalRangeChange` + `isSyncingRef` 防止 loop，主圖縮放/捲軸即時同步所有子指標面板
 - [x] **ChartWithPanels**（新）：統一管理主圖 + 所有子指標面板，page.tsx 用 ChartWithPanels 替換原 KLineChart 呼叫
+- [x] **MACD/KD/RSI 子指標面板修復**（2026-06-11）：根路由 `/` (app/page.tsx) 原直接使用 KLineChart，子面板從未存在；改用 ChartWithPanels，子指標正常顯示
+- [x] **app/page.tsx ← dashboard 完整同步**（2026-06-11）：美股支援、withCache 前端快取、keep-alive tabs、hoveredBar OHLCV 側欄、鍵盤快捷鍵全數移入根路由；/dashboard 路由退役
 
 ### 自選股（M2）
 - [x] Watchlist CRUD（前後端完整）

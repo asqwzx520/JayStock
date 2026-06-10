@@ -59,12 +59,15 @@ stock-platform/
 - **全域 Provider 掛載**：`SessionProviderWrapper` → `FeedbackWidget` → `AlertsToast`
 - **SEO / PWA**：完整 `metadata`（Open Graph, Twitter Card, robots）、`manifest.json`、viewport
 
-#### 1.2 首頁 (`app/page.tsx`)
-- 主要入口，展示 `HomeDashboard` 儀表板
+#### 1.2 首頁 (`app/page.tsx`) ← **唯一主要入口**
+- 完整股票平台主頁（路由 `/`）
+- 所有功能的入口：K線、籌碼、排行、大盤、選股、新聞、回測、分析、比較、月曆
+- 功能包含：美股支援、前端快取（`withCache`）、Tab keep-alive（`mountedTabs`）、十字線懸停 OHLCV、鍵盤快捷鍵、全螢幕 K 線 Modal
+- **2026-06-11 更新**：從 `app/dashboard/page.tsx` 完整同步，兩檔合一，`/dashboard` 路由退役
 
 #### 1.3 儀表板 (`app/dashboard/`)
 - `layout.tsx`：Dashboard 專屬 layout
-- `page.tsx`：渲染 `HomeDashboard` 元件
+- `page.tsx`：**已退役**（功能已全數移入 `app/page.tsx`，2026-06-11）
 
 #### 1.4 個股頁 (`app/stock/[symbol]/`)
 - `page.tsx`：動態路由，接收 `symbol` 參數
