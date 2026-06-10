@@ -24,7 +24,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-const HotRanking = dynamic(() => import("@/components/market/HotRanking"), { ssr: false });
 
 // ── localStorage helpers ───────────────────────────────────────────────────
 const LS_KEY = "stockpulse_watchlist_v2";
@@ -98,7 +97,6 @@ interface Props {
 
 export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = false, onDrawerClose }: Props) {
   const { data: session } = useSession();
-  const [panelMode, setPanelMode]   = useState<"watchlist" | "ranking">("watchlist");
   const [state, setState]           = useState<WatchlistState>(DEFAULT_STATE);
   const [activeGid, setActiveGid]   = useState<string>("default");
 
@@ -368,32 +366,8 @@ export default function LeftPanel({ currentSymbol, onSelectStock, drawerOpen = f
           ✕
         </button>
       </div>
-      {/* Top mode switcher */}
-      <div className="shrink-0 flex border-b" style={{ borderColor: "var(--border)" }}>
-        {(["watchlist", "ranking"] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setPanelMode(mode)}
-            className="flex-1 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              color:        panelMode === mode ? "var(--color-accent)" : "var(--text-tertiary)",
-              borderBottom: panelMode === mode ? "2px solid var(--color-accent)" : "2px solid transparent",
-            }}
-          >
-            {mode === "watchlist" ? "自選股" : "熱門排行"}
-          </button>
-        ))}
-      </div>
-
-      {/* ── 熱門排行模式 ── */}
-      {panelMode === "ranking" && (
-        <div className="flex-1 min-h-0">
-          <HotRanking onSelectSymbol={handleSelectAndClose} />
-        </div>
-      )}
-
-      {/* ── 自選股模式 ── */}
-      {panelMode === "watchlist" && <>
+      {/* ── 自選股 ── */}
+      {<>
 
       {/* Group tabs */}
       <div className="shrink-0 flex items-center gap-0.5 px-2 pt-2 pb-1.5 overflow-x-auto"
