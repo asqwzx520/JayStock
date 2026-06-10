@@ -19,8 +19,6 @@ Headers: X-User-ID (optional, 用於評估自訂警示規則)
   7. exdiv_soon      7 日內除息
   8. earnings_soon   7 日內財報
 """
-from __future__ import annotations
-
 import asyncio
 import logging
 import time

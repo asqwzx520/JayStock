@@ -1165,10 +1165,17 @@ export default function HomeDashboard({ onSelectStock }: HomeDashboardProps) {
         {/* 錯誤提示 */}
         {error && (
           <div
-            className="rounded-lg px-4 py-3 text-sm"
+            className="rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3"
             style={{ background: "rgba(239,68,68,0.08)", color: "var(--color-down)", border: "1px solid rgba(239,68,68,0.2)" }}
           >
-            {error}
+            <span>{error}</span>
+            <button
+              onClick={() => { setError(null); loadDashboard(symbols); }}
+              className="shrink-0 text-xs px-2 py-1 rounded transition-opacity hover:opacity-80"
+              style={{ background: "rgba(239,68,68,0.15)", color: "var(--color-down)" }}
+            >
+              重試
+            </button>
           </div>
         )}
 
