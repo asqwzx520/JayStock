@@ -790,6 +790,8 @@ export interface BacktestBenchmarkPoint {
   value: number;
 }
 
+export type BacktestExitReason = "signal" | "stop_loss" | "take_profit" | "end_of_period";
+
 export interface BacktestTrade {
   entry_date:  string;
   exit_date:   string;
@@ -800,6 +802,8 @@ export interface BacktestTrade {
   pnl_pct:     number;
   hold_days:   number;
   side:        "long" | "short";
+  fee?:        number;              // 手續費總額（買入 + 賣出 + 證交稅，元）
+  exit_reason?: BacktestExitReason; // signal / stop_loss / take_profit / end_of_period
 }
 
 export interface BacktestMonthlyReturn {

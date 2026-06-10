@@ -347,51 +347,164 @@ function TradeTableHeader({
   );
 }
 
+const EXIT_REASON_META: Record<string, { label: string; color: string; bg: string }> = {
+  signal:        { label: "訊號",   color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
+  stop_loss:     { label: "停損",   color: "#ef4444", bg: "rgba(239,68,68,0.15)"   },
+  take_profit:   { label: "停利",   color: "#10b981", bg: "rgba(16,185,129,0.15)"  },
+  end_of_period: { label: "期末強平", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+};
+
+function ExitReasonBadge({ reason }: { reason?: string }) {
+  const meta = EXIT_REASON_META[reason ?? "signal"] ?? EXIT_REASON_META.signal;
+  return (
+    <span
+      className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap"
+      style={{ color: meta.color, background: meta.bg }}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+function exportTradesCsv(trades: BacktestTrade[]) {
+  const header = ["進場日", "出場日", "進場價", "出場價", "股數", "持倉天數", "損益(元)", "損益%", "手續費(元)", "出場原因"];
+  const rows = trades.map(t => [
+    t.entry_date,
+    t.exit_date,
+    t.entry_price,
+    t.exit_price,
+    t.shares,
+    t.hold_days,
+    t.pnl,
+    (t.pnl_pct * 100).toFixed(4),
+    t.fee ?? "",
+    EXIT_REASON_META[t.exit_reason ?? "signal"]?.label ?? "",
+  ]);
+  const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `backtest_trades_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function TradeList({ trades }: { trades: BacktestTrade[] }) {
   const [sortKey, setSortKey] = useState<keyof BacktestTrade>("entry_date");
   const [sortAsc, setSortAsc] = useState(true);
+  const [filterReason, setFilterReason] = useState<string>("all");
 
   function toggleSort(key: keyof BacktestTrade) {
     if (sortKey === key) setSortAsc(v => !v);
     else { setSortKey(key); setSortAsc(true); }
   }
 
-  const sorted = [...trades].sort((a, b) => {
+  const filtered = filterReason === "all"
+    ? trades
+    : trades.filter(t => (t.exit_reason ?? "signal") === filterReason);
+
+  const sorted = [...filtered].sort((a, b) => {
     const av = a[sortKey] as number | string;
     const bv = b[sortKey] as number | string;
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
     return sortAsc ? cmp : -cmp;
   });
 
-  const wins   = trades.filter(t => t.pnl > 0).length;
-  const losses = trades.length - wins;
-  const avgPnl = trades.length ? trades.reduce((s, t) => s + t.pnl_pct, 0) / trades.length : 0;
+  const wins      = trades.filter(t => t.pnl > 0).length;
+  const losses    = trades.length - wins;
+  const avgPnl    = trades.length ? trades.reduce((s, t) => s + t.pnl_pct,  0) / trades.length : 0;
+  const totalFee  = trades.reduce((s, t) => s + (t.fee ?? 0), 0);
+  const avgHold   = trades.length ? trades.reduce((s, t) => s + t.hold_days, 0) / trades.length : 0;
+  const bestPnl   = trades.length ? Math.max(...trades.map(t => t.pnl_pct)) : 0;
+  const worstPnl  = trades.length ? Math.min(...trades.map(t => t.pnl_pct)) : 0;
+
+  // 出場原因分佈統計
+  const reasonCounts: Record<string, number> = {};
+  for (const t of trades) {
+    const r = t.exit_reason ?? "signal";
+    reasonCounts[r] = (reasonCounts[r] ?? 0) + 1;
+  }
+
+  const FILTER_TABS: { id: string; label: string }[] = [
+    { id: "all", label: `全部 (${trades.length})` },
+    ...Object.entries(reasonCounts).map(([id, n]) => ({
+      id,
+      label: `${EXIT_REASON_META[id]?.label ?? id} (${n})`,
+    })),
+  ];
 
   return (
     <div>
-      {/* Summary bar */}
-      <div className="flex items-center gap-4 mb-3 text-xs" style={{ color: "var(--text-secondary)" }}>
-        <span>共 {trades.length} 筆交易</span>
-        <span style={{ color: "var(--color-up)" }}>獲利 {wins} 筆</span>
-        <span style={{ color: "var(--color-down)" }}>虧損 {losses} 筆</span>
-        <span>平均損益 <span className="num" style={{ color: avgPnl >= 0 ? "var(--color-up)" : "var(--color-down)" }}>{pct(avgPnl)}</span></span>
+      {/* Summary bar (2 rows) */}
+      <div className="grid gap-2 mb-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>共 <span className="num font-medium" style={{ color: "var(--text-primary)" }}>{trades.length}</span> 筆</span>
+          <span style={{ color: "var(--color-up)" }}>獲利 {wins}</span>
+          <span style={{ color: "var(--color-down)" }}>虧損 {losses}</span>
+          <span>勝率 <span className="num font-medium" style={{ color: "var(--text-primary)" }}>{trades.length ? ((wins / trades.length) * 100).toFixed(1) : "0"}%</span></span>
+          <span>平均損益 <span className="num" style={{ color: avgPnl >= 0 ? "var(--color-up)" : "var(--color-down)" }}>{pct(avgPnl)}</span></span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>平均持倉 <span className="num font-medium" style={{ color: "var(--text-primary)" }}>{avgHold.toFixed(1)} 天</span></span>
+          <span>總手續費 <span className="num font-medium" style={{ color: "var(--text-primary)" }}>${totalFee.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></span>
+          <span>最佳 <span className="num" style={{ color: "var(--color-up)" }}>{pct(bestPnl)}</span></span>
+          <span>最差 <span className="num" style={{ color: "var(--color-down)" }}>{pct(worstPnl)}</span></span>
+          <button
+            onClick={() => exportTradesCsv(trades)}
+            disabled={trades.length === 0}
+            className="ml-auto px-2 py-0.5 rounded text-[11px] transition-colors disabled:opacity-40"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+            title="匯出交易明細為 CSV"
+          >
+            ⬇ 匯出 CSV
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-auto max-h-72 rounded" style={{ border: "1px solid var(--border)" }}>
-        <table className="w-full text-xs" style={{ minWidth: 560 }}>
+      {/* Filter chips */}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {FILTER_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setFilterReason(tab.id)}
+            className="px-2 py-0.5 rounded text-[11px] transition-colors"
+            style={{
+              background: filterReason === tab.id ? "var(--accent)" : "var(--bg-elevated)",
+              color:      filterReason === tab.id ? "white"        : "var(--text-secondary)",
+              border:     "1px solid var(--border)",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="overflow-auto max-h-80 rounded" style={{ border: "1px solid var(--border)" }}>
+        <table className="w-full text-xs" style={{ minWidth: 760 }}>
           <thead style={{ background: "var(--bg-elevated)", position: "sticky", top: 0, zIndex: 1 }}>
             <tr>
-              <TradeTableHeader label="進場日"  k="entry_date"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="出場日"  k="exit_date"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="進場價"  k="entry_price" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="出場價"  k="exit_price"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="損益"    k="pnl"         sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="損益%"   k="pnl_pct"     sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
-              <TradeTableHeader label="持倉天"  k="hold_days"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="進場日"   k="entry_date"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="出場日"   k="exit_date"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="進場價"   k="entry_price" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="出場價"   k="exit_price"  sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="持倉天"   k="hold_days"   sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="損益"     k="pnl"         sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="損益%"    k="pnl_pct"     sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <TradeTableHeader label="手續費"   k="fee"         sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} />
+              <th className="px-2 py-1.5 text-left text-[10px]" style={{ color: "var(--text-tertiary)", borderBottom: "1px solid var(--border)" }}>
+                出場原因
+              </th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((t, i) => (
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-2 py-6 text-center text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  此分類無交易
+                </td>
+              </tr>
+            ) : sorted.map((t, i) => (
               <tr
                 key={i}
                 style={{
@@ -399,17 +512,23 @@ function TradeList({ trades }: { trades: BacktestTrade[] }) {
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>{t.entry_date}</td>
-                <td className="px-2 py-1.5 num" style={{ color: "var(--text-secondary)" }}>{t.exit_date}</td>
+                <td className="px-2 py-1.5 num whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{t.entry_date}</td>
+                <td className="px-2 py-1.5 num whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{t.exit_date}</td>
                 <td className="px-2 py-1.5 num">{t.entry_price.toLocaleString()}</td>
                 <td className="px-2 py-1.5 num">{t.exit_price.toLocaleString()}</td>
+                <td className="px-2 py-1.5 num">{t.hold_days}</td>
                 <td className="px-2 py-1.5 num" style={{ color: t.pnl >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
                   {t.pnl >= 0 ? "+" : ""}{t.pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </td>
                 <td className="px-2 py-1.5 num font-medium" style={{ color: t.pnl_pct >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
                   {pct(t.pnl_pct)}
                 </td>
-                <td className="px-2 py-1.5 num">{t.hold_days}</td>
+                <td className="px-2 py-1.5 num" style={{ color: "var(--text-tertiary)" }}>
+                  {t.fee != null ? t.fee.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}
+                </td>
+                <td className="px-2 py-1.5">
+                  <ExitReasonBadge reason={t.exit_reason} />
+                </td>
               </tr>
             ))}
           </tbody>

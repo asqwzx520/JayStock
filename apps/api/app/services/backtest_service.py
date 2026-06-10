@@ -420,9 +420,40 @@ def _run_portfolio(
     position = 0.0          # 股數（允許小數，模擬整股可用 math.floor）
     entry_price  = 0.0
     entry_date   = None
+    entry_cost   = 0.0       # 進場時的買入手續費（元）
 
     equity_list: list[tuple] = []
     trades: list[dict]        = []
+
+    def _close_position(date, price, reason: str):
+        """結算一筆交易並寫入 trades；回傳新的 cash 餘額"""
+        nonlocal position, entry_price, entry_date, entry_cost
+        proceeds  = position * price * (1 - sell_cost)
+        gross_buy = position * entry_price
+        pnl       = proceeds - gross_buy - entry_cost
+        pnl_pct   = (price * (1 - sell_cost) - entry_price * (1 + buy_cost)) / (entry_price * (1 + buy_cost))
+        hold_days = (date - entry_date).days if entry_date else 0
+        sell_fee  = position * price * sell_cost
+        total_fee = entry_cost + sell_fee
+        trades.append({
+            "entry_date":   entry_date.strftime("%Y-%m-%d") if entry_date else "",
+            "exit_date":    date.strftime("%Y-%m-%d"),
+            "entry_price":  round(entry_price, 2),
+            "exit_price":   round(price, 2),
+            "shares":       round(position, 4),
+            "pnl":          round(pnl, 2),
+            "pnl_pct":      round(pnl_pct, 6),
+            "hold_days":    hold_days,
+            "side":         "long",
+            "fee":          round(total_fee, 2),
+            "exit_reason":  reason,
+        })
+        new_cash = proceeds
+        position = 0.0
+        entry_price = 0.0
+        entry_date  = None
+        entry_cost  = 0.0
+        return new_cash
 
     for date, row in df.iterrows():
         price = float(row["close"])
@@ -431,48 +462,41 @@ def _run_portfolio(
             continue
 
         sig = int(signals.get(date, 0))
+        exit_reason = "signal"
 
         # ── 停損/停利 ──
         if position > 0 and entry_price > 0:
             chg = (price - entry_price) / entry_price
             if stop_loss_pct  is not None and chg <= -abs(stop_loss_pct):
                 sig = -1
-            if take_profit_pct is not None and chg >= abs(take_profit_pct):
+                exit_reason = "stop_loss"
+            elif take_profit_pct is not None and chg >= abs(take_profit_pct):
                 sig = -1
+                exit_reason = "take_profit"
 
         # ── 買入 ──
         if sig == 1 and position == 0 and cash > 0:
             cost     = price * (1 + buy_cost)
             shares   = cash / cost
             position = shares
+            entry_cost  = shares * price * buy_cost
             cash     = 0.0
             entry_price = price
             entry_date  = date
 
         # ── 賣出 ──
         elif sig == -1 and position > 0:
-            proceeds  = position * price * (1 - sell_cost)
-            pnl       = proceeds - (position * entry_price * (1 + buy_cost))
-            pnl_pct   = (price * (1 - sell_cost) - entry_price * (1 + buy_cost)) / (entry_price * (1 + buy_cost))
-            hold_days = (date - entry_date).days if entry_date else 0
-            trades.append({
-                "entry_date":   entry_date.strftime("%Y-%m-%d") if entry_date else "",
-                "exit_date":    date.strftime("%Y-%m-%d"),
-                "entry_price":  round(entry_price, 2),
-                "exit_price":   round(price, 2),
-                "shares":       round(position, 4),
-                "pnl":          round(pnl, 2),
-                "pnl_pct":      round(pnl_pct, 6),
-                "hold_days":    hold_days,
-                "side":         "long",
-            })
-            cash     = proceeds
-            position = 0.0
-            entry_price = 0.0
-            entry_date  = None
+            cash = _close_position(date, price, exit_reason)
 
         equity = cash + position * price
         equity_list.append((date, equity))
+
+    # ── 期末強平：若回測結束時仍有持倉，以最後收盤價結算 ──
+    if position > 0 and len(df) > 0:
+        last_date  = df.index[-1]
+        last_price = float(df.iloc[-1]["close"])
+        if last_price > 0 and not math.isnan(last_price):
+            cash = _close_position(last_date, last_price, "end_of_period")
 
     equity_series = pd.Series({d: e for d, e in equity_list}, name="equity")
     equity_series = equity_series.sort_index()
