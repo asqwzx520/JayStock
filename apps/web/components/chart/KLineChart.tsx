@@ -1126,6 +1126,26 @@ export default function KLineChart({
     : isDrawing                ? "crosshair"
     : "default";
 
+  // ── 縮放按鈕邏輯：以目前可視範圍為中心進行放大/縮小 ──────────────────────
+  const handleZoom = useCallback((factor: number) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const ts = chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    if (!range) return;
+    const center = (range.from + range.to) / 2;
+    const halfSpan = (range.to - range.from) / 2;
+    const newHalf = Math.max(halfSpan * factor, 2);
+    ts.setVisibleLogicalRange({
+      from: center - newHalf,
+      to:   center + newHalf,
+    });
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    chartRef.current?.timeScale().fitContent();
+  }, []);
+
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 relative">
       <canvas
@@ -1183,6 +1203,39 @@ export default function KLineChart({
           點擊設定通道寬度　Esc 取消
         </div>
       )}
+
+      {/* ── 縮放控制（右下角，價格軸左側）──────────────────────────────── */}
+      <div
+        className="absolute z-20 flex flex-col gap-0.5"
+        style={{ right: 72, bottom: 30 }}
+      >
+        {[
+          { label: "+", title: "放大",   onClick: () => handleZoom(0.7) },
+          { label: "−", title: "縮小",   onClick: () => handleZoom(1.4) },
+          { label: "⛶", title: "顯示全部 (Fit)", onClick: handleResetZoom },
+        ].map((btn) => (
+          <button
+            key={btn.title}
+            onClick={btn.onClick}
+            title={btn.title}
+            className="flex items-center justify-center rounded transition-all hover:opacity-100"
+            style={{
+              width:       22,
+              height:      22,
+              fontSize:    13,
+              fontWeight:  600,
+              background:  "rgba(15,23,42,0.75)",
+              border:      "1px solid rgba(148,163,184,0.35)",
+              color:       "#E2E8F0",
+              opacity:     0.65,
+              lineHeight:  1,
+              cursor:      "pointer",
+            }}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
 
       {/* ── 指標 Legend（左上角，可點擊編輯參數）────────────────────────── */}
       {legendItems.length > 0 && (

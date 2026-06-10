@@ -101,35 +101,35 @@ export default function ChartWithPanels({
     setHeights(prev => {
       const total = 100;
       const MIN_MAIN = 30;
-      const MIN_SUB  = 5;
+      const MIN_SUB  = 8;
+      const DEFAULT_SUB = 18;
 
-      // 移除已不在列表中的 sub 高度
-      const cleaned: HeightMap = { main: prev.main };
-      subIndicators.forEach(k => { cleaned[k] = prev[k] ?? 0; });
-
-      // 若有新加的 sub（高度為 0 或不存在），分配預設高度
-      const newSubs = subIndicators.filter(k => !prev[k]);
-      if (newSubs.length === 0) {
-        saveHeights(cleaned);
-        return cleaned;
-      }
-
-      // 每個新 sub 分配 15%，從主圖壓縮
-      let mainH = cleaned.main;
-      newSubs.forEach(k => {
-        const give = Math.min(15, mainH - MIN_MAIN);
-        mainH -= give;
-        cleaned[k] = give;
+      // 只保留主圖 + 目前 active 的 sub，但保留先前存過的數值
+      const cleaned: HeightMap = { main: prev.main ?? 100 };
+      subIndicators.forEach(k => {
+        if (prev[k] && prev[k] > 0) cleaned[k] = prev[k];
       });
-      cleaned.main = Math.max(MIN_MAIN, mainH);
 
-      // 確保加總等於 100
-      const sum = cleaned.main + subIndicators.reduce((s, k) => s + (cleaned[k] ?? 0), 0);
-      if (Math.abs(sum - total) > 0.5) {
-        const scale = total / sum;
-        cleaned.main = Math.max(MIN_MAIN, cleaned.main * scale);
-        subIndicators.forEach(k => { cleaned[k] = Math.max(MIN_SUB, (cleaned[k] ?? 0) * scale); });
+      // 沒有 sub → 主圖獨佔 100，並 reset
+      if (subIndicators.length === 0) {
+        const next: HeightMap = { main: 100 };
+        saveHeights(next);
+        return next;
       }
+
+      // 新加的 sub：給預設值
+      const newSubs = subIndicators.filter(k => !cleaned[k]);
+      newSubs.forEach(k => { cleaned[k] = DEFAULT_SUB; });
+
+      // 重新標準化讓加總 = 100（避免反覆 toggle 後主圖被一直壓縮）
+      const subSum = subIndicators.reduce((s, k) => s + (cleaned[k] ?? 0), 0);
+      const targetSubSum = Math.min(subSum, 100 - MIN_MAIN);
+      const scale = subSum > 0 ? targetSubSum / subSum : 1;
+      subIndicators.forEach(k => {
+        cleaned[k] = Math.max(MIN_SUB, (cleaned[k] ?? DEFAULT_SUB) * scale);
+      });
+      const finalSubSum = subIndicators.reduce((s, k) => s + cleaned[k], 0);
+      cleaned.main = Math.max(MIN_MAIN, total - finalSubSum);
 
       saveHeights(cleaned);
       return cleaned;
@@ -172,7 +172,11 @@ export default function ChartWithPanels({
   // 主圖指標（不含 sub-panel 類型）
   const mainIndicators = indicators.filter(ind => !(SUB_PANEL_INDICATORS as IndicatorType[]).includes(ind));
 
-  const mainPx = Math.round((heights.main / 100) * containerH);
+  // 扣掉所有 divider 才是可分配給圖表面板的高度
+  const DIVIDER_PX = 5;
+  const totalDividerPx = subIndicators.length * DIVIDER_PX;
+  const availableH = Math.max(containerH - totalDividerPx, 200);
+  const mainPx = Math.round((heights.main / 100) * availableH);
 
   return (
     <div ref={containerRef} className="relative flex flex-col w-full h-full min-h-0">
@@ -205,11 +209,15 @@ export default function ChartWithPanels({
 
       {/* ── 子指標面板（各自獨立，可拖分界線）──────────────────────────── */}
       {subIndicators.map((ind, i) => {
-        const pct = heights[ind] ?? 5;
-        const px  = Math.max(Math.round((pct / 100) * containerH), 40);
+        const pct = heights[ind] ?? 18;
+        const px  = Math.max(Math.round((pct / 100) * availableH), 60);
         const isLast = i === subIndicators.length - 1;
         return (
-          <div key={ind} className="flex flex-col min-h-0" style={{ flexShrink: 0 }}>
+          <div
+            key={ind}
+            className="flex flex-col"
+            style={{ flexShrink: 0, height: `${px + DIVIDER_PX}px` }}
+          >
             <ResizeDivider onDrag={(delta) => handleDrag(i, delta)} />
             <SubIndicatorPanel
               indicator={ind}
