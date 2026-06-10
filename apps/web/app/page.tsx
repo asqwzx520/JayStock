@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Header from "@/components/layout/Header";
+import RightPanel from "@/components/layout/RightPanel";
 import { ChartSkeleton, DashboardSkeleton, NewsListSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { useTabConfig } from "@/hooks/useTabConfig";
 import type { ViewTab } from "@/hooks/useTabConfig";
@@ -917,6 +918,9 @@ export default function Home() {
           {/* 底部 Tab Bar 佔位（手機版推高內容，避免被 fixed bar 遮住） */}
           <div className="md:hidden shrink-0 h-14" />
         </main>
+
+        {/* 右側報價面板（1024px+ 才顯示）*/}
+        <RightPanel quote={quote} isLoading={loading} />
       </div>
 
       {/* ⚙ 自訂工作區 Modal */}

@@ -139,6 +139,61 @@ function ScoreSection({ score }: { score: ChipsScore }) {
   );
 }
 
+// ── ② 日報數字表格 ────────────────────────────────────────────────────────────
+function DailyChipsTable({ data }: { data: ChipsBar[] }) {
+  const rows = [...data].reverse().slice(0, 30);
+  if (rows.length === 0) return null;
+
+  const NetCell = ({ v }: { v: number }) => (
+    <td className="num text-right pr-3 py-1" style={{
+      fontSize: "11px",
+      color: v > 0 ? "var(--color-up)" : v < 0 ? "var(--color-down)" : "var(--text-tertiary)",
+      fontWeight: v !== 0 ? 600 : 400,
+    }}>
+      {v > 0 ? "+" : ""}{v.toLocaleString()}
+    </td>
+  );
+
+  return (
+    <Section title="三大法人 · 近30日明細">
+      <div className="overflow-x-auto">
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["日期", "外資", "投信", "自營", "合計"].map((h, i) => (
+                <th key={h} className={i === 0 ? "pl-3 pr-2" : "pr-3"} style={{
+                  padding: "5px 0",
+                  textAlign: i === 0 ? "left" : "right",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  color: i === 1 ? F_COLOR : i === 2 ? T_COLOR : i === 3 ? D_COLOR : "var(--text-tertiary)",
+                }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.date} style={{ borderBottom: "1px solid var(--border)" }}
+                  className="hover:bg-[var(--bg-elevated)] transition-colors">
+                <td className="pl-3 pr-2 py-1 num" style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                  {r.date.slice(5)}
+                </td>
+                <NetCell v={r.foreign_net} />
+                <NetCell v={r.trust_net} />
+                <NetCell v={r.dealer_net} />
+                <NetCell v={r.total_net} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
+}
+
 // ── ③ 累積持倉走勢圖 ──────────────────────────────────────────────────────────
 function CumulativeChart({ series }: { series: ChipsCumulativePoint[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -512,6 +567,9 @@ export default function ChipsPanel({ symbol, days = 60, onDaysChange }: ChipsPan
           </div>
         </Section>
       )}
+
+      {/* ② 日報數字表格 */}
+      {chipsData.length > 0 && <DailyChipsTable data={chipsData} />}
 
       {/* ③ 累積持倉走勢 */}
       {cumulSeries.length > 0 && (
