@@ -25,6 +25,7 @@ import PortfolioPanel    from "./PortfolioPanel";
 import WalkForwardPanel  from "./WalkForwardPanel";
 import MonteCarloPanel   from "./MonteCarloPanel";
 import TradeDistPanel    from "./TradeDistPanel";
+import RollingPanel      from "./RollingPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1621,7 +1622,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling";
 
 interface Props {
   symbol: string;
@@ -1713,6 +1714,7 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "walkforward", label: "🔄 Walk-Fwd",   alwaysEnabled: true },
     { id: "montecarlo",  label: "🎲 Monte Carlo" },
     { id: "tradedist",   label: "📊 交易分佈" },
+    { id: "rolling",     label: "📈 滾動績效" },
   ];
 
   return (
@@ -1846,6 +1848,11 @@ export default function BacktestPanel({ symbol }: Props) {
               trades={result.trades}
               monthlyReturns={result.monthly_returns}
             />
+          )}
+
+          {/* Rolling Performance tab */}
+          {resultTab === "rolling" && result && (
+            <RollingPanel equityCurve={result.equity_curve} />
           )}
 
           {/* Initial state */}

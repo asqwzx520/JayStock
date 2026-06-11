@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（回測 P0–P3 共 13 項全部完成；進入 P4 實戰轉化）  
-> **當前版本：** commit `058f3e1`（fix(lint): second round of ESLint fixes）  
+> **更新日期：** 2026-06-11（回測 P0–P4 共 16 項全部完成；進入 P5 深度分析與報告）  
+> **當前版本：** commit `97c8e59`（feat(backtest): P4-14/15/16 Robustness + Regime + Live Signal）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
