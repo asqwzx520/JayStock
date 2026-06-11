@@ -22,6 +22,7 @@ import ComparePanel    from "./ComparePanel";
 import ScanPanel       from "./ScanPanel";
 import PortfolioPanel    from "./PortfolioPanel";
 import WalkForwardPanel  from "./WalkForwardPanel";
+import MonteCarloPanel   from "./MonteCarloPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1443,7 +1444,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo";
 
 interface Props {
   symbol: string;
@@ -1532,7 +1533,8 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "compare",   label: "⚖️ 比較",   alwaysEnabled: true },
     { id: "scan",        label: "🔭 掃描",      alwaysEnabled: true },
     { id: "portfolio",   label: "📦 組合",      alwaysEnabled: true },
-    { id: "walkforward", label: "🔄 Walk-Fwd", alwaysEnabled: true },
+    { id: "walkforward", label: "🔄 Walk-Fwd",   alwaysEnabled: true },
+    { id: "montecarlo",  label: "🎲 Monte Carlo" },
   ];
 
   return (
@@ -1650,6 +1652,14 @@ export default function BacktestPanel({ symbol }: Props) {
             <div className="-m-4 h-[calc(100%+2rem)] p-4 overflow-y-auto">
               <WalkForwardPanel presets={presets} symbol={symbol} />
             </div>
+          )}
+
+          {/* Monte Carlo tab */}
+          {resultTab === "montecarlo" && result && (
+            <MonteCarloPanel
+              trades={result.trades}
+              initialCapital={lastReq?.initial_capital ?? 1_000_000}
+            />
           )}
 
           {/* Initial state */}
