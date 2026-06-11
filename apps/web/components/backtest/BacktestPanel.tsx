@@ -23,6 +23,7 @@ import ScanPanel       from "./ScanPanel";
 import PortfolioPanel    from "./PortfolioPanel";
 import WalkForwardPanel  from "./WalkForwardPanel";
 import MonteCarloPanel   from "./MonteCarloPanel";
+import TradeDistPanel    from "./TradeDistPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1444,7 +1445,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist";
 
 interface Props {
   symbol: string;
@@ -1535,6 +1536,7 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "portfolio",   label: "📦 組合",      alwaysEnabled: true },
     { id: "walkforward", label: "🔄 Walk-Fwd",   alwaysEnabled: true },
     { id: "montecarlo",  label: "🎲 Monte Carlo" },
+    { id: "tradedist",   label: "📊 交易分佈" },
   ];
 
   return (
@@ -1659,6 +1661,14 @@ export default function BacktestPanel({ symbol }: Props) {
             <MonteCarloPanel
               trades={result.trades}
               initialCapital={lastReq?.initial_capital ?? 1_000_000}
+            />
+          )}
+
+          {/* Trade Distribution tab */}
+          {resultTab === "tradedist" && result && (
+            <TradeDistPanel
+              trades={result.trades}
+              monthlyReturns={result.monthly_returns}
             />
           )}
 

@@ -294,8 +294,8 @@ CREATE INDEX idx_backtest_strategies_user ON backtest_strategies(user_id);
 | # | 階段 | 任務 | 狀態 | Commit |
 |:-:|:----:|------|:----:|:------|
 | 11 | P3 | Walk-Forward Analysis | ✅ | `4d935ba` |
-| 12 | P3 | Monte Carlo Simulation | 🔄 | — |
-| 13 | P3 | 交易分佈分析 | ⏳ | — |
+| 12 | P3 | Monte Carlo Simulation | ✅ | `7131285` |
+| 13 | P3 | 交易分佈分析 | ✅ | pending |
 
 ---
 
