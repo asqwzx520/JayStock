@@ -111,7 +111,9 @@ class BacktestStrategy(BaseModel):
     buy_zone:    Optional[int]   = None
     sell_zone:   Optional[int]   = None
     std:         Optional[float] = None
-    logic:       Optional[str]   = "AND"
+    logic:       Optional[str]   = "AND"  # backwards compat: shared logic
+    entry_logic: Optional[str]   = None   # P0-3: independent entry AND/OR
+    exit_logic:  Optional[str]   = None   # P0-3: independent exit AND/OR
     entry_conditions: Optional[list[dict]] = None
     exit_conditions:  Optional[list[dict]] = None
 

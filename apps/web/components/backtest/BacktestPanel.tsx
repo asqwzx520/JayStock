@@ -745,6 +745,215 @@ function dateOffset(years: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// ── P0-3: 自訂策略條件編輯器 ──────────────────────────────────────────────────
+
+type Cond = { field: string; op: string; value: string };
+
+interface FieldOption { value: string; label: string }
+interface FieldGroup  { group: string; options: FieldOption[] }
+
+const FIELD_GROUPS: FieldGroup[] = [
+  {
+    group: "價量",
+    options: [
+      { value: "close",  label: "收盤價" },
+      { value: "open",   label: "開盤價" },
+      { value: "high",   label: "最高價" },
+      { value: "low",    label: "最低價" },
+      { value: "volume", label: "成交量" },
+    ],
+  },
+  {
+    group: "均線",
+    options: [
+      { value: "ma5",   label: "MA5" },
+      { value: "ma10",  label: "MA10" },
+      { value: "ma20",  label: "MA20" },
+      { value: "ma60",  label: "MA60" },
+      { value: "ema12", label: "EMA12" },
+      { value: "ema26", label: "EMA26" },
+    ],
+  },
+  {
+    group: "動能",
+    options: [
+      { value: "rsi14",       label: "RSI(14)" },
+      { value: "k",           label: "KD-K" },
+      { value: "d",           label: "KD-D" },
+      { value: "macd",        label: "MACD" },
+      { value: "macd_signal", label: "MACD 訊號" },
+    ],
+  },
+  {
+    group: "通道",
+    options: [
+      { value: "bb_upper",  label: "布林上軌" },
+      { value: "bb_middle", label: "布林中軌" },
+      { value: "bb_lower",  label: "布林下軌" },
+    ],
+  },
+  {
+    group: "EPS（公布日 +45 天才生效）",
+    options: [
+      { value: "eps_ttm",           label: "TTM EPS（過去 4 季）" },
+      { value: "eps_quarterly",     label: "最近季 EPS" },
+      { value: "eps_quarterly_yoy", label: "季 EPS YoY%" },
+      { value: "eps_quarterly_qoq", label: "季 EPS QoQ%" },
+    ],
+  },
+  {
+    group: "營收（月公布 +10 天 / 年 TTM）",
+    options: [
+      { value: "revenue",            label: "月營收（千元）" },
+      { value: "revenue_yoy",        label: "月營收 YoY%" },
+      { value: "revenue_mom",        label: "月營收 MoM%" },
+      { value: "revenue_annual",     label: "年營收 TTM（千元）" },
+      { value: "revenue_annual_yoy", label: "年累計 YoY%" },
+    ],
+  },
+];
+
+const OP_OPTIONS: { value: string; label: string }[] = [
+  { value: ">",            label: ">  大於" },
+  { value: "<",            label: "<  小於" },
+  { value: ">=",           label: ">= 大於等於" },
+  { value: "<=",           label: "<= 小於等於" },
+  { value: "==",           label: "=  等於" },
+  { value: "cross_above",  label: "↗ 向上突破" },
+  { value: "cross_below",  label: "↘ 向下跌破" },
+];
+
+const ALL_FIELD_VALUES = new Set(FIELD_GROUPS.flatMap(g => g.options.map(o => o.value)));
+
+function FieldSelect({
+  value, onChange,
+}: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="text-[11px] px-1.5 py-1 rounded outline-none flex-1 min-w-0"
+      style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+    >
+      {FIELD_GROUPS.map(g => (
+        <optgroup key={g.group} label={g.group}>
+          {g.options.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+function ConditionsEditor({
+  title,
+  conds,
+  setConds,
+  logic,
+  setLogic,
+  maxConds = 10,
+}: {
+  title:    string;
+  conds:    Cond[];
+  setConds: (c: Cond[]) => void;
+  logic:    "AND" | "OR";
+  setLogic: (l: "AND" | "OR") => void;
+  maxConds?: number;
+}) {
+  const canAdd = conds.length < maxConds;
+
+  function addCond() {
+    setConds([...conds, { field: "close", op: ">", value: "ma20" }]);
+  }
+  function removeCond(idx: number) {
+    setConds(conds.filter((_, i) => i !== idx));
+  }
+  function updateCond(idx: number, patch: Partial<Cond>) {
+    setConds(conds.map((c, i) => i === idx ? { ...c, ...patch } : c));
+  }
+
+  return (
+    <div className="rounded border p-2" style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{title}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>邏輯</span>
+          <button
+            onClick={() => setLogic("AND")}
+            className="px-1.5 py-0.5 rounded text-[10px]"
+            style={{
+              background: logic === "AND" ? "var(--color-brand)" : "var(--bg-elevated)",
+              color:      logic === "AND" ? "#fff" : "var(--text-secondary)",
+              border:     "1px solid var(--border)",
+            }}
+          >AND</button>
+          <button
+            onClick={() => setLogic("OR")}
+            className="px-1.5 py-0.5 rounded text-[10px]"
+            style={{
+              background: logic === "OR" ? "var(--color-brand)" : "var(--bg-elevated)",
+              color:      logic === "OR" ? "#fff" : "var(--text-secondary)",
+              border:     "1px solid var(--border)",
+            }}
+          >OR</button>
+        </div>
+      </div>
+
+      {conds.length === 0 ? (
+        <div className="text-[10px] py-2 text-center" style={{ color: "var(--text-tertiary)" }}>
+          尚無條件，點下方「+ 加條件」開始
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {conds.map((c, idx) => (
+            <div key={idx} className="flex items-center gap-1">
+              <span className="text-[9px] w-4 text-center" style={{ color: "var(--text-tertiary)" }}>{idx + 1}</span>
+              <FieldSelect value={c.field} onChange={(v) => updateCond(idx, { field: v })} />
+              <select
+                value={c.op}
+                onChange={(e) => updateCond(idx, { op: e.target.value })}
+                className="text-[11px] px-1.5 py-1 rounded outline-none"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)", width: 90 }}
+              >
+                {OP_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={c.value}
+                onChange={(e) => updateCond(idx, { value: e.target.value })}
+                placeholder="數字或欄位名"
+                className="text-[11px] px-1.5 py-1 rounded outline-none flex-1 min-w-0"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+              />
+              <button
+                onClick={() => removeCond(idx)}
+                className="text-[14px] px-1 leading-none"
+                style={{ color: "var(--color-down)" }}
+                title="刪除"
+              >×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2 flex items-center justify-between">
+        <button
+          onClick={addCond}
+          disabled={!canAdd}
+          className="text-[11px] px-2 py-1 rounded disabled:opacity-40"
+          style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+        >+ 加條件</button>
+        <span className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>
+          {conds.length}/{maxConds}　值可填數字（如 30）或欄位（如 ma20）
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [selectedId, setSelectedId] = useState(presets[0]?.id ?? "ma_cross");
   const [params, setParams]         = useState<Record<string, number>>({});
@@ -753,7 +962,19 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [stopLoss, setStopLoss]     = useState("");
   const [takeProfit, setTakeProfit] = useState("");
 
+  // P0-3 自訂策略 state
+  const [entryConds, setEntryConds] = useState<Cond[]>([
+    { field: "close", op: "cross_above", value: "ma20" },
+    { field: "rsi14", op: "<",           value: "70"   },
+  ]);
+  const [exitConds, setExitConds] = useState<Cond[]>([
+    { field: "close", op: "cross_below", value: "ma20" },
+  ]);
+  const [entryLogic, setEntryLogic] = useState<"AND" | "OR">("AND");
+  const [exitLogic,  setExitLogic]  = useState<"AND" | "OR">("OR");
+
   const preset = presets.find(p => p.id === selectedId) ?? presets[0];
+  const isCustom = selectedId === "custom";
 
   // Reset params when preset changes
   useEffect(() => {
@@ -765,10 +986,34 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
 
   function handleSubmit() {
     if (!preset) return;
-    const strategy: BacktestStrategyConfig = {
+    let strategy: BacktestStrategyConfig = {
       ...preset.default,
       ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v])),
     };
+
+    if (isCustom) {
+      // value: 若是已知欄位名 → 字串；否則嘗試數字
+      const normVal = (v: string): string | number => {
+        const t = v.trim();
+        if (ALL_FIELD_VALUES.has(t)) return t;
+        const n = parseFloat(t);
+        return isNaN(n) ? t : n;
+      };
+      const validConds = (arr: Cond[]) =>
+        arr
+          .filter(c => c.field && c.op && c.value.trim() !== "")
+          .map(c => ({ field: c.field, op: c.op, value: normVal(c.value) }));
+
+      strategy = {
+        ...strategy,
+        type:             "custom",
+        entry_logic:      entryLogic,
+        exit_logic:       exitLogic,
+        entry_conditions: validConds(entryConds),
+        exit_conditions:  validConds(exitConds),
+      };
+    }
+
     const endDate   = new Date().toISOString().slice(0, 10);
     const startDate = dateOffset(rangeYears);
     onSubmit({
@@ -808,8 +1053,32 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
         )}
       </div>
 
+      {/* P0-3: 自訂策略條件編輯器（積木式） */}
+      {isCustom && (
+        <div className="flex flex-col gap-2">
+          <ConditionsEditor
+            title="📥 進場條件"
+            conds={entryConds}
+            setConds={setEntryConds}
+            logic={entryLogic}
+            setLogic={setEntryLogic}
+          />
+          <ConditionsEditor
+            title="📤 出場條件"
+            conds={exitConds}
+            setConds={setExitConds}
+            logic={exitLogic}
+            setLogic={setExitLogic}
+          />
+          <div className="text-[10px] px-2 py-1 rounded"
+               style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
+            💡 基本面欄位（EPS / 營收）自動延後公布日生效（季 +45 天 / 月 +10 天），避免未來函數
+          </div>
+        </div>
+      )}
+
       {/* Dynamic params */}
-      {preset && preset.params.length > 0 && (
+      {!isCustom && preset && preset.params.length > 0 && (
         <div>
           <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-tertiary)" }}>策略參數</div>
           <div className="grid grid-cols-2 gap-2">

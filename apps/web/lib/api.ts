@@ -745,7 +745,9 @@ export interface BacktestStrategyConfig {
   buy_zone?:           number;
   sell_zone?:          number;
   std?:                number;
-  logic?:              "AND" | "OR";
+  logic?:              "AND" | "OR";   // shared logic（向後相容；entry/exit_logic 優先）
+  entry_logic?:        "AND" | "OR";   // P0-3
+  exit_logic?:         "AND" | "OR";   // P0-3
   entry_conditions?:   Array<{ field: string; op: string; value: string | number }>;
   exit_conditions?:    Array<{ field: string; op: string; value: string | number }>;
 }

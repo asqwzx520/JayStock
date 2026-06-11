@@ -245,6 +245,7 @@ def _add_indicators(df: pd.DataFrame, strategy: dict) -> pd.DataFrame:
         for p in [5, 10, 20, 60]:
             df[f"ma{p}"] = df["close"].rolling(p).mean()
         df["ema12"] = df.ta.ema(length=12)
+        df["ema26"] = df.ta.ema(length=26)
         df["rsi14"] = df.ta.rsi(length=14)
         macd_df = df.ta.macd(fast=12, slow=26, signal=9)
         if macd_df is not None and not macd_df.empty:
@@ -254,6 +255,109 @@ def _add_indicators(df: pd.DataFrame, strategy: dict) -> pd.DataFrame:
         if stoch is not None and not stoch.empty:
             df["k"] = stoch.iloc[:, 0]
             df["d"] = stoch.iloc[:, 1]
+        # BOLL 上中下軌
+        bb = df.ta.bbands(length=20, std=2.0)
+        if bb is not None and not bb.empty:
+            df["bb_lower"]  = bb.iloc[:, 0]
+            df["bb_middle"] = bb.iloc[:, 1]
+            df["bb_upper"]  = bb.iloc[:, 2]
+
+    return df
+
+
+# ── 基本面欄位 + Lookahead 對齊（自訂策略專用）────────────────────────────────
+#
+# 目的：避免「未來函數」（Lookahead Bias）
+#   - 月營收依台股法令最遲下月 10 日公布 → 公布日 = 隔月 1 日 + 10 天
+#   - 季 EPS 依規定當季結束後 45 天內公布 → 公布日 = 季底 + 45 天
+#   - 年營收 (TTM) 跟隨最後一個月營收的公布日
+#
+# 失敗 silent：基本面拉取失敗時欄位為 NaN，不影響技術指標條件評估
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _add_fundamental_columns(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """加入 EPS / 營收欄位（lookahead-safe）。失敗時欄位為 NaN。"""
+    if not _is_tw_symbol(symbol) or len(df) == 0:
+        return df
+
+    bare = symbol.replace(".TW", "").replace(".TWO", "").upper()
+
+    # ── 月營收 ──
+    try:
+        from app.services.monthly_revenue_service import _fetch_sync as _rev_fetch
+        rev = _rev_fetch(bare)
+        rows = rev.get("data") or []
+        if rows:
+            rev_df = pd.DataFrame(rows)
+            # 公布日 = 隔月 10 日（保守取台股法定公布期限）
+            rev_df["pub_date"] = (
+                pd.to_datetime(rev_df.apply(
+                    lambda r: f"{int(r['year'])}-{int(r['month']):02d}-01",
+                    axis=1,
+                ))
+                + pd.DateOffset(months=1)
+                + pd.Timedelta(days=10)
+            )
+            rev_df = rev_df.set_index("pub_date").sort_index()
+            rev_df["mom_pct"] = rev_df["revenue"].pct_change() * 100
+            rev_df["annual"]  = rev_df["revenue"].rolling(12).sum()
+
+            df["revenue"]            = rev_df["revenue"].reindex(df.index, method="ffill")
+            df["revenue_yoy"]        = rev_df["yoy_pct"].reindex(df.index, method="ffill")
+            df["revenue_mom"]        = rev_df["mom_pct"].reindex(df.index, method="ffill")
+            df["revenue_annual"]     = rev_df["annual"].reindex(df.index, method="ffill")
+            df["revenue_annual_yoy"] = rev_df["cumulative_yoy_pct"].reindex(df.index, method="ffill")
+    except Exception as exc:
+        logger.debug("[backtest] add monthly revenue %s failed: %s", bare, exc)
+
+    # ── 季 EPS ──（yfinance quarterly_income_stmt）
+    try:
+        import yfinance as yf
+        yf_symbol = _yf_symbol(symbol)
+        ticker = yf.Ticker(yf_symbol)
+        try:
+            shares = ticker.info.get("sharesOutstanding") or 0
+        except Exception:
+            shares = 0
+        q_inc = None
+        for attr in ("quarterly_income_stmt", "quarterly_financials"):
+            try:
+                q_inc = getattr(ticker, attr)
+                if q_inc is not None and not q_inc.empty:
+                    break
+            except Exception:
+                continue
+        if q_inc is not None and not q_inc.empty and shares:
+            ni_row = None
+            for key in ("Net Income", "NetIncome", "Net Income Common Stockholders"):
+                if key in q_inc.index:
+                    ni_row = q_inc.loc[key]
+                    break
+            if ni_row is not None:
+                rows: list[dict] = []
+                for col, ni in ni_row.items():
+                    if pd.isna(ni):
+                        continue
+                    try:
+                        q_end = pd.Timestamp(col)
+                        rows.append({"q_end": q_end, "eps": float(ni) / float(shares)})
+                    except Exception:
+                        continue
+                if rows:
+                    eps_df = pd.DataFrame(rows).sort_values("q_end").reset_index(drop=True)
+                    # 公布日 = 季底 + 45 天
+                    eps_df["pub_date"] = eps_df["q_end"] + pd.Timedelta(days=45)
+                    eps_df = eps_df.set_index("pub_date")
+                    eps_df["eps_yoy"] = (eps_df["eps"] / eps_df["eps"].shift(4) - 1) * 100
+                    eps_df["eps_qoq"] = (eps_df["eps"] / eps_df["eps"].shift(1) - 1) * 100
+                    eps_df["eps_ttm"] = eps_df["eps"].rolling(4).sum()
+
+                    df["eps_quarterly"]     = eps_df["eps"].reindex(df.index, method="ffill")
+                    df["eps_quarterly_yoy"] = eps_df["eps_yoy"].reindex(df.index, method="ffill")
+                    df["eps_quarterly_qoq"] = eps_df["eps_qoq"].reindex(df.index, method="ffill")
+                    df["eps_ttm"]           = eps_df["eps_ttm"].reindex(df.index, method="ffill")
+    except Exception as exc:
+        logger.debug("[backtest] add quarterly EPS %s failed: %s", symbol, exc)
 
     return df
 
@@ -316,12 +420,15 @@ def _gen_signals(df: pd.DataFrame, strategy: dict) -> pd.Series:
         sig[sell & ~sell.shift(1).fillna(False)] = -1
 
     elif stype == "custom":
-        entry_conds = strategy.get("entry_conditions", [])
-        exit_conds  = strategy.get("exit_conditions",  [])
-        logic       = strategy.get("logic", "AND")
+        entry_conds  = strategy.get("entry_conditions", [])
+        exit_conds   = strategy.get("exit_conditions",  [])
+        # 進場 / 出場 可有獨立的 AND/OR；不指定時 fallback 至共用 `logic`
+        default_lg   = strategy.get("logic", "AND")
+        entry_logic  = strategy.get("entry_logic", default_lg)
+        exit_logic   = strategy.get("exit_logic",  default_lg)
 
-        buy_mask  = _eval_conditions(df, entry_conds, logic)
-        sell_mask = _eval_conditions(df, exit_conds,  logic)
+        buy_mask  = _eval_conditions(df, entry_conds, entry_logic)
+        sell_mask = _eval_conditions(df, exit_conds,  exit_logic)
         # 只取從 False→True 的第一天
         sig[buy_mask  & ~buy_mask.shift(1).fillna(False)]  =  1
         sig[sell_mask & ~sell_mask.shift(1).fillna(False)] = -1
@@ -340,13 +447,29 @@ def _eval_conditions(
 
     masks = []
     FIELD_MAP = {
+        # 價量
         "close": "close", "open": "open", "high": "high", "low": "low",
         "volume": "volume",
+        # 均線
         "ma5": "ma5", "ma10": "ma10", "ma20": "ma20", "ma60": "ma60",
-        "ema12": "ema12",
+        "ema12": "ema12", "ema26": "ema26",
+        # 動能
         "rsi14": "rsi14",
         "macd": "macd", "macd_signal": "macd_s",
         "k": "k", "d": "d",
+        # 通道
+        "bb_upper": "bb_upper", "bb_middle": "bb_middle", "bb_lower": "bb_lower",
+        # 基本面 — EPS（lookahead-safe，公布日 +45 天才生效）
+        "eps_ttm":            "eps_ttm",
+        "eps_quarterly":      "eps_quarterly",
+        "eps_quarterly_yoy":  "eps_quarterly_yoy",
+        "eps_quarterly_qoq":  "eps_quarterly_qoq",
+        # 基本面 — 營收（月 +10 天 / 年 TTM 跟隨月）
+        "revenue":            "revenue",
+        "revenue_yoy":        "revenue_yoy",
+        "revenue_mom":        "revenue_mom",
+        "revenue_annual":     "revenue_annual",
+        "revenue_annual_yoy": "revenue_annual_yoy",
     }
     OPS = {
         ">": lambda a, b: a > b,
@@ -358,7 +481,7 @@ def _eval_conditions(
         "cross_below": lambda a, b: (a < b) & (a.shift(1) >= b.shift(1)),
     }
 
-    for cond in conditions[:3]:   # max 3 conditions
+    for cond in conditions[:10]:   # P0-3: max 10 conditions
         field = FIELD_MAP.get(cond.get("field", ""), "")
         op    = cond.get("op", ">")
         value = cond.get("value")   # numeric or field name
@@ -704,6 +827,10 @@ async def run_backtest(
 
     if len(df) < 10:
         raise ValueError("指標計算後資料不足，請確認策略參數與日期範圍。")
+
+    # 加入基本面欄位（custom 策略才需要，且包含 lookahead 防護）
+    if strategy.get("type") == "custom":
+        df = _add_fundamental_columns(df, symbol)
 
     # 生成訊號
     signals = _gen_signals(df, strategy)
