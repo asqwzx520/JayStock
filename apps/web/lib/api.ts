@@ -857,6 +857,64 @@ export function getBacktestPresets(): Promise<{ presets: BacktestPreset[] }> {
   return fetcher<{ presets: BacktestPreset[] }>("/api/v1/backtest/presets");
 }
 
+// ── P0-4: 我的策略書（儲存、列表、刪除）──────────────────────────────────────
+
+export interface SavedStrategy {
+  id:              string;
+  user_id:         string;
+  name:            string;
+  note:            string;
+  strategy_json:   BacktestStrategyConfig;
+  symbol:          string;
+  start_date:      string;
+  end_date:        string;
+  initial_capital: number;
+  stop_loss_pct:   number | null;
+  take_profit_pct: number | null;
+  created_at:      string;
+}
+
+export interface SaveStrategyRequest {
+  name:            string;
+  note?:           string;
+  strategy:        BacktestStrategyConfig;
+  symbol:          string;
+  start_date:      string;
+  end_date:        string;
+  initial_capital: number;
+  stop_loss_pct?:  number;
+  take_profit_pct?: number;
+}
+
+export async function listSavedStrategies(): Promise<{ strategies: SavedStrategy[] }> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/strategies`, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+
+export async function saveStrategy(req: SaveStrategyRequest): Promise<SavedStrategy> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/strategies`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json", "X-User-ID": getUserId() },
+    body:    JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err?.detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteSavedStrategy(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/strategies/${id}`, {
+    method:  "DELETE",
+    headers: { "X-User-ID": getUserId() },
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+}
+
 // ── Foreign Holding（外資持股比例）──────────────────────────────────────────
 export interface ForeignHoldingItem {
   year:        number;

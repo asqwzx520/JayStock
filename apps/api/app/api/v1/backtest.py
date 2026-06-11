@@ -5,13 +5,16 @@ GET  /api/v1/backtest/presets  → 6 種預設策略模板
 POST /api/v1/backtest/run      → 執行回測（最長等待 60 秒）
 """
 import logging
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.rate_limit import limiter
+from app.core.supabase_client import get_supabase
+from app.core.validators import require_user
 from app.services.backtest_service import run_backtest
 
 logger = logging.getLogger(__name__)
@@ -187,3 +190,127 @@ async def run_backtest_endpoint(
     except Exception as e:
         logger.exception("[backtest] 執行失敗 symbol=%s strategy=%s", body.symbol, body.strategy.type)
         raise HTTPException(status_code=500, detail=f"回測執行失敗：{e}") from e
+
+
+# ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
+#
+# Supabase 表：backtest_strategies
+#   id            UUID PK
+#   user_id       TEXT
+#   name          TEXT
+#   note          TEXT
+#   strategy_json JSONB  (BacktestStrategy 序列化)
+#   symbol        TEXT
+#   start_date    TEXT
+#   end_date      TEXT
+#   initial_capital      DOUBLE PRECISION
+#   stop_loss_pct        DOUBLE PRECISION (nullable)
+#   take_profit_pct      DOUBLE PRECISION (nullable)
+#   created_at    TIMESTAMPTZ DEFAULT NOW()
+#
+# 無 Supabase 時 fallback 至 in-memory（per-process，重啟即失，但 UI 仍可用）
+# ─────────────────────────────────────────────────────────────────────────────
+
+_mem_strategies: dict[str, list[dict]] = {}   # user_id → list of strategies (newest first)
+_MAX_PER_USER = 50
+
+
+class SavedStrategyCreate(BaseModel):
+    name:           str = Field(..., min_length=1, max_length=60)
+    note:           Optional[str] = Field(default="", max_length=500)
+    strategy:       BacktestStrategy
+    symbol:         str = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z]+$")
+    start_date:     str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:       str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
+
+def _strategy_to_dict(row_id: str, user_id: str, body: SavedStrategyCreate) -> dict:
+    return {
+        "id":              row_id,
+        "user_id":         user_id,
+        "name":            body.name.strip(),
+        "note":            (body.note or "").strip(),
+        "strategy_json":   body.strategy.model_dump(exclude_none=True),
+        "symbol":          body.symbol.upper(),
+        "start_date":      body.start_date,
+        "end_date":        body.end_date,
+        "initial_capital": body.initial_capital,
+        "stop_loss_pct":   body.stop_loss_pct,
+        "take_profit_pct": body.take_profit_pct,
+        "created_at":      datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/backtest/strategies")
+async def list_strategies(
+    request: Request,
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """列出當前使用者已儲存的策略（最新在前）"""
+    user_id = require_user(x_user_id)
+    try:
+        sb = get_supabase()
+        if sb is not None:
+            resp = (
+                sb.table("backtest_strategies")
+                .select("*")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(_MAX_PER_USER)
+                .execute()
+            )
+            return {"strategies": resp.data or []}
+    except Exception as e:
+        logger.warning("[backtest] Supabase list_strategies failed, fallback memory: %s", e)
+    return {"strategies": _mem_strategies.get(user_id, [])}
+
+
+@router.post("/backtest/strategies")
+@limiter.limit("30/minute")
+async def save_strategy(
+    request: Request,
+    body: SavedStrategyCreate = Body(...),
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """儲存一筆策略（包含完整回測設定，可一鍵重跑）"""
+    user_id = require_user(x_user_id)
+    row_id  = str(uuid.uuid4())
+    row     = _strategy_to_dict(row_id, user_id, body)
+
+    try:
+        sb = get_supabase()
+        if sb is not None:
+            sb.table("backtest_strategies").insert(row).execute()
+            return row
+    except Exception as e:
+        logger.warning("[backtest] Supabase save_strategy failed, fallback memory: %s", e)
+
+    arr = _mem_strategies.setdefault(user_id, [])
+    arr.insert(0, row)
+    if len(arr) > _MAX_PER_USER:
+        del arr[_MAX_PER_USER:]
+    return row
+
+
+@router.delete("/backtest/strategies/{strategy_id}")
+async def delete_strategy(
+    request: Request,
+    strategy_id: str,
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """刪除一筆已儲存的策略"""
+    user_id = require_user(x_user_id)
+    try:
+        sb = get_supabase()
+        if sb is not None:
+            sb.table("backtest_strategies").delete().eq("id", strategy_id).eq("user_id", user_id).execute()
+            return {"ok": True}
+    except Exception as e:
+        logger.warning("[backtest] Supabase delete_strategy failed, fallback memory: %s", e)
+
+    arr = _mem_strategies.get(user_id, [])
+    _mem_strategies[user_id] = [s for s in arr if s.get("id") != strategy_id]
+    return {"ok": True}

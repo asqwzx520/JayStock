@@ -11,8 +11,11 @@ import type {
   BacktestStrategyConfig,
   BacktestMonthlyReturn,
 } from "@/lib/api";
-import { runBacktest, getBacktestPresets, getKline } from "@/lib/api";
-import type { KlineBar } from "@/lib/api";
+import {
+  runBacktest, getBacktestPresets, getKline,
+  listSavedStrategies, saveStrategy, deleteSavedStrategy,
+} from "@/lib/api";
+import type { KlineBar, SavedStrategy, SaveStrategyRequest } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1179,6 +1182,212 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   );
 }
 
+// ── P0-4: 儲存策略 Modal ──────────────────────────────────────────────────────
+
+function SaveStrategyModal({
+  open, onClose, onSave, defaultName,
+}: {
+  open:         boolean;
+  onClose:      () => void;
+  onSave:       (name: string, note: string) => Promise<void>;
+  defaultName:  string;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [note, setNote] = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [errMsg, setErrMsg]   = useState<string | null>(null);
+
+  useEffect(() => { setName(defaultName); }, [defaultName, open]);
+
+  if (!open) return null;
+
+  async function handleSave() {
+    if (!name.trim()) { setErrMsg("請輸入策略名稱"); return; }
+    setSaving(true);
+    setErrMsg(null);
+    try {
+      await onSave(name.trim(), note.trim());
+      onClose();
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : "儲存失敗");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-lg p-5 w-full max-w-md"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold" style={{ color: "var(--color-brand)" }}>💾 儲存策略</h3>
+          <button onClick={onClose} className="text-lg" style={{ color: "var(--text-tertiary)" }}>✕</button>
+        </div>
+
+        <label className="flex flex-col gap-1 mb-3">
+          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>策略名稱 <span style={{ color: "var(--color-down)" }}>*</span></span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            autoFocus
+            placeholder="例：2330 RSI 抄底 v2"
+            className="text-sm px-3 py-2 rounded outline-none"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 mb-3">
+          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>備註（選填）</span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+            rows={3}
+            placeholder="例：測試後發現勝率太低，再調整 RSI 門檻"
+            className="text-sm px-3 py-2 rounded outline-none resize-none"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          />
+        </label>
+
+        {errMsg && (
+          <div className="text-xs mb-3 px-2 py-1 rounded" style={{ color: "var(--color-down)", background: "var(--color-down-subtle)" }}>
+            {errMsg}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 py-2 rounded text-sm transition-opacity"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          >取消</button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2 rounded text-sm font-semibold transition-opacity"
+            style={{ background: "var(--color-brand)", color: "#fff", opacity: saving ? 0.6 : 1 }}
+          >{saving ? "儲存中..." : "儲存"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── P0-4: 我的策略列表 Drawer ────────────────────────────────────────────────
+
+function MyStrategiesDrawer({
+  open, onClose, onLoad, refreshKey,
+}: {
+  open:       boolean;
+  onClose:    () => void;
+  onLoad:     (s: SavedStrategy) => void;
+  refreshKey: number;
+}) {
+  const [items, setItems]   = useState<SavedStrategy[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    listSavedStrategies()
+      .then(r => setItems(r.strategies))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [open, refreshKey]);
+
+  async function handleDelete(id: string) {
+    if (!confirm("確定刪除這筆策略？此動作無法復原。")) return;
+    try {
+      await deleteSavedStrategy(id);
+      setItems(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "刪除失敗");
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex"
+      style={{ background: "rgba(0,0,0,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        className="ml-auto h-full w-full max-w-md flex flex-col"
+        style={{ background: "var(--bg-surface)", borderLeft: "1px solid var(--border)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+          <h3 className="text-base font-bold" style={{ color: "var(--color-brand)" }}>📁 我的策略</h3>
+          <button onClick={onClose} className="text-lg" style={{ color: "var(--text-tertiary)" }}>✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3">
+          {loading ? (
+            <div className="text-center text-xs py-6" style={{ color: "var(--text-tertiary)" }}>載入中...</div>
+          ) : items.length === 0 ? (
+            <div className="text-center text-xs py-6" style={{ color: "var(--text-tertiary)" }}>
+              尚無已儲存的策略<br />
+              <span className="text-[10px]">回測完成後可按右上「💾 儲存策略」</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {items.map(s => (
+                <div
+                  key={s.id}
+                  className="rounded p-3"
+                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{s.name}</div>
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                        {s.symbol} · {s.strategy_json.type} · {s.start_date} → {s.end_date}
+                      </div>
+                    </div>
+                    <span className="text-[10px] whitespace-nowrap" style={{ color: "var(--text-tertiary)" }}>
+                      {s.created_at.slice(0, 10)}
+                    </span>
+                  </div>
+                  {s.note && (
+                    <div className="text-[11px] mt-1.5 mb-1" style={{ color: "var(--text-secondary)" }}>
+                      📝 {s.note}
+                    </div>
+                  )}
+                  <div className="flex gap-1.5 mt-2">
+                    <button
+                      onClick={() => { onLoad(s); onClose(); }}
+                      className="flex-1 py-1 rounded text-xs font-medium"
+                      style={{ background: "var(--color-brand)", color: "#fff" }}
+                    >▶ 重新執行</button>
+                    <button
+                      onClick={() => handleDelete(s.id)}
+                      className="px-2 py-1 rounded text-xs"
+                      style={{ background: "var(--bg-surface)", color: "var(--color-down)", border: "1px solid var(--border)" }}
+                      title="刪除"
+                    >🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
 type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly";
@@ -1194,6 +1403,13 @@ export default function BacktestPanel({ symbol }: Props) {
   const [error,     setError]     = useState<string | null>(null);
   const [resultTab, setResultTab] = useState<ResultTab>("stats");
 
+  // P0-4: 我的策略書
+  const [lastReq,         setLastReq]         = useState<BacktestRequest | null>(null);
+  const [saveModalOpen,   setSaveModalOpen]   = useState(false);
+  const [drawerOpen,      setDrawerOpen]      = useState(false);
+  const [savedRefreshKey, setSavedRefreshKey] = useState(0);
+  const [loadedStrategy,  setLoadedStrategy]  = useState<SavedStrategy | null>(null);
+
   // Load presets once
   useEffect(() => {
     getBacktestPresets()
@@ -1204,6 +1420,7 @@ export default function BacktestPanel({ symbol }: Props) {
   const handleSubmit = useCallback(async (req: BacktestRequest) => {
     setLoading(true);
     setError(null);
+    setLastReq(req);
     try {
       const res = await runBacktest(req);
       setResult(res);
@@ -1215,6 +1432,42 @@ export default function BacktestPanel({ symbol }: Props) {
       setLoading(false);
     }
   }, []);
+
+  // P0-4: 點「重新執行」 → 載入舊策略並自動跑
+  const handleLoadStrategy = useCallback((s: SavedStrategy) => {
+    setLoadedStrategy(s);
+    handleSubmit({
+      symbol:          s.symbol,
+      strategy:        s.strategy_json,
+      start_date:      s.start_date,
+      end_date:        s.end_date,
+      initial_capital: s.initial_capital,
+      stop_loss_pct:   s.stop_loss_pct ?? undefined,
+      take_profit_pct: s.take_profit_pct ?? undefined,
+    });
+  }, [handleSubmit]);
+
+  // P0-4: 儲存策略
+  const handleSaveStrategy = useCallback(async (name: string, note: string) => {
+    if (!lastReq) throw new Error("尚無回測結果可儲存");
+    const payload: SaveStrategyRequest = {
+      name,
+      note,
+      strategy:        lastReq.strategy,
+      symbol:          lastReq.symbol,
+      start_date:      lastReq.start_date,
+      end_date:        lastReq.end_date,
+      initial_capital: lastReq.initial_capital ?? 1_000_000,
+      stop_loss_pct:   lastReq.stop_loss_pct   ?? undefined,
+      take_profit_pct: lastReq.take_profit_pct ?? undefined,
+    };
+    await saveStrategy(payload);
+    setSavedRefreshKey(k => k + 1);
+  }, [lastReq]);
+
+  const defaultSaveName = lastReq
+    ? `${lastReq.symbol} · ${lastReq.strategy.type} · ${new Date().toISOString().slice(5, 10)}`
+    : "";
 
   const RESULT_TABS: { id: ResultTab; label: string }[] = [
     { id: "stats",   label: "績效摘要" },
@@ -1252,24 +1505,49 @@ export default function BacktestPanel({ symbol }: Props) {
 
       {/* ── Right: Results ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Result tab bar */}
-        <div className="shrink-0 flex border-b" style={{ borderColor: "var(--border)" }}>
-          {RESULT_TABS.map(t => (
+        {/* Result tab bar + P0-4 toolbar */}
+        <div className="shrink-0 flex items-center border-b" style={{ borderColor: "var(--border)" }}>
+          <div className="flex flex-1 min-w-0 overflow-x-auto">
+            {RESULT_TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setResultTab(t.id)}
+                disabled={!result}
+                className="px-4 py-2 text-xs font-medium transition-colors shrink-0"
+                style={{
+                  color:        resultTab === t.id ? "var(--color-brand)" : "var(--text-tertiary)",
+                  borderBottom: resultTab === t.id ? "2px solid var(--color-brand)" : "2px solid transparent",
+                  opacity:      result ? 1 : 0.4,
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="shrink-0 flex items-center gap-1 px-2">
             <button
-              key={t.id}
-              onClick={() => setResultTab(t.id)}
-              disabled={!result}
-              className="px-4 py-2 text-xs font-medium transition-colors shrink-0"
-              style={{
-                color:        resultTab === t.id ? "var(--color-brand)" : "var(--text-tertiary)",
-                borderBottom: resultTab === t.id ? "2px solid var(--color-brand)" : "2px solid transparent",
-                opacity:      result ? 1 : 0.4,
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+              onClick={() => setSaveModalOpen(true)}
+              disabled={!result || !lastReq}
+              className="text-[11px] px-2 py-1 rounded transition-colors disabled:opacity-40"
+              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+              title="儲存目前策略設定"
+            >💾 儲存</button>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="text-[11px] px-2 py-1 rounded transition-colors"
+              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+              title="開啟我的策略列表"
+            >📁 我的策略</button>
+          </div>
         </div>
+
+        {loadedStrategy && (
+          <div className="shrink-0 px-3 py-1.5 text-[11px] flex items-center justify-between"
+               style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", borderBottom: "1px solid var(--border)" }}>
+            <span>📂 已載入策略：<b style={{ color: "var(--color-brand)" }}>{loadedStrategy.name}</b></span>
+            <button onClick={() => setLoadedStrategy(null)} className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>清除</button>
+          </div>
+        )}
 
         {/* Content area */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -1379,6 +1657,20 @@ export default function BacktestPanel({ symbol }: Props) {
           )}
         </div>
       </div>
+
+      {/* P0-4: 儲存策略 Modal + 我的策略 Drawer */}
+      <SaveStrategyModal
+        open={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+        onSave={handleSaveStrategy}
+        defaultName={defaultSaveName}
+      />
+      <MyStrategiesDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onLoad={handleLoadStrategy}
+        refreshKey={savedRefreshKey}
+      />
     </div>
   );
 }
