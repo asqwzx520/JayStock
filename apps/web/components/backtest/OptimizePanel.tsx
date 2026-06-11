@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type {
   BacktestRequest,
   BacktestStats,
@@ -345,8 +345,8 @@ export default function OptimizePanel({ symbol, presets, lastReq }: OptimizePane
   }, [mode, currentGrid, paramKeys, customValues]);
 
   // Date range from lastReq or default
-  const defaultStart = lastReq?.start_date ?? new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
-  const defaultEnd   = lastReq?.end_date   ?? new Date().toISOString().slice(0, 10);
+  const defaultStart = useMemo(() => lastReq?.start_date ?? new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10), [lastReq?.start_date]);
+  const defaultEnd   = useMemo(() => lastReq?.end_date   ?? new Date().toISOString().slice(0, 10), [lastReq?.end_date]);
   const defaultCap   = lastReq?.initial_capital ?? 1_000_000;
 
   // Run optimize

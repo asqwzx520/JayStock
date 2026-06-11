@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import dynamic from "next/dynamic";
 import type { Quote, WatchlistState, WatchlistGroup, WatchlistItem } from "@/lib/api";
 import { watchlistApi, getUserId } from "@/lib/api";
 import { useStockWebSocket } from "@/lib/useStockWebSocket";
