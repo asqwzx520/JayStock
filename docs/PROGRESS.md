@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-12（P7-23/24/25 全完成；P0-P7 共 25 項）  
-> **當前版本：** commit `1521f9b`（feat(backtest): P7-23/24/25 年度報酬 + 交易時機 + 退化偵測）  
+> **更新日期：** 2026-06-12（P8 全完成；回測 28 項全數落地）  
+> **當前版本：** commit `aaad1e4`（feat(backtest): P8-26/27/28 Kelly Criterion, Capital Utilization, History）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -100,6 +100,9 @@
 - [x] **P7-23 年度報酬條形圖**（`AnnualReturnsChart`）：從 monthly_returns 複利聚合年度報酬；SVG 垂直條形圖（正綠/負紅）+ 基準年報酬灰色橫線 + 策略平均紫虛線 + 新 tab「📅 年度報酬」
 - [x] **P7-24 交易時機分析**（`TradeTimingPanel`）：從 trades 提取進場日的星期幾/月份；各分組勝率水平條形圖；accordion 展開顯示於交易明細 tab 下方；< 10 筆自動隱藏
 - [x] **P7-25 策略退化偵測**（`DecayDetectionPanel`）：自動切前後兩半比較報酬/Sharpe/勝率/MDD；後段 Sharpe < 前段×0.6 顯示 ⚠️ 退化警告；後段明顯進步則顯示 ✅；插入 Stats tab 評分卡下方
+- [x] **P8-26 Kelly Criterion 持倉比例**（`KellyCriterionCard`）：f*=W−(1−W)/PF；Full/Half/Quarter Kelly 橫向進度條 + $ 金額；Kelly>0.5 顯示「過激」警告；顯示於 Stats tab `StatsPanel` 之後
+- [x] **P8-27 資金使用率分析**（`CapitalUtilizationCard`）：持倉率雙色橫條 + 閒置天數/年化換手/平均持倉天數 4 格；從 trades.hold_days + equity_curve 計算，純前端
+- [x] **P8-28 回測歷史記錄**（localStorage）：`backtest_history_v1` 最多 20 筆；每次 runBacktest 成功後自動快照；左側設定面板「📜 歷史(N)」按鈕展開列表；點選任一記錄後 Stats tab 出現「對比前次」表格（總報酬/Sharpe/最大回撤/勝率 4 欄差異）
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
