@@ -816,6 +816,29 @@ const FIELD_GROUPS: FieldGroup[] = [
       { value: "revenue_annual_yoy", label: "年累計 YoY%" },
     ],
   },
+  {
+    group: "跨日量價（P2-7）",
+    options: [
+      { value: "vol_ratio",      label: "量比（今/昨量）" },
+      { value: "consec_up",      label: "連續上漲天數" },
+      { value: "consec_down",    label: "連續下跌天數" },
+      { value: "body_pct",       label: "K棒實體%（正=紅K）" },
+      { value: "upper_wick_pct", label: "上影線%（相對開盤）" },
+      { value: "lower_wick_pct", label: "下影線%（相對開盤）" },
+      { value: "is_52w_high",    label: "52週新高（0/1）" },
+      { value: "consec_52w_hi",  label: "連續52週新高天數" },
+    ],
+  },
+  {
+    group: "K棒形態（0=否/1=是）（P2-7）",
+    options: [
+      { value: "hammer",       label: "錘頭線（下影≥2倍實體）" },
+      { value: "shooting_star",label: "射擊之星（上影≥2倍實體）" },
+      { value: "doji",         label: "十字星（實體≤8%振幅）" },
+      { value: "bull_engulf",  label: "多頭吞噬" },
+      { value: "bear_engulf",  label: "空頭吞噬" },
+    ],
+  },
 ];
 
 const OP_OPTIONS: { value: string; label: string }[] = [

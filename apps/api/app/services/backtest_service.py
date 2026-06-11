@@ -261,8 +261,98 @@ def _add_indicators(df: pd.DataFrame, strategy: dict) -> pd.DataFrame:
             df["bb_lower"]  = bb.iloc[:, 0]
             df["bb_middle"] = bb.iloc[:, 1]
             df["bb_upper"]  = bb.iloc[:, 2]
+        # P2-7: 跨日形態欄位
+        _add_crossday_columns(df)
 
     return df
+
+
+# ── P2-7: 跨日條件 + K棒形態欄位 ─────────────────────────────────────────────
+
+def _consec(cond: pd.Series) -> pd.Series:
+    """連續滿足條件的天數（不滿足時歸 0）"""
+    s      = cond.astype(int)
+    reset  = (s == 0)
+    # 每次遇到 0 時群組編號 +1，同群內累加
+    groups = reset.cumsum()
+    cum    = s.groupby(groups).cumsum()
+    return cum
+
+
+def _add_crossday_columns(df: pd.DataFrame) -> None:
+    """原地新增跨日條件欄位（P2-7）。失敗時 silent。"""
+    try:
+        close  = df["close"]
+        open_  = df["open"]
+        high   = df["high"]
+        low    = df["low"]
+        vol    = df["volume"]
+
+        # ── 量比 / 連漲連跌 ──────────────────────────────────────────────────
+        safe_vol = vol.shift(1).replace(0, float("nan"))
+        df["vol_ratio"] = vol / safe_vol
+
+        df["consec_up"]   = _consec(close > close.shift(1))   # 連續上漲天數
+        df["consec_down"] = _consec(close < close.shift(1))   # 連續下跌天數
+
+        # ── K棒幾何欄位 ──────────────────────────────────────────────────────
+        safe_open = open_.replace(0, float("nan"))
+        body      = (close - open_).abs()
+        hi_body   = df[["close", "open"]].max(axis=1)
+        lo_body   = df[["close", "open"]].min(axis=1)
+        upper_wick = high - hi_body
+        lower_wick = lo_body - low
+        total_range = high - low
+
+        df["body_pct"]       = (close - open_) / safe_open * 100   # 正=紅K
+        df["upper_wick_pct"] = upper_wick / safe_open * 100
+        df["lower_wick_pct"] = lower_wick / safe_open * 100
+
+        # 52 週新高（連續）
+        rolling_max = close.shift(1).rolling(252, min_periods=20).max()
+        df["is_52w_high"]   = (close >= rolling_max).astype(int)
+        df["consec_52w_hi"] = _consec(close >= rolling_max)
+
+        # ── K棒形態（binary 0/1）────────────────────────────────────────────
+        positive = total_range > 0
+
+        df["hammer"] = (
+            positive &
+            (lower_wick >= 2 * body) &
+            (upper_wick <= 0.15 * total_range) &
+            (close >= open_)
+        ).astype(int)
+
+        df["shooting_star"] = (
+            positive &
+            (upper_wick >= 2 * body) &
+            (lower_wick <= 0.15 * total_range) &
+            (close <= open_)
+        ).astype(int)
+
+        df["doji"] = (
+            positive & (body <= 0.08 * total_range)
+        ).astype(int)
+
+        prev_close = close.shift(1)
+        prev_open  = open_.shift(1)
+
+        df["bull_engulf"] = (
+            (close >= open_) &
+            (prev_close < prev_open) &
+            (close >= prev_open) &
+            (open_ <= prev_close)
+        ).astype(int)
+
+        df["bear_engulf"] = (
+            (close <= open_) &
+            (prev_close > prev_open) &
+            (close <= prev_open) &
+            (open_ >= prev_close)
+        ).astype(int)
+
+    except Exception as exc:
+        logger.debug("[backtest] _add_crossday_columns failed: %s", exc)
 
 
 # ── 基本面欄位 + Lookahead 對齊（自訂策略專用）────────────────────────────────
@@ -470,6 +560,21 @@ def _eval_conditions(
         "revenue_mom":        "revenue_mom",
         "revenue_annual":     "revenue_annual",
         "revenue_annual_yoy": "revenue_annual_yoy",
+        # P2-7: 跨日量價
+        "vol_ratio":       "vol_ratio",
+        "consec_up":       "consec_up",
+        "consec_down":     "consec_down",
+        "body_pct":        "body_pct",
+        "upper_wick_pct":  "upper_wick_pct",
+        "lower_wick_pct":  "lower_wick_pct",
+        "is_52w_high":     "is_52w_high",
+        "consec_52w_hi":   "consec_52w_hi",
+        # P2-7: K棒形態（0/1）
+        "hammer":       "hammer",
+        "shooting_star":"shooting_star",
+        "doji":         "doji",
+        "bull_engulf":  "bull_engulf",
+        "bear_engulf":  "bear_engulf",
     }
     OPS = {
         ">": lambda a, b: a > b,
