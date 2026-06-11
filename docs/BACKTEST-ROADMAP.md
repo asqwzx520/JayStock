@@ -427,9 +427,9 @@ CREATE INDEX idx_backtest_strategies_user ON backtest_strategies(user_id);
 
 | # | 階段 | 任務 | 狀態 | Commit |
 |:-:|:----:|------|:----:|:------|
-| 20 | P6 | 策略評分卡 | ✅ | `pending` |
-| 21 | P6 | 最佳停損/停利推薦 | ✅ | `pending` |
-| 22 | P6 | 資金曲線趨勢分析 | ✅ | `pending` |
+| 20 | P6 | 策略評分卡 | ✅ | `f514b48` |
+| 21 | P6 | 最佳停損/停利推薦 | ✅ | `f514b48` |
+| 22 | P6 | 資金曲線趨勢分析 | ✅ | `f514b48` |
 
 ---
 

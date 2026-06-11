@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
 > **更新日期：** 2026-06-12（回測 P6-20/21/22 全完成；P0-P6 共 22 項）  
-> **當前版本：** commit `pending`（feat(backtest): P6-20/21/22 評分卡 + 停損推薦 + 趨勢分析）  
+> **當前版本：** commit `f514b48`（feat(backtest): P6-20/21/22 評分卡 + 停損推薦 + 趨勢分析）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
