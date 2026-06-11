@@ -334,9 +334,9 @@ CREATE INDEX idx_backtest_strategies_user ON backtest_strategies(user_id);
 
 | # | 階段 | 任務 | 狀態 | Commit |
 |:-:|:----:|------|:----:|:------|
-| 14 | P4 | 參數穩健性分析 | ✅ | pending |
-| 15 | P4 | 市場環境績效分析 | ✅ | pending |
-| 16 | P4 | 即時訊號偵測 | ✅ | pending |
+| 14 | P4 | 參數穩健性分析 | ✅ | `97c8e59` |
+| 15 | P4 | 市場環境績效分析 | ✅ | `97c8e59` |
+| 16 | P4 | 即時訊號偵測 | ✅ | `97c8e59` |
 
 ---
 
