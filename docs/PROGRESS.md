@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（回測升級 Roadmap 建立 + P0-1 交易明細強化）  
-> **當前版本：** commit `7bfb0fd`（回測 trades 加 fee/exit_reason 欄位 + 期末強平 + CSV 匯出 + 出場原因 chip 篩選 + 9 欄表格）  
+> **更新日期：** 2026-06-11（回測 P0 第一波 4 項全部完成）  
+> **當前版本：** commit `1fcfabf`（儲存策略 / 我的策略列表：Supabase 持久化 + Modal + Drawer + 一鍵重跑）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -436,6 +436,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `1fcfabf` | **回測 P0-4：儲存策略 / 我的策略列表**：後端 `backtest.py` 新增三個 endpoints（GET 列表 / POST 儲存 / DELETE 刪除）：`SavedStrategyCreate` Pydantic、`X-User-ID` 認證、Supabase 主儲存 + in-memory fallback、每用戶上限 50 筆；新增 Supabase migration `20260611_backtest_strategies.sql`（id/user_id/name/note/strategy_json JSONB/symbol/date_range/capital + 索引 idx_bs_user_created）；前端新建 `<SaveStrategyModal>`（名稱必填 + 備註 + 預設名 = symbol·strategy·date）和 `<MyStrategiesDrawer>`（右側抽屜，列出全部策略：名稱/股票/類型/期間/備註，▶ 重新執行載入並自動跑回測、🗑 刪除帶 confirm）；BacktestPanel result tab bar 右側加 💾 儲存 / 📁 我的策略 按鈕；已載入策略時頂部 banner 顯示來源 | ✅ Live |
 | `c54dc52` | **回測 P0-3：自訂策略 A 積木式 + 基本面 + Lookahead 防護**：後端 `backtest_service.py` custom 指標補齊 EMA26/BOLL；新增 `_add_fundamental_columns()` 注入月營收 + 季 EPS（lookahead-safe：月公布 +10 天、季公布 +45 天）；新欄位：eps_ttm/eps_quarterly/eps_quarterly_yoy/qoq + revenue/yoy/mom/annual_ttm/annual_yoy；`_eval_conditions` FIELD_MAP 擴充至 24 個欄位，條件上限 3→10，支援 entry_logic/exit_logic 獨立 AND/OR；前端新建 `<ConditionsEditor>` 積木式元件：FIELD_GROUPS 6 大類 optgroup、7 運算子（含 cross_above/below）、AND/OR toggle、+/× 增刪、值可填數字或欄位名（自動辨識）；選 custom 策略時 UI 自動切換為條件編輯器 | ✅ Live |
 | `8d7f9ae` | **回測 P0-2：K線圖標記買賣點**：新建 `<TradesKlineChart>` 元件，從 `getKline()` 拉每日 K 線、用 equity_curve 頭尾日期篩選回測範圍；CandlestickSeries 採台股慣例（紅漲綠跌）；買入 ▲藍 (B#) 在 K 棒下方、賣出 ▼依損益正負染色 (S# +X%) 在上方；新增 `<TradesMiniList>` 6 欄迷你表（編號與 K 線標記對應）；Tab 新增「K線標記」（順序：績效摘要/資金曲線/**K線標記**/交易明細/月份報酬）| ✅ Live |
 | `7bfb0fd` | **回測 P0-1：交易明細表格強化 + Roadmap 文件**：新建 `docs/BACKTEST-ROADMAP.md`（15 題 grill-me 完整規格，P0/P1/P2 三階段）；後端 `backtest_service.py` trades 加 `fee`（買 0.1425% + 賣 0.1425% + 證交稅 0.3%）和 `exit_reason`（signal/stop_loss/take_profit/end_of_period），新增 `_close_position()` helper，修復期末強平 bug（原本期末有持倉的交易會消失不在 trades 列表）；前端 `BacktestPanel.tsx` TradeList 重構：2 行統計（總筆數/獲利/虧損/勝率/平均損益 + 平均持倉/總手續費/最佳最差）、出場原因 chip 即時過濾、9 欄表格含彩色 badge、⬇ CSV 匯出（UTF-8 BOM）| ✅ Live |
@@ -513,10 +514,13 @@
 
 ---
 
-*最後更新：2026-06-11 by Claude（回測 P0-3 自訂策略積木 + 基本面 lookahead；commit `c54dc52`；整體評分 96/100）*
+*最後更新：2026-06-11 by Claude（**回測 P0 第一波全部完成**：P0-1 ~ P0-4；最終 commit `1fcfabf`；整體評分 97/100）*
 
 > **回測升級進行中：** 完整規格見 `docs/BACKTEST-ROADMAP.md`  
+> - **P0 第一波全部完成 ✅**（4 項）  
 > - P0-1 ✅ 交易明細表格強化  
 > - P0-2 ✅ K線圖標記買賣點  
 > - P0-3 ✅ 自訂策略 A（積木式）+ EPS/營收欄位 + Lookahead 防護  
-> - P0-4 ⏳ 儲存策略 / 我的策略列表  
+> - P0-4 ✅ 儲存策略 / 我的策略列表  
+> 
+> **下一階段 P1：** 參數最佳化（Top 30 + 熱力圖）/ 策略比較（並排卡片 + 疊圖 + t-test）
