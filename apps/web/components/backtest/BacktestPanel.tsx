@@ -20,7 +20,8 @@ import DSLEditor, { type DSLStrategy } from "@/components/backtest/DSLEditor";
 import OptimizePanel   from "./OptimizePanel";
 import ComparePanel    from "./ComparePanel";
 import ScanPanel       from "./ScanPanel";
-import PortfolioPanel  from "./PortfolioPanel";
+import PortfolioPanel    from "./PortfolioPanel";
+import WalkForwardPanel  from "./WalkForwardPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1442,7 +1443,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward";
 
 interface Props {
   symbol: string;
@@ -1529,8 +1530,9 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "monthly",  label: "月份報酬" },
     { id: "optimize",  label: "🔍 最佳化", alwaysEnabled: true },
     { id: "compare",   label: "⚖️ 比較",   alwaysEnabled: true },
-    { id: "scan",      label: "🔭 掃描",   alwaysEnabled: true },
-    { id: "portfolio", label: "📦 組合",   alwaysEnabled: true },
+    { id: "scan",        label: "🔭 掃描",      alwaysEnabled: true },
+    { id: "portfolio",   label: "📦 組合",      alwaysEnabled: true },
+    { id: "walkforward", label: "🔄 Walk-Fwd", alwaysEnabled: true },
   ];
 
   return (
@@ -1643,8 +1645,15 @@ export default function BacktestPanel({ symbol }: Props) {
             </div>
           )}
 
+          {/* Walk-Forward tab */}
+          {resultTab === "walkforward" && (
+            <div className="-m-4 h-[calc(100%+2rem)] p-4 overflow-y-auto">
+              <WalkForwardPanel presets={presets} symbol={symbol} />
+            </div>
+          )}
+
           {/* Initial state */}
-          {resultTab !== "optimize" && resultTab !== "scan" && resultTab !== "portfolio" && !result && !loading && !error && (
+          {resultTab !== "optimize" && resultTab !== "scan" && resultTab !== "portfolio" && resultTab !== "walkforward" && !result && !loading && !error && (
             <div className="h-full flex flex-col items-center justify-center gap-3 text-center" style={{ color: "var(--text-tertiary)" }}>
               <span className="text-5xl">📈</span>
               <div className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>

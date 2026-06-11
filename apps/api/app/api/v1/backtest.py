@@ -449,6 +449,56 @@ async def portfolio_backtest(
         raise HTTPException(status_code=500, detail=f"組合回測失敗：{e}") from e
 
 
+# ─── P3-11: Walk-Forward Analysis ────────────────────────────────────────────
+
+class WalkForwardRequest(BaseModel):
+    symbol:          str   = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z.]+$")
+    strategy_type:   str
+    param_ranges:    dict[str, list[float]]   # {"fast": [3,5,8], "slow": [15,20,30]}
+    sort_by:         str  = "sharpe"
+    start_date:      str  = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:        str  = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    n_windows:       int  = Field(default=5,    ge=3, le=10)
+    is_pct:          float = Field(default=0.67, ge=0.5, le=0.8)
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
+
+@router.post("/backtest/walk-forward")
+@limiter.limit("2/minute")
+async def walk_forward(
+    request: Request,
+    body: WalkForwardRequest = Body(...),
+):
+    """
+    Walk-Forward Analysis：在 N 個非重疊窗口中分別最佳化（IS）→ 驗證（OOS）。
+
+    輸出：每窗口最佳參數 + IS/OOS 對照 + 效率比 + OOS 拼接資金曲線
+    """
+    from app.services.walk_forward_service import run_walk_forward
+    try:
+        result = await run_walk_forward(
+            symbol          = body.symbol.upper(),
+            strategy_type   = body.strategy_type,
+            param_ranges    = body.param_ranges,
+            sort_by         = body.sort_by,
+            start_date      = body.start_date,
+            end_date        = body.end_date,
+            n_windows       = body.n_windows,
+            is_pct          = body.is_pct,
+            initial_capital = body.initial_capital,
+            stop_loss_pct   = body.stop_loss_pct,
+            take_profit_pct = body.take_profit_pct,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("[walk-forward] failed symbol=%s", body.symbol)
+        raise HTTPException(status_code=500, detail=f"Walk-Forward 失敗：{e}") from e
+
+
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
 #
 # Supabase 表：backtest_strategies
