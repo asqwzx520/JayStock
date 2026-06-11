@@ -14,9 +14,9 @@ import type {
 import {
   runBacktest, getBacktestPresets, getKline,
   listSavedStrategies, saveStrategy, deleteSavedStrategy,
-  getLiveSignal,
+  getLiveSignal, getStopRecommendation,
 } from "@/lib/api";
-import type { KlineBar, SavedStrategy, SaveStrategyRequest, LiveSignalResult } from "@/lib/api";
+import type { KlineBar, SavedStrategy, SaveStrategyRequest, LiveSignalResult, StopRecommendResult } from "@/lib/api";
 import DSLEditor, { type DSLStrategy } from "@/components/backtest/DSLEditor";
 import OptimizePanel   from "./OptimizePanel";
 import ComparePanel    from "./ComparePanel";
@@ -48,16 +48,38 @@ function fmtMoney(v: number | undefined) {
 
 // ── Equity Curve (lightweight-charts) ────────────────────────────────────────
 
+// ── OLS regression helpers (P6-22) ───────────────────────────────────────────
+
+function calcOLS(values: number[]): { yHat: number[]; sigma: number; r2: number } {
+  const n = values.length;
+  if (n < 4) return { yHat: values, sigma: 0, r2: 0 };
+  const sumX  = (n * (n - 1)) / 2;
+  const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
+  const sumY  = values.reduce((a, b) => a + b, 0);
+  const sumXY = values.reduce((a, v, i) => a + i * v, 0);
+  const slope     = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  const yHat   = values.map((_, i) => intercept + slope * i);
+  const ssTot  = values.reduce((a, v) => a + (v - sumY / n) ** 2, 0);
+  const ssRes  = values.reduce((a, v, i) => a + (v - yHat[i]) ** 2, 0);
+  const sigma  = Math.sqrt(ssRes / Math.max(n - 2, 1));
+  const r2     = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
+  return { yHat, sigma, r2 };
+}
+
 function EquityChart({
   equityCurve,
   benchmarkCurve,
   trades,
+  showTrend,
 }: {
   equityCurve:    BacktestResult["equity_curve"];
   benchmarkCurve: BacktestResult["benchmark_curve"];
   trades:         BacktestTrade[];
+  showTrend?:     boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [r2Display, setR2Display] = useState<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || !equityCurve.length) return;
@@ -103,6 +125,29 @@ function EquityChart({
         bmSeries.setData(benchmarkCurve.map(p => ({ time: p.time as import("lightweight-charts").Time, value: p.value })));
       }
 
+      // ── OLS Trend + σ bands (P6-22) ──
+      if (showTrend && equityCurve.length >= 4) {
+        const vals = equityCurve.map(p => p.value);
+        const { yHat, sigma, r2 } = calcOLS(vals);
+        setR2Display(r2);
+        type Time = import("lightweight-charts").Time;
+        const times = equityCurve.map(p => p.time as Time);
+        const fmtP = { type: "custom" as const, formatter: (v: number) => fmtMoney(v) };
+
+        chart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 2, lineStyle: LineStyle.Dashed, priceFormat: fmtP })
+          .setData(times.map((t, i) => ({ time: t, value: yHat[i] })));
+        chart.addSeries(LineSeries, { color: "rgba(245,158,11,0.35)", lineWidth: 1, lineStyle: LineStyle.Solid, priceFormat: fmtP })
+          .setData(times.map((t, i) => ({ time: t, value: yHat[i] + sigma })));
+        chart.addSeries(LineSeries, { color: "rgba(245,158,11,0.35)", lineWidth: 1, lineStyle: LineStyle.Solid, priceFormat: fmtP })
+          .setData(times.map((t, i) => ({ time: t, value: yHat[i] - sigma })));
+        chart.addSeries(LineSeries, { color: "rgba(245,158,11,0.15)", lineWidth: 1, lineStyle: LineStyle.Dotted, priceFormat: fmtP })
+          .setData(times.map((t, i) => ({ time: t, value: yHat[i] + 2 * sigma })));
+        chart.addSeries(LineSeries, { color: "rgba(245,158,11,0.15)", lineWidth: 1, lineStyle: LineStyle.Dotted, priceFormat: fmtP })
+          .setData(times.map((t, i) => ({ time: t, value: yHat[i] - 2 * sigma })));
+      } else {
+        setR2Display(null);
+      }
+
       // ── Trade markers ──
       type Marker = import("lightweight-charts").SeriesMarker<import("lightweight-charts").Time>;
       const buyMarkers: Marker[] = trades.map(t => ({
@@ -138,9 +183,19 @@ function EquityChart({
     });
 
     return () => { chart?.remove(); };
-  }, [equityCurve, benchmarkCurve, trades]);
+  }, [equityCurve, benchmarkCurve, trades, showTrend]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+      {showTrend && r2Display !== null && (
+        <div className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-mono"
+          style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+          R² = {r2Display.toFixed(4)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Drawdown Chart ────────────────────────────────────────────────────────────
@@ -574,6 +629,219 @@ function LiveSignalCard({
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ── Strategy Scorecard (P6-20) ────────────────────────────────────────────────
+
+interface ScoreDim {
+  label:  string;
+  score:  number;
+  max:    number;
+  note:   string;
+}
+
+function calcScorecard(s: BacktestStats): { dims: ScoreDim[]; total: number; grade: string; gradeColor: string } {
+  const cagr = s.cagr ?? 0;
+  const cagrScore =
+    cagr >= 0.30 ? 25 : cagr >= 0.20 ? 20 : cagr >= 0.15 ? 15 : cagr >= 0.10 ? 10 : cagr >= 0.05 ? 5 : 0;
+
+  const sharpe = s.sharpe ?? 0;
+  const sharpeScore =
+    sharpe >= 2.0 ? 25 : sharpe >= 1.5 ? 20 : sharpe >= 1.0 ? 15 : sharpe >= 0.5 ? 10 : sharpe >= 0 ? 5 : 0;
+
+  const mdd = Math.abs(s.max_drawdown ?? 0);
+  const mddScore =
+    mdd <= 0.05 ? 25 : mdd <= 0.10 ? 20 : mdd <= 0.20 ? 15 : mdd <= 0.30 ? 10 : mdd <= 0.40 ? 5 : 0;
+
+  const wr = s.win_rate ?? 0;
+  const wrScore =
+    wr >= 0.70 ? 15 : wr >= 0.60 ? 12 : wr >= 0.55 ? 9 : wr >= 0.50 ? 6 : wr >= 0.40 ? 3 : 0;
+
+  const pf = s.profit_factor ?? 0;
+  const pfScore =
+    pf >= 3.0 ? 10 : pf >= 2.0 ? 8 : pf >= 1.5 ? 6 : pf >= 1.2 ? 4 : pf >= 1.0 ? 2 : 0;
+
+  const total = cagrScore + sharpeScore + mddScore + wrScore + pfScore;
+  const grade      = total >= 80 ? "A" : total >= 65 ? "B" : total >= 50 ? "C" : total >= 35 ? "D" : "F";
+  const gradeColor = total >= 80 ? "#16a34a" : total >= 65 ? "#2563eb" : total >= 50 ? "#d97706" : total >= 35 ? "#dc2626" : "#7f1d1d";
+
+  return {
+    total,
+    grade,
+    gradeColor,
+    dims: [
+      { label: "年化報酬", score: cagrScore,  max: 25, note: `CAGR ${(cagr * 100).toFixed(1)}%` },
+      { label: "Sharpe",   score: sharpeScore, max: 25, note: `${sharpe.toFixed(2)}` },
+      { label: "最大回撤", score: mddScore,    max: 25, note: `${(mdd * 100).toFixed(1)}%` },
+      { label: "勝率",     score: wrScore,     max: 15, note: `${(wr * 100).toFixed(1)}%` },
+      { label: "盈虧比",   score: pfScore,     max: 10, note: `${pf.toFixed(2)}` },
+    ],
+  };
+}
+
+function ScorecardPanel({ stats }: { stats: BacktestStats }) {
+  const { dims, total, grade, gradeColor } = calcScorecard(stats);
+
+  return (
+    <div className="rounded-xl p-4" style={{ border: `2px solid ${gradeColor}40`, background: "var(--bg-surface)" }}>
+      <div className="flex items-center gap-4 mb-4">
+        {/* Grade circle */}
+        <div className="shrink-0 flex items-center justify-center rounded-full font-black text-2xl"
+          style={{ width: 64, height: 64, background: `${gradeColor}18`, color: gradeColor, border: `2px solid ${gradeColor}60` }}>
+          {grade}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-black" style={{ color: gradeColor }}>{total}</span>
+            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>/ 100</span>
+          </div>
+          <div className="text-xs font-semibold mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            策略綜合評分
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+            {grade === "A" ? "優秀 · 各維度均衡出色" :
+             grade === "B" ? "良好 · 多數指標達標" :
+             grade === "C" ? "普通 · 仍有改善空間" :
+             grade === "D" ? "偏弱 · 風險或報酬不足" :
+                             "危險 · 建議重新調整策略"}
+          </div>
+        </div>
+        {/* Mini score bar (total out of 100) */}
+        <div className="shrink-0 w-2 h-14 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+          <div className="w-full rounded-full transition-all" style={{ height: `${total}%`, background: gradeColor }} />
+        </div>
+      </div>
+
+      {/* Dimension bars */}
+      <div className="flex flex-col gap-2">
+        {dims.map(d => (
+          <div key={d.label} className="flex items-center gap-2">
+            <div className="text-[10px] shrink-0 text-right" style={{ width: 52, color: "var(--text-tertiary)" }}>{d.label}</div>
+            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${(d.score / d.max) * 100}%`, background: gradeColor }} />
+            </div>
+            <div className="text-[10px] font-mono shrink-0" style={{ width: 36, color: "var(--text-secondary)" }}>
+              {d.score}/{d.max}
+            </div>
+            <div className="text-[10px] shrink-0" style={{ width: 52, color: "var(--text-tertiary)" }}>{d.note}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stop Recommendation Card (P6-21) ─────────────────────────────────────────
+
+function StopRecommendCard({ trades }: { trades: BacktestTrade[] }) {
+  const [data,    setData]    = useState<StopRecommendResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  async function handleFetch() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getStopRecommendation(trades);
+      setData(res);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "計算失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const pct = (v: number | null | undefined) =>
+    v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+
+  return (
+    <div className="rounded-xl p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+            🎯 停損 / 停利推薦
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+            基於 {trades.length} 筆歷史交易的報酬分佈，估算最優截斷點
+          </div>
+        </div>
+        {!data && (
+          <button
+            onClick={handleFetch}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity"
+            style={{ background: "var(--color-brand)", color: "#fff", opacity: loading ? 0.5 : 1 }}
+          >
+            {loading ? "⏳ 計算中..." : "🔍 分析推薦"}
+          </button>
+        )}
+        {data && (
+          <button
+            onClick={() => setData(null)}
+            className="text-[10px] px-2 py-0.5 rounded"
+            style={{ color: "var(--text-tertiary)", border: "1px solid var(--border)" }}
+          >
+            重設
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="text-xs rounded px-3 py-2" style={{ background: "var(--color-down-subtle)", color: "var(--color-down)" }}>
+          {error}
+        </div>
+      )}
+
+      {data && (
+        <div className="flex flex-col gap-3">
+          {/* Recommendation badges */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg p-3 text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>建議停損</div>
+              <div className="text-xl font-black" style={{ color: "#ef4444" }}>
+                {data.recommended_stop_loss != null ? `-${(data.recommended_stop_loss * 100).toFixed(0)}%` : "不建議"}
+              </div>
+              {data.recommended_stop_loss && (
+                <div className="text-[10px] mt-1" style={{ color: "#ef4444" }}>
+                  預估改善 {data.sl_improvement_pct > 0 ? "+" : ""}{data.sl_improvement_pct.toFixed(1)}%
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg p-3 text-center" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)" }}>
+              <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>建議停利</div>
+              <div className="text-xl font-black" style={{ color: "#22c55e" }}>
+                {data.recommended_take_profit != null ? `+${(data.recommended_take_profit * 100).toFixed(0)}%` : "不建議"}
+              </div>
+              {data.recommended_take_profit && (
+                <div className="text-[10px] mt-1" style={{ color: "#22c55e" }}>
+                  預估改善 {data.tp_improvement_pct > 0 ? "+" : ""}{data.tp_improvement_pct.toFixed(1)}%
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Distribution summary */}
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: "平均虧損", value: pct(data.avg_loss),  color: "#ef4444" },
+              { label: "P5 最差",  value: pct(data.p5_loss),   color: "#ef4444" },
+              { label: "平均獲利", value: pct(data.avg_gain),  color: "#22c55e" },
+              { label: "P95 最佳", value: pct(data.p95_gain),  color: "#22c55e" },
+            ].map(d => (
+              <div key={d.label} className="rounded-lg py-2" style={{ background: "var(--bg-elevated)" }}>
+                <div className="text-[9px] mb-0.5" style={{ color: "var(--text-tertiary)" }}>{d.label}</div>
+                <div className="text-xs font-bold font-mono" style={{ color: d.color }}>{d.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-[9px] text-center" style={{ color: "var(--text-tertiary)" }}>
+            * 基於歷史 pnl_pct 分佈線性模擬；實際回測需重新執行以驗證
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1757,6 +2025,7 @@ export default function BacktestPanel({ symbol }: Props) {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
   const [resultTab, setResultTab] = useState<ResultTab>("stats");
+  const [showTrend, setShowTrend] = useState(false);
 
   // P0-4: 我的策略書
   const [lastReq,         setLastReq]         = useState<BacktestRequest | null>(null);
@@ -2018,11 +2287,13 @@ export default function BacktestPanel({ symbol }: Props) {
             <>
               {resultTab === "stats" && (
                 <>
+                  <ScorecardPanel stats={result.stats} />
                   <StatsPanel stats={result.stats} symbol={symbol} />
                   {result.regime_stats && (
                     <RegimeStatsPanel regime={result.regime_stats} />
                   )}
                   <LiveSignalCard symbol={symbol} lastReq={lastReq} />
+                  <StopRecommendCard trades={result.trades} />
                   <div className="flex justify-end px-1 pb-2">
                     <ExportReportButton result={result} symbol={symbol} lastReq={lastReq} />
                   </div>
@@ -2032,13 +2303,27 @@ export default function BacktestPanel({ symbol }: Props) {
               {resultTab === "chart" && (
                 <div className="flex flex-col gap-3 h-full">
                   <div style={{ height: 300 }}>
-                    <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>
-                      — 策略淨值　— — 大盤基準　▲ 買入　▼ 賣出
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                        — 策略淨值　— — 大盤基準　▲ 買入　▼ 賣出
+                      </div>
+                      <button
+                        onClick={() => setShowTrend(v => !v)}
+                        className="text-[10px] px-2 py-0.5 rounded transition-colors"
+                        style={{
+                          background: showTrend ? "rgba(245,158,11,0.15)" : "var(--bg-elevated)",
+                          color:      showTrend ? "#f59e0b" : "var(--text-tertiary)",
+                          border:     `1px solid ${showTrend ? "rgba(245,158,11,0.4)" : "var(--border)"}`,
+                        }}
+                      >
+                        📐 趨勢線
+                      </button>
                     </div>
                     <EquityChart
                       equityCurve={result.equity_curve}
                       benchmarkCurve={result.benchmark_curve}
                       trades={result.trades}
+                      showTrend={showTrend}
                     />
                   </div>
                   <div style={{ height: 120 }}>

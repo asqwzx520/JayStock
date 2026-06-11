@@ -595,6 +595,84 @@ async def live_signal(request: Request, body: LiveSignalRequest = Body(...)):
         raise HTTPException(status_code=422, detail=f"訊號計算失敗：{exc}") from exc
 
 
+# ─── P6-21: 最佳停損 / 停利推薦 ─────────────────────────────────────────────
+
+
+class StopRecommendRequest(BaseModel):
+    trades: list[dict]   # BacktestTrade records (entry_price, exit_price, pnl_pct, etc.)
+
+
+@router.post("/backtest/stop-recommendation")
+@limiter.limit("20/minute")
+async def stop_recommendation(request: Request, body: StopRecommendRequest = Body(...)):
+    """
+    從歷史交易的 pnl_pct 分佈估算最佳停損 / 停利組合。
+
+    演算法：
+    1. 對每種 stop_loss 候選值（1%~20%，步長 1%），過濾掉虧損超過 stop_loss 的交易，
+       模擬提前停損後的盈虧，計算總盈虧。
+    2. 對每種 take_profit 候選值（3%~40%，步長 1%），同理。
+    3. 找到使「調整後總盈虧」最大的 stop_loss / take_profit 組合。
+    4. 回傳推薦值、預估改善幅度、以及分佈統計。
+    """
+    import numpy as np
+
+    trades = body.trades
+    if len(trades) < 5:
+        raise HTTPException(status_code=422, detail="至少需要 5 筆交易才能計算推薦值")
+
+    try:
+        pnls = [float(t.get("pnl_pct", 0)) for t in trades]
+        n = len(pnls)
+        baseline_total = sum(pnls)
+
+        # ── Stop-loss sweep (negative boundary) ──
+        sl_candidates = [i / 100 for i in range(1, 21)]   # 1%~20%
+        best_sl, best_sl_total = None, baseline_total
+        sl_results = []
+        for sl in sl_candidates:
+            adj = [max(p, -sl) for p in pnls]
+            total = sum(adj)
+            sl_results.append({"sl": sl, "total": round(total, 4)})
+            if total > best_sl_total:
+                best_sl_total = total
+                best_sl = sl
+
+        # ── Take-profit sweep (positive cap) ──
+        tp_candidates = [i / 100 for i in range(3, 41)]   # 3%~40%
+        best_tp, best_tp_total = None, baseline_total
+        tp_results = []
+        for tp in tp_candidates:
+            adj = [min(p, tp) for p in pnls]
+            total = sum(adj)
+            tp_results.append({"tp": tp, "total": round(total, 4)})
+            if total > best_tp_total:
+                best_tp_total = total
+                best_tp = tp
+
+        # ── Distribution stats ──
+        pnls_arr = np.array(pnls)
+        neg = pnls_arr[pnls_arr < 0]
+        pos = pnls_arr[pnls_arr > 0]
+
+        return {
+            "baseline_total_pnl": round(baseline_total, 4),
+            "recommended_stop_loss":   best_sl,
+            "recommended_take_profit": best_tp,
+            "sl_improved_total":  round(best_sl_total, 4) if best_sl else None,
+            "tp_improved_total":  round(best_tp_total, 4) if best_tp else None,
+            "sl_improvement_pct": round((best_sl_total - baseline_total) / max(abs(baseline_total), 0.0001) * 100, 2) if best_sl else 0,
+            "tp_improvement_pct": round((best_tp_total - baseline_total) / max(abs(baseline_total), 0.0001) * 100, 2) if best_tp else 0,
+            "trade_count": n,
+            "avg_loss":    round(float(neg.mean()), 4) if len(neg) else 0,
+            "avg_gain":    round(float(pos.mean()), 4) if len(pos) else 0,
+            "p5_loss":     round(float(np.percentile(pnls_arr, 5)), 4),
+            "p95_gain":    round(float(np.percentile(pnls_arr, 95)), 4),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"推薦計算失敗：{exc}") from exc
+
+
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
 #
 # Supabase 表：backtest_strategies

@@ -1647,3 +1647,33 @@ export async function getLiveSignal(
   return res.json();
 }
 
+// ── P6-21: Stop Recommendation ───────────────────────────────────────────────
+
+export interface StopRecommendResult {
+  baseline_total_pnl:   number;
+  recommended_stop_loss:   number | null;
+  recommended_take_profit: number | null;
+  sl_improved_total:    number | null;
+  tp_improved_total:    number | null;
+  sl_improvement_pct:   number;
+  tp_improvement_pct:   number;
+  trade_count:          number;
+  avg_loss:             number;
+  avg_gain:             number;
+  p5_loss:              number;
+  p95_gain:             number;
+}
+
+export async function getStopRecommendation(trades: BacktestTrade[]): Promise<StopRecommendResult> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/stop-recommendation`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ trades }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
