@@ -82,6 +82,9 @@
 - [x] **P1-5 參數最佳化**（`3877b83`）：`run_optimize()` Grid Search，抓一次資料跑所有組合；`POST /backtest/optimize`（限流 3/min）；`<OptimizePanel>` 含模式切換（A 自訂 Grid / B 一鍵預設）、SVG 熱力圖（2 參數時）、Top 30 排行表（🥇🥈🥉），回測 tab bar 新增「🔍 最佳化」永遠可點 tab
 - [x] **P1-6 策略比較**（`bfc7ab8`）：`run_compare()` 支援 2–4 個策略（可不同股票/日期）；`POST /backtest/compare`（限流 5/min）；`<ComparePanel>` 含 A 並排績效卡片（★ 標最佳指標）、B lightweight-charts 疊加資金曲線（base 100 正規化）、C Welch t-test 顯著性（可收合），tab bar 新增「⚖️ 比較」永遠可點 tab
 - [x] **P2-7 跨日條件 + K棒形態**（`a546cbf`）：後端 `_add_crossday_columns()` 新增 13 個欄位（vol_ratio、consec_up/down、body_pct、upper/lower_wick_pct、is_52w_high、consec_52w_hi；hammer / shooting_star / doji / bull_engulf / bear_engulf binary 0/1）；FIELD_MAP + FIELD_GROUPS 同步擴充（跨日量價 8 欄、K棒形態 5 欄）
+- [x] **P2-8 DSL 自由式策略**（`e481804`）：`dsl_parser.py` 純 Python 遞迴下降 parser（~410行，無 eval）；允許欄位/函數白名單（ma/ema/rsi/shift/highest/lowest/cross_above/cross_below）；`POST /backtest/dsl/validate`（30/min）；前端 `DSLEditor.tsx` 含語法高亮 overlay（關鍵字/函數/數字不同色）+ 6 個範例模板 + 可收合欄位參考 + 即時驗證（debounce 500ms）
+- [x] **P2-9 全台股池掃描**（`223a0f4`）：`scan_service.py` 含 ~120 支台股池、asyncio background task、ThreadPoolExecutor(8)、in-memory job dict（1h TTL）；`POST /backtest/scan`（2/min）+ `GET /backtest/scan/{job_id}` 輪詢；前端 `ScanPanel.tsx` 3 秒輪詢進度條 + 結果表格（排序/篩選/得分/🥇🥈🥉）
+- [x] **P2-10 組合回測**（`87d9110`）：`portfolio_service.py` 最多 8 個持倉槽，ThreadPoolExecutor 並行，聯集日期 ffill 合併資金曲線；`POST /backtest/portfolio`（3/min）；前端 `PortfolioPanel.tsx` 含槽位滑桿權重分配、彩色堆疊 bar preview、lightweight-charts 疊加曲線、各股貢獻度表格
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
