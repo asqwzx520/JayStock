@@ -397,6 +397,58 @@ async def get_scan_result(job_id: str):
     }
 
 
+# ─── P2-10: 組合回測 (Portfolio) ──────────────────────────────────────────────
+
+class PortfolioSlot(BaseModel):
+    symbol:          str   = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z.]+$")
+    strategy:        BacktestStrategy
+    start_date:      str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:        str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weight:          float = Field(default=1.0, gt=0, le=10)
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
+
+class PortfolioRequest(BaseModel):
+    slots: list[PortfolioSlot] = Field(..., min_length=1, max_length=8)
+
+
+@router.post("/backtest/portfolio")
+@limiter.limit("3/minute")
+async def portfolio_backtest(
+    request: Request,
+    body: PortfolioRequest = Body(...),
+):
+    """
+    組合回測：最多 8 個持倉槽，各自跑策略，按權重合併資金曲線。
+
+    回傳：整體績效 + 各槽績效 + 疊加資金曲線 + 各股貢獻度。
+    """
+    from app.services.portfolio_service import run_portfolio_backtest
+    try:
+        slots = [
+            {
+                "symbol":          s.symbol.upper(),
+                "strategy":        s.strategy.model_dump(exclude_none=True),
+                "start_date":      s.start_date,
+                "end_date":        s.end_date,
+                "weight":          s.weight,
+                "initial_capital": s.initial_capital,
+                "stop_loss_pct":   s.stop_loss_pct,
+                "take_profit_pct": s.take_profit_pct,
+            }
+            for s in body.slots
+        ]
+        result = await run_portfolio_backtest(slots)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("[portfolio] failed")
+        raise HTTPException(status_code=500, detail=f"組合回測失敗：{e}") from e
+
+
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
 #
 # Supabase 表：backtest_strategies
