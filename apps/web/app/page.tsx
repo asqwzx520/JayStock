@@ -862,7 +862,7 @@ export default function Home() {
 
             {/* 回測 */}
             {mountedTabs.has("backtest") && (
-              <div className={viewTab !== "backtest" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "backtest" ? "hidden" : "h-full"}>
                 <BacktestPanel symbol={symbol} />
               </div>
             )}

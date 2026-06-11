@@ -2599,6 +2599,18 @@ export default function BacktestPanel({ symbol }: Props) {
   const [resultTab, setResultTab] = useState<ResultTab>("stats");
   const [showTrend, setShowTrend] = useState(false);
 
+  // 本地可編輯的股票代號（預設跟隨 K 線，但使用者可自行輸入）
+  const [localSymbol,      setLocalSymbol]      = useState(symbol);
+  const [symbolInputValue, setSymbolInputValue] = useState(symbol);
+
+  // 當 K 線切換股票時同步（只在沒有進行中回測時更新）
+  useEffect(() => {
+    if (!loading) {
+      setLocalSymbol(symbol);
+      setSymbolInputValue(symbol);
+    }
+  }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // P8-28: 歷史記錄
   const [history,        setHistory]        = useState<BacktestSnapshot[]>([]);
   const [showHistory,    setShowHistory]    = useState(false);
@@ -2715,9 +2727,7 @@ export default function BacktestPanel({ symbol }: Props) {
         }}
       >
         <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-bold" style={{ color: "var(--color-brand)" }}>
-            📊 回測設定 — {symbol}
-          </div>
+          <div className="text-xs font-semibold" style={{ color: "var(--color-brand)" }}>📊 回測設定</div>
           <button
             onClick={() => setShowHistory(v => !v)}
             className="text-[10px] px-2 py-0.5 rounded transition-colors"
@@ -2730,6 +2740,25 @@ export default function BacktestPanel({ symbol }: Props) {
             📜 歷史{history.length > 0 ? ` (${history.length})` : ""}
           </button>
         </div>
+
+        {/* 股票代號輸入 */}
+        <div className="flex items-center gap-2 mb-4">
+          <label className="text-[11px] shrink-0" style={{ color: "var(--text-tertiary)" }}>股票代號</label>
+          <input
+            value={symbolInputValue}
+            onChange={e => setSymbolInputValue(e.target.value.toUpperCase())}
+            onBlur={() => setLocalSymbol(symbolInputValue.trim() || symbol)}
+            onKeyDown={e => { if (e.key === "Enter") setLocalSymbol(symbolInputValue.trim() || symbol); }}
+            placeholder={symbol}
+            className="flex-1 text-xs px-2 py-1 rounded outline-none font-mono"
+            style={{
+              background: "var(--bg-elevated)",
+              border:     "1px solid var(--border)",
+              color:      "var(--text-primary)",
+            }}
+          />
+        </div>
+
         {showHistory && (
           <div className="mb-4 rounded-xl p-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
             <HistoryPanel
@@ -2743,7 +2772,7 @@ export default function BacktestPanel({ symbol }: Props) {
         {presets.length > 0 ? (
           <StrategyConfig
             presets={presets}
-            symbol={symbol}
+            symbol={localSymbol}
             onSubmit={handleSubmit}
             loading={loading}
           />
@@ -2803,14 +2832,14 @@ export default function BacktestPanel({ symbol }: Props) {
           {/* Optimize tab */}
           {resultTab === "optimize" && (
             <div className="-m-4 h-[calc(100%+2rem)]">
-              <OptimizePanel symbol={symbol} presets={presets} lastReq={lastReq} />
+              <OptimizePanel symbol={localSymbol} presets={presets} lastReq={lastReq} />
             </div>
           )}
 
           {/* Compare tab */}
           {resultTab === "compare" && (
             <div className="-m-4 h-[calc(100%+2rem)]">
-              <ComparePanel symbol={symbol} presets={presets} lastReq={lastReq} />
+              <ComparePanel symbol={localSymbol} presets={presets} lastReq={lastReq} />
             </div>
           )}
 
@@ -2832,14 +2861,14 @@ export default function BacktestPanel({ symbol }: Props) {
           {/* Portfolio tab */}
           {resultTab === "portfolio" && (
             <div className="-m-4 h-[calc(100%+2rem)] p-4 overflow-y-auto">
-              <PortfolioPanel presets={presets} symbol={symbol} />
+              <PortfolioPanel presets={presets} symbol={localSymbol} />
             </div>
           )}
 
           {/* Walk-Forward tab */}
           {resultTab === "walkforward" && (
             <div className="-m-4 h-[calc(100%+2rem)] p-4 overflow-y-auto">
-              <WalkForwardPanel presets={presets} symbol={symbol} />
+              <WalkForwardPanel presets={presets} symbol={localSymbol} />
             </div>
           )}
 
@@ -2906,7 +2935,7 @@ export default function BacktestPanel({ symbol }: Props) {
                 <>
                   <ScorecardPanel stats={result.stats} />
                   <DecayDetectionPanel equityCurve={result.equity_curve} trades={result.trades} />
-                  <StatsPanel stats={result.stats} symbol={symbol} />
+                  <StatsPanel stats={result.stats} symbol={lastReq?.symbol ?? localSymbol} />
                   <KellyCriterionCard
                     stats={result.stats}
                     initialCapital={lastReq?.initial_capital ?? 100000}
@@ -2942,10 +2971,10 @@ export default function BacktestPanel({ symbol }: Props) {
                   {result.regime_stats && (
                     <RegimeStatsPanel regime={result.regime_stats} />
                   )}
-                  <LiveSignalCard symbol={symbol} lastReq={lastReq} />
+                  <LiveSignalCard symbol={lastReq?.symbol ?? localSymbol} lastReq={lastReq} />
                   <StopRecommendCard trades={result.trades} />
                   <div className="flex justify-end px-1 pb-2">
-                    <ExportReportButton result={result} symbol={symbol} lastReq={lastReq} />
+                    <ExportReportButton result={result} symbol={lastReq?.symbol ?? localSymbol} lastReq={lastReq} />
                   </div>
                 </>
               )}
@@ -3001,7 +3030,7 @@ export default function BacktestPanel({ symbol }: Props) {
                     </div>
                     <div style={{ height: 360 }}>
                       <TradesKlineChart
-                        symbol={symbol}
+                        symbol={lastReq?.symbol ?? localSymbol}
                         trades={result.trades}
                         startDate={sd}
                         endDate={ed}
