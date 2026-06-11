@@ -433,6 +433,348 @@ function TradesMiniList({ trades }: { trades: BacktestTrade[] }) {
   );
 }
 
+// ── P7-23: Annual Returns Bar Chart ──────────────────────────────────────────
+
+function AnnualReturnsChart({
+  monthlyReturns,
+  benchmarkCurve,
+}: {
+  monthlyReturns:  BacktestMonthlyReturn[];
+  benchmarkCurve:  BacktestResult["benchmark_curve"];
+}) {
+  // Compound monthly returns into yearly
+  const yearMap: Record<number, number> = {};
+  for (const d of monthlyReturns) {
+    yearMap[d.year] = yearMap[d.year] == null
+      ? (1 + d.return_pct)
+      : yearMap[d.year] * (1 + d.return_pct);
+  }
+  const stratYears = Object.keys(yearMap).map(Number).sort();
+  const stratRets  = stratYears.map(y => yearMap[y] - 1);
+
+  // Benchmark annual return from equity curve (year-over-year)
+  const bmYearEnd: Record<number, number> = {};
+  for (const pt of benchmarkCurve) {
+    const yr = Number(pt.time.slice(0, 4));
+    bmYearEnd[yr] = pt.value;
+  }
+  const bmYearStart: Record<number, number> = {};
+  for (const pt of benchmarkCurve) {
+    const yr = Number(pt.time.slice(0, 4));
+    if (bmYearStart[yr] == null) bmYearStart[yr] = pt.value;
+  }
+  const bmRets: Record<number, number> = {};
+  for (const yr of stratYears) {
+    const s = bmYearStart[yr], e = bmYearEnd[yr];
+    if (s && e && s !== 0) bmRets[yr] = (e - s) / s;
+  }
+
+  if (!stratYears.length) {
+    return <div className="text-xs text-center py-8" style={{ color: "var(--text-tertiary)" }}>無月報酬資料</div>;
+  }
+
+  const maxAbs = Math.max(0.01, ...stratRets.map(Math.abs), ...Object.values(bmRets).map(Math.abs));
+  const BAR_W = Math.max(28, Math.min(60, Math.floor(500 / stratYears.length) - 6));
+  const CHART_H = 180;
+  const ZERO_Y = CHART_H * 0.55;   // zero line at 55% from top (more space for gains)
+  const SCALE = (CHART_H * 0.45) / maxAbs;
+
+  const avgRet = stratRets.reduce((a, b) => a + b, 0) / stratRets.length;
+  const posYears = stratRets.filter(r => r > 0).length;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Summary row */}
+      <div className="flex gap-4 text-xs flex-wrap">
+        {[
+          { label: "年均報酬", value: `${avgRet >= 0 ? "+" : ""}${(avgRet * 100).toFixed(1)}%`, color: avgRet >= 0 ? "#22c55e" : "#ef4444" },
+          { label: "正報酬年數", value: `${posYears} / ${stratYears.length}`, color: "var(--text-primary)" },
+          { label: "最佳年份", value: `+${(Math.max(...stratRets) * 100).toFixed(1)}%`, color: "#22c55e" },
+          { label: "最差年份", value: `${(Math.min(...stratRets) * 100).toFixed(1)}%`, color: "#ef4444" },
+        ].map(d => (
+          <div key={d.label} className="flex flex-col">
+            <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>{d.label}</span>
+            <span className="font-bold" style={{ color: d.color }}>{d.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* SVG bar chart */}
+      <div style={{ overflowX: "auto" }}>
+        <svg
+          width={stratYears.length * (BAR_W + 6) + 48}
+          height={CHART_H + 36}
+          style={{ display: "block", minWidth: 200 }}
+        >
+          {/* Zero line */}
+          <line x1={24} y1={ZERO_Y} x2={stratYears.length * (BAR_W + 6) + 24} y2={ZERO_Y}
+            stroke="var(--border)" strokeWidth={1} />
+
+          {/* Average return dashed line */}
+          {(() => {
+            const avgY = ZERO_Y - avgRet * SCALE;
+            return (
+              <line x1={24} y1={avgY} x2={stratYears.length * (BAR_W + 6) + 24} y2={avgY}
+                stroke="rgba(147,112,219,0.6)" strokeWidth={1} strokeDasharray="4 3" />
+            );
+          })()}
+
+          {stratYears.map((yr, i) => {
+            const ret  = stratRets[i];
+            const x    = 24 + i * (BAR_W + 6);
+            const barH = Math.abs(ret) * SCALE;
+            const barY = ret >= 0 ? ZERO_Y - barH : ZERO_Y;
+            const color = ret >= 0 ? "#22c55e" : "#ef4444";
+            const bmRet = bmRets[yr];
+
+            return (
+              <g key={yr}>
+                {/* Strategy bar */}
+                <rect x={x} y={barY} width={BAR_W} height={Math.max(barH, 1)} rx={2} fill={color} fillOpacity={0.85} />
+                {/* Benchmark marker */}
+                {bmRet != null && (
+                  <line
+                    x1={x + 2} y1={ZERO_Y - bmRet * SCALE}
+                    x2={x + BAR_W - 2} y2={ZERO_Y - bmRet * SCALE}
+                    stroke="rgba(156,163,175,0.9)" strokeWidth={2}
+                  />
+                )}
+                {/* Value label */}
+                <text
+                  x={x + BAR_W / 2}
+                  y={ret >= 0 ? barY - 3 : barY + barH + 9}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fill={color}
+                >
+                  {ret >= 0 ? "+" : ""}{(ret * 100).toFixed(0)}%
+                </text>
+                {/* Year label */}
+                <text x={x + BAR_W / 2} y={CHART_H + 14} textAnchor="middle" fontSize={9} fill="var(--text-tertiary)">
+                  {yr}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        ■ 策略年報酬 &nbsp; — 基準年報酬（灰線）&nbsp; - - 策略平均（紫虛線）
+      </div>
+    </div>
+  );
+}
+
+// ── P7-24: Trade Timing Analysis ─────────────────────────────────────────────
+
+const WEEKDAY_LABELS = ["週一", "週二", "週三", "週四", "週五"];
+const MONTH_LABELS_TW = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+
+interface TimingBucket { count: number; wins: number; totalPnl: number }
+
+function BucketBar({
+  items, labels,
+}: {
+  items:  Record<number, TimingBucket>;
+  labels: string[];
+}) {
+  const keys = labels.map((_, i) => i).filter(k => items[k]?.count > 0);
+  if (!keys.length) return null;
+  const maxWr = Math.max(...keys.map(k => items[k].wins / items[k].count));
+  return (
+    <div className="flex flex-col gap-1">
+      {labels.map((label, k) => {
+        const b = items[k];
+        if (!b || b.count === 0) return null;
+        const wr  = b.wins / b.count;
+        const avg = b.totalPnl / b.count;
+        const w   = maxWr > 0 ? wr / maxWr : 0;
+        return (
+          <div key={k} className="flex items-center gap-2">
+            <div className="text-[10px] text-right shrink-0" style={{ width: 28, color: "var(--text-tertiary)" }}>{label}</div>
+            <div className="flex-1 h-3 rounded overflow-hidden" style={{ background: "var(--border)" }}>
+              <div className="h-full rounded" style={{ width: `${w * 100}%`, background: avg >= 0 ? "#22c55e" : "#ef4444", opacity: 0.8 }} />
+            </div>
+            <div className="text-[10px] font-mono shrink-0" style={{ width: 36, color: wr >= 0.5 ? "#22c55e" : "#ef4444" }}>
+              {(wr * 100).toFixed(0)}%
+            </div>
+            <div className="text-[9px] shrink-0" style={{ color: "var(--text-tertiary)", width: 40 }}>
+              ({b.count}筆)
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TradeTimingPanel({ trades }: { trades: BacktestTrade[] }) {
+  const [open, setOpen] = useState(false);
+
+  if (trades.length < 10) return null;
+
+  const byDay:   Record<number, TimingBucket> = {};
+  const byMonth: Record<number, TimingBucket> = {};
+
+  for (const t of trades) {
+    const d = new Date(t.entry_date);
+    const dow   = d.getDay() === 0 ? 4 : d.getDay() - 1;
+    const month = d.getMonth() + 1;
+    const win   = t.pnl_pct > 0 ? 1 : 0;
+
+    if (!byDay[dow])     byDay[dow]     = { count: 0, wins: 0, totalPnl: 0 };
+    if (!byMonth[month]) byMonth[month] = { count: 0, wins: 0, totalPnl: 0 };
+
+    byDay[dow].count++;   byDay[dow].wins   += win; byDay[dow].totalPnl   += t.pnl_pct;
+    byMonth[month].count++; byMonth[month].wins += win; byMonth[month].totalPnl += t.pnl_pct;
+  }
+
+  return (
+    <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold"
+        style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}
+      >
+        <span>🕐 交易時機分析（進場勝率）</span>
+        <span style={{ color: "var(--text-tertiary)" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="p-4 flex flex-col gap-4" style={{ background: "var(--bg-surface)" }}>
+          <div>
+            <div className="text-[10px] font-semibold mb-2" style={{ color: "var(--text-tertiary)" }}>按星期幾</div>
+            <BucketBar items={byDay} labels={WEEKDAY_LABELS} />
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold mb-2" style={{ color: "var(--text-tertiary)" }}>按月份</div>
+            <BucketBar items={byMonth} labels={MONTH_LABELS_TW} />
+          </div>
+          <div className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>
+            條形長度代表相對勝率；綠色平均盈利、紅色平均虧損
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── P7-25: Strategy Decay Detection ──────────────────────────────────────────
+
+function DecayDetectionPanel({
+  equityCurve,
+  trades,
+}: {
+  equityCurve: BacktestResult["equity_curve"];
+  trades:      BacktestTrade[];
+}) {
+  if (equityCurve.length < 20) return null;
+
+  const mid    = Math.floor(equityCurve.length / 2);
+  const first  = equityCurve.slice(0, mid + 1);
+  const second = equityCurve.slice(mid);
+
+  function halfStats(curve: typeof equityCurve, allTrades: BacktestTrade[], dateRange: [string, string]) {
+    const [start, end] = dateRange;
+    const ret   = curve.length > 1 ? (curve[curve.length - 1].value - curve[0].value) / curve[0].value : 0;
+    // Annualised return
+    const days  = Math.max(1, (new Date(curve[curve.length - 1].time).getTime() - new Date(curve[0].time).getTime()) / 86400_000);
+    const cagr  = Math.pow(1 + ret, 365 / days) - 1;
+    // Max drawdown
+    let peak = curve[0].value, mdd = 0;
+    for (const pt of curve) {
+      if (pt.value > peak) peak = pt.value;
+      const dd = (pt.value - peak) / peak;
+      if (dd < mdd) mdd = dd;
+    }
+    // Sharpe from daily returns
+    const dailyRets: number[] = [];
+    for (let i = 1; i < curve.length; i++) {
+      const p = curve[i - 1].value;
+      if (p !== 0) dailyRets.push((curve[i].value - p) / p);
+    }
+    let sharpe = null;
+    if (dailyRets.length >= 5) {
+      const mean = dailyRets.reduce((a, b) => a + b, 0) / dailyRets.length;
+      const std  = Math.sqrt(dailyRets.reduce((a, v) => a + (v - mean) ** 2, 0) / (dailyRets.length - 1));
+      sharpe = std === 0 ? null : (mean / std) * Math.sqrt(252);
+    }
+    // Win rate from trades in this period
+    const periodTrades = allTrades.filter(t => t.entry_date >= start && t.entry_date <= end);
+    const wr = periodTrades.length ? periodTrades.filter(t => t.pnl_pct > 0).length / periodTrades.length : null;
+    return { ret, cagr, mdd, sharpe, wr, tradeCount: periodTrades.length };
+  }
+
+  const h1 = halfStats(first,  trades, [first[0].time,  first[first.length - 1].time]);
+  const h2 = halfStats(second, trades, [second[0].time, second[second.length - 1].time]);
+
+  // Decay check: second-half Sharpe < first-half Sharpe × 0.6
+  const isDecay = h1.sharpe != null && h2.sharpe != null && h2.sharpe < h1.sharpe * 0.6;
+  const isImprove = h1.sharpe != null && h2.sharpe != null && h2.sharpe > h1.sharpe * 1.2;
+
+  function fmtPct(v: number | null) { return v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`; }
+  function fmtF(v: number | null, d = 2) { return v == null ? "—" : v.toFixed(d); }
+
+  const rows: { label: string; v1: string; v2: string; better: "h1" | "h2" | "eq" }[] = [
+    { label: "總報酬",   v1: fmtPct(h1.ret),    v2: fmtPct(h2.ret),    better: h2.ret > h1.ret ? "h2" : "h1" },
+    { label: "年化報酬", v1: fmtPct(h1.cagr),   v2: fmtPct(h2.cagr),   better: h2.cagr > h1.cagr ? "h2" : "h1" },
+    { label: "Sharpe",  v1: fmtF(h1.sharpe),   v2: fmtF(h2.sharpe),   better: (h2.sharpe ?? -99) > (h1.sharpe ?? -99) ? "h2" : "h1" },
+    { label: "最大回撤", v1: fmtPct(h1.mdd),    v2: fmtPct(h2.mdd),    better: h2.mdd > h1.mdd ? "h1" : "h2" },
+    { label: "勝率",    v1: fmtPct(h1.wr),     v2: fmtPct(h2.wr),     better: (h2.wr ?? 0) > (h1.wr ?? 0) ? "h2" : "h1" },
+    { label: "交易筆數", v1: String(h1.tradeCount), v2: String(h2.tradeCount), better: "eq" },
+  ];
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: `2px solid ${isDecay ? "rgba(239,68,68,0.4)" : isImprove ? "rgba(34,197,94,0.4)" : "var(--border)"}` }}>
+      {/* Header */}
+      <div className="px-4 py-3 flex items-center justify-between"
+        style={{ background: isDecay ? "rgba(239,68,68,0.08)" : isImprove ? "rgba(34,197,94,0.06)" : "var(--bg-elevated)" }}>
+        <div>
+          <div className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+            {isDecay ? "⚠️ 策略退化警告" : isImprove ? "✅ 策略持續進步" : "📊 前後段績效對比"}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+            前段：{first[0].time} ~ {first[first.length - 1].time} &nbsp;｜&nbsp;
+            後段：{second[0].time} ~ {second[second.length - 1].time}
+          </div>
+        </div>
+        {isDecay && (
+          <div className="text-xs px-2 py-1 rounded-full font-semibold" style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
+            後段 Sharpe &lt; 前段 × 0.6
+          </div>
+        )}
+      </div>
+      {/* Table */}
+      <div className="p-4" style={{ background: "var(--bg-surface)" }}>
+        <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th className="py-1.5 text-left text-[10px]" style={{ color: "var(--text-tertiary)", width: 70 }}>指標</th>
+              <th className="py-1.5 text-right text-[10px]" style={{ color: "var(--color-brand)" }}>前半段</th>
+              <th className="py-1.5 text-right text-[10px]" style={{ color: "var(--text-secondary)" }}>後半段</th>
+              <th className="py-1.5 text-right text-[10px] w-12" style={{ color: "var(--text-tertiary)" }}>變化</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const h2Better = r.better === "h2";
+              return (
+                <tr key={r.label} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td className="py-1.5 text-[10px]" style={{ color: "var(--text-tertiary)" }}>{r.label}</td>
+                  <td className="py-1.5 text-right font-mono text-[11px]" style={{ color: "var(--text-primary)", fontWeight: r.better === "h1" ? 700 : 400 }}>{r.v1}</td>
+                  <td className="py-1.5 text-right font-mono text-[11px]" style={{ color: isDecay && r.label === "Sharpe" ? "#ef4444" : "var(--text-primary)", fontWeight: h2Better ? 700 : 400 }}>{r.v2}</td>
+                  <td className="py-1.5 text-right text-[10px]">
+                    {r.better === "eq" ? "" : h2Better ? <span style={{ color: "#22c55e" }}>▲</span> : <span style={{ color: "#ef4444" }}>▼</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Monthly Returns Heatmap ───────────────────────────────────────────────────
 
 const MONTHS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -2013,7 +2355,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling";
 
 interface Props {
   symbol: string;
@@ -2099,6 +2441,7 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "kline",    label: "K線標記" },
     { id: "trades",   label: "交易明細" },
     { id: "monthly",  label: "月份報酬" },
+    { id: "annual",   label: "📅 年度報酬" },
     { id: "optimize",  label: "🔍 最佳化", alwaysEnabled: true },
     { id: "compare",   label: "⚖️ 比較",   alwaysEnabled: true },
     { id: "scan",        label: "🔭 掃描",      alwaysEnabled: true },
@@ -2288,6 +2631,7 @@ export default function BacktestPanel({ symbol }: Props) {
               {resultTab === "stats" && (
                 <>
                   <ScorecardPanel stats={result.stats} />
+                  <DecayDetectionPanel equityCurve={result.equity_curve} trades={result.trades} />
                   <StatsPanel stats={result.stats} symbol={symbol} />
                   {result.regime_stats && (
                     <RegimeStatsPanel regime={result.regime_stats} />
@@ -2368,11 +2712,23 @@ export default function BacktestPanel({ symbol }: Props) {
               })()}
 
               {resultTab === "trades" && (
-                <TradeList trades={result.trades} />
+                <div className="flex flex-col gap-4">
+                  <TradeList trades={result.trades} />
+                  <TradeTimingPanel trades={result.trades} />
+                </div>
               )}
 
               {resultTab === "monthly" && (
                 <MonthlyHeatmap data={result.monthly_returns} />
+              )}
+
+              {resultTab === "annual" && (
+                <div className="p-1">
+                  <AnnualReturnsChart
+                    monthlyReturns={result.monthly_returns}
+                    benchmarkCurve={result.benchmark_curve}
+                  />
+                </div>
               )}
             </>
           )}

@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-12（回測 P6-20/21/22 全完成；P0-P6 共 22 項）  
-> **當前版本：** commit `f514b48`（feat(backtest): P6-20/21/22 評分卡 + 停損推薦 + 趨勢分析）  
+> **更新日期：** 2026-06-12（P7-23/24/25 全完成；P0-P7 共 25 項）  
+> **當前版本：** commit `pending`（feat(backtest): P7-23/24/25 年度報酬 + 交易時機 + 退化偵測）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -97,6 +97,9 @@
 - [x] **P6-20 策略評分卡**（`ScorecardPanel`）：Stats tab 頂部彩色評分卡；5維度評分（CAGR 25 / Sharpe 25 / MDD 25 / 勝率 15 / 盈虧比 10）；等級 A/B/C/D/F + 圓圈總分 + 各維度進度條
 - [x] **P6-21 最佳停損/停利推薦**（`POST /backtest/stop-recommendation`）：後端對 1~20% 停損 / 3~40% 停利做線性掃描，找最優截斷組合；前端 `StopRecommendCard` 點「🔍 分析推薦」後顯示建議值 + 預估改善幅度 + P5/P95 分佈摘要
 - [x] **P6-22 資金曲線趨勢分析**（OLS 迴歸）：`calcOLS()` 計算線性迴歸趨勢線 + ±1σ/±2σ 標準差通道；「資金曲線」tab 右上角「📐 趨勢線」toggle；開啟後疊加黃色趨勢線 + 淡黃通道 + R² 標籤
+- [x] **P7-23 年度報酬條形圖**（`AnnualReturnsChart`）：從 monthly_returns 複利聚合年度報酬；SVG 垂直條形圖（正綠/負紅）+ 基準年報酬灰色橫線 + 策略平均紫虛線 + 新 tab「📅 年度報酬」
+- [x] **P7-24 交易時機分析**（`TradeTimingPanel`）：從 trades 提取進場日的星期幾/月份；各分組勝率水平條形圖；accordion 展開顯示於交易明細 tab 下方；< 10 筆自動隱藏
+- [x] **P7-25 策略退化偵測**（`DecayDetectionPanel`）：自動切前後兩半比較報酬/Sharpe/勝率/MDD；後段 Sharpe < 前段×0.6 顯示 ⚠️ 退化警告；後段明顯進步則顯示 ✅；插入 Stats tab 評分卡下方
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
