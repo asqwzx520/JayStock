@@ -218,6 +218,123 @@ function SignificanceSection({ significance }: { significance: CompareResponse["
   );
 }
 
+// ── Correlation Matrix (P5-18) ────────────────────────────────────────────────
+
+function _monthlyRets(curve: import("@/lib/api").CompareEquityPoint[]): Record<string, number> {
+  const grouped = new Map<string, number>();
+  for (const pt of curve) {
+    grouped.set(pt.time.slice(0, 7), pt.value);
+  }
+  const months = [...grouped.keys()].sort();
+  const result: Record<string, number> = {};
+  for (let i = 1; i < months.length; i++) {
+    const prev = grouped.get(months[i - 1])!;
+    const curr = grouped.get(months[i])!;
+    result[months[i]] = prev === 0 ? 0 : (curr - prev) / prev;
+  }
+  return result;
+}
+
+function _pearson(xs: number[], ys: number[]): number {
+  if (xs.length < 3) return NaN;
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const num = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
+  const dx  = Math.sqrt(xs.reduce((a, x) => a + (x - mx) ** 2, 0));
+  const dy  = Math.sqrt(ys.reduce((a, y) => a + (y - my) ** 2, 0));
+  return dx === 0 || dy === 0 ? NaN : num / (dx * dy);
+}
+
+function _corrColor(r: number): string {
+  if (isNaN(r)) return "var(--bg-elevated)";
+  if (r >= 0) return `rgba(239,68,68,${r.toFixed(2)})`;
+  return `rgba(59,130,246,${Math.abs(r).toFixed(2)})`;
+}
+
+function CorrelationSection({ strategies }: { strategies: CompareStrategyResult[] }) {
+  const valid = strategies.filter(s => s.equity_curve_norm.length > 0);
+  if (valid.length < 2) return null;
+
+  const allMonthly = valid.map(s => _monthlyRets(s.equity_curve_norm));
+  const n = valid.length;
+
+  const matrix: number[][] = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => {
+      if (i === j) return 1;
+      const months = Object.keys(allMonthly[i]).filter(m => m in allMonthly[j]);
+      if (months.length < 3) return NaN;
+      return _pearson(months.map(m => allMonthly[i][m]), months.map(m => allMonthly[j][m]));
+    })
+  );
+
+  const CELL = 56;
+  const LABEL = 72;
+  const svgW = LABEL + n * CELL + 4;
+  const svgH = LABEL + n * CELL + 4;
+
+  return (
+    <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="text-xs font-semibold mb-1" style={{ color: "var(--text-secondary)" }}>
+        D. 策略相關性矩陣（月報酬 Pearson r）
+      </div>
+      <div className="text-[10px] mb-3" style={{ color: "var(--text-tertiary)" }}>
+        深紅 r≈+1（高度相關，多加此策略無法分散風險）；深藍 r≈-1（負相關，有對沖效果）；資料不足時顯示 —
+      </div>
+
+      {/* Color legend */}
+      <div className="flex items-center gap-2 mb-3 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+        <div style={{ background: "rgba(59,130,246,0.9)", width: 16, height: 10, borderRadius: 2 }} />
+        <span>負相關</span>
+        <div style={{ background: "var(--bg-elevated)", width: 16, height: 10, borderRadius: 2, border: "1px solid var(--border)" }} />
+        <span>無相關</span>
+        <div style={{ background: "rgba(239,68,68,0.9)", width: 16, height: 10, borderRadius: 2 }} />
+        <span>正相關</span>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <svg width={svgW} height={svgH} style={{ display: "block", minWidth: svgW }}>
+          {valid.map((s, j) => (
+            <text key={`col-${j}`}
+              x={LABEL + j * CELL + CELL / 2} y={LABEL - 6}
+              textAnchor="middle" fontSize={9} fill={s.color}
+            >
+              {s.name.length > 6 ? s.name.slice(0, 5) + "…" : s.name}
+            </text>
+          ))}
+          {valid.map((s, i) => (
+            <text key={`row-${i}`}
+              x={LABEL - 6} y={LABEL + i * CELL + CELL / 2}
+              textAnchor="end" dominantBaseline="middle" fontSize={9} fill={s.color}
+            >
+              {s.name.length > 6 ? s.name.slice(0, 5) + "…" : s.name}
+            </text>
+          ))}
+          {matrix.map((row, i) =>
+            row.map((r, j) => (
+              <g key={`c-${i}-${j}`}>
+                <rect
+                  x={LABEL + j * CELL} y={LABEL + i * CELL}
+                  width={CELL - 2} height={CELL - 2} rx={4}
+                  fill={_corrColor(r)}
+                />
+                <text
+                  x={LABEL + j * CELL + (CELL - 2) / 2}
+                  y={LABEL + i * CELL + (CELL - 2) / 2}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={10} fontWeight={i === j ? 700 : 400}
+                  fill={!isNaN(r) && Math.abs(r) > 0.5 ? "#fff" : "var(--text-primary)"}
+                >
+                  {isNaN(r) ? "—" : r.toFixed(2)}
+                </text>
+              </g>
+            ))
+          )}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 // ── Slot Editor ───────────────────────────────────────────────────────────────
 
 interface SlotState {
@@ -525,6 +642,11 @@ export default function ComparePanel({ symbol, presets: _presets, lastReq }: Com
 
             {/* C: Significance */}
             <SignificanceSection significance={response.significance} />
+
+            {/* D: Correlation Matrix */}
+            {valid.length >= 2 && (
+              <CorrelationSection strategies={response.strategies} />
+            )}
           </div>
         );
       })()}

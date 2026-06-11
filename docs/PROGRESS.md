@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（回測 P0–P4 共 16 項全部完成；進入 P5 深度分析與報告）  
-> **當前版本：** commit `97c8e59`（feat(backtest): P4-14/15/16 Robustness + Regime + Live Signal）  
+> **更新日期：** 2026-06-12（回測 P5 全部完成，P5-17/18/19 三項實作完畢）  
+> **當前版本：** commit `pending`（feat(backtest): P5-18/19 相關性矩陣 + 報告匯出）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -91,6 +91,9 @@
 - [x] **P4-14 參數穩健性分析**（前端）：`RobustnessAnalysis` 元件整合入 OptimizePanel；以最佳 metric 為基準計算每個參數組合的 ratio；ratio≥0.8 佔比為穩健分（≥60%=✅ 穩健，35-60%=⚠️ 尚可，<35%=❌ 脆弱）；2參數顯示穩健性熱圖、1參數顯示 bar chart
 - [x] **P4-15 市場環境績效分析**（`_calc_regime_stats`）：`backtest_service.py` 新增函式，依 MA50/MA200 將每筆交易分類為 bull/bear/sideways；`run_backtest` 新增 `regime_stats` 欄位；前端 `RegimeStatsPanel`（三欄卡片：交易數/勝率/平均報酬/淨損益）顯示於 Stats tab 底部
 - [x] **P4-16 即時訊號偵測**（`POST /backtest/live-signal`）：拉近1年日K、加指標、取最後一根訊號；回傳 buy/sell/holding/none + reason + 指標數值；前端 `LiveSignalCard` 在 Stats tab 底部，點「🔍 偵測訊號」即時查詢
+- [x] **P5-17 滾動績效視窗**（`7e62917`）：純前端從 equity_curve 計算滾動報酬率 / 最大回撤 / 年化 Sharpe；視窗可選 20/30/60/90 天；三張 lightweight-charts 折線圖分層顯示 + 摘要卡片；新增「📈 滾動績效」回測 tab
+- [x] **P5-18 策略相關性分析**（ComparePanel 擴充）：從 equity_curve_norm 計算月報酬 → Pearson 相關矩陣；SVG 熱力圖（深紅=正相關/深藍=負相關）；≥2 策略比較後自動顯示「D. 策略相關性矩陣」區塊
+- [x] **P5-19 回測報告匯出**（`window.open()` + print HTML）：Stats tab 底部「📄 匯出回測報告」按鈕；彈出包含績效摘要 + 前30筆交易明細的完整 HTML 報告，`window.onload` 自動觸發列印對話框；無需新增套件
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%

@@ -578,6 +578,129 @@ function LiveSignalCard({
   );
 }
 
+// ── Export Report (P5-19) ─────────────────────────────────────────────────────
+
+function ExportReportButton({
+  result,
+  symbol,
+  lastReq,
+}: {
+  result:   BacktestResult;
+  symbol:   string;
+  lastReq:  BacktestRequest | null;
+}) {
+  const s = result.stats;
+
+  function handleExport() {
+    const strategyLabel = lastReq?.strategy?.type
+      ? lastReq.strategy.type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+      : "自訂策略";
+    const dateRange = lastReq ? `${lastReq.start_date} ~ ${lastReq.end_date}` : "—";
+    const capital   = lastReq?.initial_capital?.toLocaleString() ?? "—";
+    const generated = new Date().toLocaleDateString("zh-TW", { year: "numeric", month: "long", day: "numeric" });
+
+    const p = (v: number | undefined, d = 2) =>
+      v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+    const f = (v: number | undefined, d = 2) =>
+      v == null ? "—" : v.toFixed(d);
+
+    const rows = [
+      ["總報酬率",     p(s.total_return)],
+      ["年化報酬（CAGR）", p(s.cagr)],
+      ["Sharpe Ratio",  f(s.sharpe)],
+      ["Sortino Ratio", f(s.sortino)],
+      ["最大回撤",      p(s.max_drawdown)],
+      ["勝率",          p(s.win_rate, 1)],
+      ["盈虧比",        f(s.profit_factor)],
+      ["平均持倉天數",  s.avg_hold_days != null ? `${s.avg_hold_days.toFixed(1)} 天` : "—"],
+      ["總交易筆數",    String(s.total_trades ?? "—")],
+      ["Alpha（超額報酬）", p(s.alpha)],
+      ["基準年化報酬",  p(s.benchmark_cagr)],
+    ];
+
+    const tradeRows = result.trades.slice(0, 30).map(t => `
+      <tr>
+        <td>${t.entry_date}</td>
+        <td>${t.exit_date}</td>
+        <td>${t.side === "long" ? "買入" : "放空"}</td>
+        <td style="text-align:right">${Number(t.entry_price).toFixed(2)}</td>
+        <td style="text-align:right">${Number(t.exit_price).toFixed(2)}</td>
+        <td style="text-align:right">${t.shares}</td>
+        <td style="text-align:right; color:${t.pnl >= 0 ? "#16a34a" : "#dc2626"}">${t.pnl >= 0 ? "+" : ""}${Number(t.pnl).toFixed(0)}</td>
+        <td style="text-align:right; color:${t.pnl_pct >= 0 ? "#16a34a" : "#dc2626"}">${t.pnl_pct >= 0 ? "+" : ""}${(Number(t.pnl_pct) * 100).toFixed(2)}%</td>
+      </tr>
+    `).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>回測報告 ${symbol} ${strategyLabel}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 12px; color: #1f2937; padding: 32px; max-width: 860px; margin: auto; }
+  h1 { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .meta { color: #6b7280; font-size: 11px; margin-bottom: 24px; }
+  .section-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #e5e7eb; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  th { background: #f3f4f6; text-align: left; padding: 6px 10px; font-size: 11px; color: #6b7280; }
+  td { padding: 5px 10px; border-bottom: 1px solid #f3f4f6; font-size: 11px; }
+  .kpi-table td:first-child { color: #6b7280; width: 160px; }
+  .kpi-table td:last-child { font-weight: 600; font-family: monospace; }
+  .footer { margin-top: 32px; font-size: 10px; color: #9ca3af; text-align: center; }
+  @media print { body { padding: 16px; } }
+</style>
+</head>
+<body>
+<h1>📊 回測報告</h1>
+<div class="meta">
+  股票代號：<strong>${symbol}</strong> &nbsp;｜&nbsp;
+  策略：<strong>${strategyLabel}</strong> &nbsp;｜&nbsp;
+  期間：${dateRange} &nbsp;｜&nbsp;
+  起始資金：$${capital} &nbsp;｜&nbsp;
+  產生日期：${generated}
+</div>
+
+<div class="section-title">績效摘要</div>
+<table class="kpi-table">
+  ${rows.map(([label, val]) => `<tr><td>${label}</td><td>${val}</td></tr>`).join("")}
+</table>
+
+<div class="section-title">交易明細（前 ${Math.min(result.trades.length, 30)} 筆，共 ${result.trades.length} 筆）</div>
+<table>
+  <thead>
+    <tr>
+      <th>進場日</th><th>出場日</th><th>方向</th>
+      <th style="text-align:right">進場價</th><th style="text-align:right">出場價</th>
+      <th style="text-align:right">股數</th>
+      <th style="text-align:right">損益</th><th style="text-align:right">報酬%</th>
+    </tr>
+  </thead>
+  <tbody>${tradeRows}</tbody>
+</table>
+
+<div class="footer">由 JayStock / StockPulse 回測引擎產生 · 僅供參考，不構成投資建議</div>
+<script>window.onload = () => { window.print(); };<\/script>
+</body>
+</html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) { alert("請允許彈出視窗以匯出報告"); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+
+  return (
+    <button
+      onClick={handleExport}
+      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors mt-2"
+      style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+    >
+      📄 匯出回測報告
+    </button>
+  );
+}
+
 function RegimeStatsPanel({
   regime,
 }: {
@@ -1900,6 +2023,9 @@ export default function BacktestPanel({ symbol }: Props) {
                     <RegimeStatsPanel regime={result.regime_stats} />
                   )}
                   <LiveSignalCard symbol={symbol} lastReq={lastReq} />
+                  <div className="flex justify-end px-1 pb-2">
+                    <ExportReportButton result={result} symbol={symbol} lastReq={lastReq} />
+                  </div>
                 </>
               )}
 
