@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-12（P8 全完成；回測 28 項全數落地）  
-> **當前版本：** commit `aaad1e4`（feat(backtest): P8-26/27/28 Kelly Criterion, Capital Utilization, History）  
+> **更新日期：** 2026-06-12（P8 全完成；P9–P11 規格確定，共 8 項待實作）  
+> **當前版本：** commit `6448edc`（docs: mark P8 complete, update progress table）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -148,6 +148,23 @@
 - [x] Render 雙服務部署（前端 + 後端）
 - [x] GitHub Actions CI/CD
 - [x] Supabase 資料庫（watchlist + 設價提醒通知，免費方案）
+
+---
+
+## 🔲 回測 P9–P11 待實作（8 項）
+
+| # | 階段 | 功能 | 優先 |
+|---|------|------|------|
+| 28 | P9 | 隔日開盤成交模型 + 滑價參數 | ⭐ 最高（改變所有數字基準） |
+| 29 | P9 | 盤中停損/停利觸發（low/high）+ 跳空開盤成交 | ⭐ 最高 |
+| 30 | P9 | 引擎版號（快照斷層保護） | 高 |
+| 31 | P10 | 移動停損（trailing stop，峰值 high 更新）| 高 |
+| 32 | P10 | 時間停損（max hold days，次日開盤出場）| 中 |
+| 33 | P11 | 兩層式 Tab 導航（5 組，第二層顯示組內 tab）| 中 |
+| 34 | P11 | 一鍵體檢 + Gemini AI 白話解讀 | 中 |
+| 35 | P11 | 手機版設定欄收折（< 1024px 抽屜化）| 低 |
+
+> **P9 必須最先**：它改變所有數字基準；P10 移動停損依賴 P9 盤中觸發邏輯；P11 AI 體檢要等 P9/P10 穩定後數字才有意義。
 
 ---
 
