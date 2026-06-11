@@ -81,6 +81,7 @@
 - [x] **P0-4 儲存策略 / 我的策略列表**（`1fcfabf`）：`<SaveStrategyModal>` 自訂名稱、`<MyStrategiesDrawer>` 右側抽屜（▶ 一鍵重跑 / 🗑 刪除），Supabase `backtest_strategies` 表 + in-memory fallback（每用戶上限 50 筆）
 - [x] **P1-5 參數最佳化**（`3877b83`）：`run_optimize()` Grid Search，抓一次資料跑所有組合；`POST /backtest/optimize`（限流 3/min）；`<OptimizePanel>` 含模式切換（A 自訂 Grid / B 一鍵預設）、SVG 熱力圖（2 參數時）、Top 30 排行表（🥇🥈🥉），回測 tab bar 新增「🔍 最佳化」永遠可點 tab
 - [x] **P1-6 策略比較**（`bfc7ab8`）：`run_compare()` 支援 2–4 個策略（可不同股票/日期）；`POST /backtest/compare`（限流 5/min）；`<ComparePanel>` 含 A 並排績效卡片（★ 標最佳指標）、B lightweight-charts 疊加資金曲線（base 100 正規化）、C Welch t-test 顯著性（可收合），tab bar 新增「⚖️ 比較」永遠可點 tab
+- [x] **P2-7 跨日條件 + K棒形態**（`a546cbf`）：後端 `_add_crossday_columns()` 新增 13 個欄位（vol_ratio、consec_up/down、body_pct、upper/lower_wick_pct、is_52w_high、consec_52w_hi；hammer / shooting_star / doji / bull_engulf / bear_engulf binary 0/1）；FIELD_MAP + FIELD_GROUPS 同步擴充（跨日量價 8 欄、K棒形態 5 欄）
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%

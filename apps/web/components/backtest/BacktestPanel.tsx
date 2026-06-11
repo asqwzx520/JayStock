@@ -16,6 +16,7 @@ import {
   listSavedStrategies, saveStrategy, deleteSavedStrategy,
 } from "@/lib/api";
 import type { KlineBar, SavedStrategy, SaveStrategyRequest } from "@/lib/api";
+import DSLEditor, { type DSLStrategy } from "@/components/backtest/DSLEditor";
 import OptimizePanel from "./OptimizePanel";
 import ComparePanel  from "./ComparePanel";
 
@@ -1001,8 +1002,16 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [entryLogic, setEntryLogic] = useState<"AND" | "OR">("AND");
   const [exitLogic,  setExitLogic]  = useState<"AND" | "OR">("OR");
 
-  const preset = presets.find(p => p.id === selectedId) ?? presets[0];
+  // P2-8: DSL strategy state
+  const [dslStrategy, setDslStrategy] = useState<DSLStrategy>({
+    type: "dsl",
+    entry_dsl: "cross_above(ma(5), ma(20))",
+    exit_dsl:  "cross_below(ma(5), ma(20))",
+  });
+
+  const preset   = presets.find(p => p.id === selectedId) ?? presets[0];
   const isCustom = selectedId === "custom";
+  const isDSL    = selectedId === "dsl";
 
   // Reset params when preset changes
   useEffect(() => {
@@ -1039,6 +1048,14 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
         exit_logic:       exitLogic,
         entry_conditions: validConds(entryConds),
         exit_conditions:  validConds(exitConds),
+      };
+    }
+
+    if (isDSL) {
+      strategy = {
+        type:      "dsl",
+        entry_dsl: dslStrategy.entry_dsl.trim(),
+        exit_dsl:  dslStrategy.exit_dsl.trim(),
       };
     }
 
@@ -1105,8 +1122,16 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
         </div>
       )}
 
+      {/* P2-8: DSL 自由式條件編輯器 */}
+      {isDSL && (
+        <DSLEditor
+          value={dslStrategy}
+          onChange={setDslStrategy}
+        />
+      )}
+
       {/* Dynamic params */}
-      {!isCustom && preset && preset.params.length > 0 && (
+      {!isCustom && !isDSL && preset && preset.params.length > 0 && (
         <div>
           <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-tertiary)" }}>策略參數</div>
           <div className="grid grid-cols-2 gap-2">

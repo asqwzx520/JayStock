@@ -240,7 +240,7 @@ def _add_indicators(df: pd.DataFrame, strategy: dict) -> pd.DataFrame:
             df["bb_upper"] = bb.iloc[:, 2]
             df["bb_lower"] = bb.iloc[:, 0]
 
-    elif stype == "custom":
+    elif stype in ("custom", "dsl"):
         # 計算全部指標，讓自訂條件可以引用
         for p in [5, 10, 20, 60]:
             df[f"ma{p}"] = df["close"].rolling(p).mean()
@@ -520,6 +520,26 @@ def _gen_signals(df: pd.DataFrame, strategy: dict) -> pd.Series:
         buy_mask  = _eval_conditions(df, entry_conds, entry_logic)
         sell_mask = _eval_conditions(df, exit_conds,  exit_logic)
         # 只取從 False→True 的第一天
+        sig[buy_mask  & ~buy_mask.shift(1).fillna(False)]  =  1
+        sig[sell_mask & ~sell_mask.shift(1).fillna(False)] = -1
+
+    elif stype == "dsl":
+        from app.services.dsl_parser import dsl_eval, DSLError  # lazy import
+        entry_dsl = strategy.get("entry_dsl", "").strip()
+        exit_dsl  = strategy.get("exit_dsl",  "").strip()
+        if not entry_dsl:
+            return sig  # all zeros
+        try:
+            buy_mask = dsl_eval(entry_dsl, df)
+        except DSLError as exc:
+            raise ValueError(f"進場 DSL 錯誤：{exc}") from exc
+        try:
+            sell_mask = (
+                dsl_eval(exit_dsl, df) if exit_dsl
+                else pd.Series(False, index=df.index)
+            )
+        except DSLError as exc:
+            raise ValueError(f"出場 DSL 錯誤：{exc}") from exc
         sig[buy_mask  & ~buy_mask.shift(1).fillna(False)]  =  1
         sig[sell_mask & ~sell_mask.shift(1).fillna(False)] = -1
 

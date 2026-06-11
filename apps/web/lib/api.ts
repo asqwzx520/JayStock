@@ -750,6 +750,24 @@ export interface BacktestStrategyConfig {
   exit_logic?:         "AND" | "OR";   // P0-3
   entry_conditions?:   Array<{ field: string; op: string; value: string | number }>;
   exit_conditions?:    Array<{ field: string; op: string; value: string | number }>;
+  // P2-8: DSL strategy
+  entry_dsl?:          string;
+  exit_dsl?:           string;
+}
+
+export interface DSLValidateResult {
+  ok:    boolean;
+  error: string | null;
+}
+
+export async function validateDSL(dsl: string): Promise<DSLValidateResult> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/dsl/validate`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ dsl }),
+  });
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+  return res.json();
 }
 
 export interface BacktestRequest {

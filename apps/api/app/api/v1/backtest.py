@@ -96,6 +96,18 @@ PRESETS = [
             "exit_conditions":  [{"field": "rsi14", "op": ">", "value": 70}],
         },
     },
+    {
+        "id":    "dsl",
+        "name":  "DSL 自由式",
+        "desc":  "用文字語法自由描述進出場條件，支援函數（ma/rsi/cross_above…）與跨日形態欄位。",
+        "icon":  "✍️",
+        "params": [],
+        "default": {
+            "type":      "dsl",
+            "entry_dsl": "cross_above(ma(5), ma(20))",
+            "exit_dsl":  "cross_below(ma(5), ma(20))",
+        },
+    },
 ]
 
 
@@ -313,6 +325,23 @@ async def compare_strategies(
     except Exception as e:
         logger.exception("[compare] failed slots=%d", len(body.slots))
         raise HTTPException(status_code=500, detail=f"策略比較失敗：{e}") from e
+
+
+# ─── P2-8: DSL 策略語法驗證 ────────────────────────────────────────────────────
+
+class DSLValidateRequest(BaseModel):
+    dsl: str = Field(..., max_length=1000)
+
+
+@router.post("/backtest/dsl/validate")
+@limiter.limit("30/minute")
+async def validate_dsl(
+    request: Request,
+    body: DSLValidateRequest = Body(...),
+):
+    """即時 DSL 語法驗證（不執行回測）。"""
+    from app.services.dsl_parser import dsl_validate
+    return dsl_validate(body.dsl)
 
 
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
