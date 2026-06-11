@@ -299,12 +299,55 @@ CREATE INDEX idx_backtest_strategies_user ON backtest_strategies(user_id);
 
 ---
 
+## 階段 P4（第五波 · 實戰轉化）
+
+### 14. 參數穩健性分析（P4-14）
+
+**目的：** 判斷最佳化找到的是「廣域高原」還是「尖銳孤峰」，後者表示策略在輕微參數變化下即崩潰。
+
+**規格：**
+- 純前端，利用 Optimize 已回傳的全部參數組合結果
+- 以最佳值為基準，計算每組 score ratio = combo_metric / best_metric
+- 新增 SVG 熱力圖：ratio ≥ 0.9 → 綠（穩健），0.7–0.9 → 黃，< 0.7 → 紅
+- 穩健性得分 = ratio ≥ 0.8 的組合佔比；≥ 60% 顯示 ✅ 穩健
+- 整合至 OptimizePanel 現有「最佳化」tab，熱力圖旁加穩健性 badge
+
+### 15. 市場環境績效分析（P4-15）
+
+**目的：** 揭露策略「只在牛市有效」等隱性風險。
+
+**規格：**
+- 後端 backtest_service.py：每日依 close vs MA50、MA50 vs MA200 分類為 bull / bear / sideways
+- BacktestResult 新增 `regime_stats: { bull, bear, sideways }` 各自的 trades / total_return / win_rate
+- 前端 StatsPanel：新增「市場環境」區塊，三欄卡片顯示各 regime 績效，以色塊區分
+
+### 16. 即時訊號偵測（P4-16）
+
+**目的：** 把回測工具轉為正向使用工具——偵測「當下是否符合進場條件」。
+
+**規格：**
+- 後端 `POST /backtest/live-signal`：拉最新 60 根 K 棒，加入策略指標，回傳 `{ signal: "buy"|"sell"|"none", reason, latest_close, indicators }`
+- 前端：回測結果 Stats 頁底部加「📡 即時訊號」卡片，Symbol 固定用回測的股票，策略固定用上次回測的策略
+- 顯示：買入 🟢 / 賣出 🔴 / 無訊號 ⚪，附簡短說明（e.g. "MA5 > MA20 黃金交叉"）
+
+---
+
+| # | 階段 | 任務 | 狀態 | Commit |
+|:-:|:----:|------|:----:|:------|
+| 14 | P4 | 參數穩健性分析 | ✅ | pending |
+| 15 | P4 | 市場環境績效分析 | ✅ | pending |
+| 16 | P4 | 即時訊號偵測 | ✅ | pending |
+
+---
+
 ## 實作優先順序
 
 ```
 P0 → 立即提升現有回測體驗，無架構大改（~1 週）
 P1 → 在 P0 單股回測上做擴展，運算成本可控（~1 週）
 P2 → 三個工程量大頭：DSL parser、非同步 job 系統、組合回測（~3 週）
+P3 → 進階驗證與風控：Walk-Forward / Monte Carlo / 交易分佈（~2 週）
+P4 → 實戰轉化：穩健性 / 市場環境 / 即時訊號（~2 週）
 ```
 
 ---

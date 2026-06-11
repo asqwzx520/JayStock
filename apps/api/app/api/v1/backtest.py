@@ -499,6 +499,102 @@ async def walk_forward(
         raise HTTPException(status_code=500, detail=f"Walk-Forward 失敗：{e}") from e
 
 
+# ─── P4-16: 即時訊號偵測 ─────────────────────────────────────────────────────
+
+class LiveSignalRequest(BaseModel):
+    symbol:   str   = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z.]+$")
+    strategy: BacktestStrategy
+
+
+@router.post("/backtest/live-signal")
+@limiter.limit("10/minute")
+async def live_signal(request: Request, body: LiveSignalRequest = Body(...)):
+    """
+    拉最近 120 根日K棒，計算策略指標，回傳當日是否有進出場訊號。
+    """
+    from app.services.backtest_service import (
+        _yf_symbol, _is_tw_symbol, _fetch_ohlcv_sync, _to_df,
+        _add_indicators, _gen_signals,
+    )
+    from app.services.backtest_service import _fetch_tw_ohlcv
+    import asyncio
+    from datetime import date, timedelta
+
+    end_date   = date.today().isoformat()
+    start_date = (date.today() - timedelta(days=365)).isoformat()
+
+    is_tw  = _is_tw_symbol(body.symbol)
+    yf_sym = _yf_symbol(body.symbol)
+
+    try:
+        loop = asyncio.get_running_loop()
+        if is_tw:
+            raw = await _fetch_tw_ohlcv(body.symbol, start_date, end_date)
+        else:
+            raw = await loop.run_in_executor(
+                None, _fetch_ohlcv_sync, yf_sym, start_date, end_date
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"無法取得 {body.symbol} 行情：{exc}") from exc
+
+    if not raw:
+        raise HTTPException(status_code=404, detail=f"查無 {body.symbol} 近期行情")
+
+    try:
+        strategy = body.strategy.model_dump(exclude_none=True)
+        df = _to_df(raw)
+        df = _add_indicators(df, strategy)
+        df = df.dropna()
+        if len(df) < 5:
+            raise ValueError("有效資料列數不足")
+
+        sigs = _gen_signals(df, strategy)
+
+        # Latest bar
+        last_date = df.index[-1]
+        last_sig  = int(sigs.iloc[-1]) if len(sigs) else 0
+        prev_sig  = int(sigs.iloc[-2]) if len(sigs) > 1 else 0
+
+        if last_sig == 1 and prev_sig != 1:
+            signal = "buy"
+        elif last_sig == -1 and prev_sig != -1:
+            signal = "sell"
+        elif last_sig == 1:
+            signal = "holding"
+        else:
+            signal = "none"
+
+        # Build human-readable reason
+        stype = strategy.get("type", "")
+        reasons = {
+            "ma_cross":     f"MA{strategy.get('fast',5)} {'>' if signal in ('buy','holding') else '<'} MA{strategy.get('slow',20)}",
+            "rsi_mean_rev": f"RSI={round(float(df['rsi'].iloc[-1]),1) if 'rsi' in df.columns else '?'}",
+            "macd_signal":  "MACD 訊號",
+            "kd_cross":     f"K={round(float(df['k'].iloc[-1]),1) if 'k' in df.columns else '?'} D={round(float(df['d'].iloc[-1]),1) if 'd' in df.columns else '?'}",
+            "boll_bounce":  "布林通道",
+        }
+        reason = reasons.get(stype, stype)
+
+        # Collect latest indicator values for display
+        indicator_cols = ["ma_fast", "ma_slow", "rsi", "k", "d", "macd", "macd_signal_line", "upper", "lower", "mid"]
+        indicators = {}
+        for col in indicator_cols:
+            if col in df.columns:
+                val = df[col].iloc[-1]
+                if not (val != val):  # not NaN
+                    indicators[col] = round(float(val), 4)
+
+        return {
+            "signal":       signal,
+            "reason":       reason,
+            "latest_date":  last_date.strftime("%Y-%m-%d"),
+            "latest_close": round(float(df["close"].iloc[-1]), 2),
+            "indicators":   indicators,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"訊號計算失敗：{exc}") from exc
+
+
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
 #
 # Supabase 表：backtest_strategies

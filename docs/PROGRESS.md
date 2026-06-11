@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（回測 P0 第一波 4 項全部完成；準備進入 P1-5 參數最佳化）  
-> **當前版本：** commit `46caf3f`（docs: P0 backtest first wave all complete）  
+> **更新日期：** 2026-06-11（回測 P0–P3 共 13 項全部完成；進入 P4 實戰轉化）  
+> **當前版本：** commit `058f3e1`（fix(lint): second round of ESLint fixes）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -74,7 +74,7 @@
 - [x] 選股結果列表
 - [x] **Screener 一鍵加自選股**（每列 +/✓ 按鈕，optimistic update + rollback）
 
-### 回測引擎（P0 第一波，2026-06-11）
+### 回測引擎（P0–P3 全部完成，2026-06-11）
 - [x] **P0-1 交易明細表格強化**（`7bfb0fd`）：手續費欄、出場原因 badge（訊號/停損/停利/期末強平）、篩選 chip、CSV 匯出（UTF-8 BOM，10 欄）
 - [x] **P0-2 K 線標記買賣點**（`8d7f9ae`）：`<TradesKlineChart>` 蠟燭圖 + 藍色買入 markers + 報酬彩色賣出 markers，編號 B1/S1...，下方 `<TradesMiniList>` 迷你對照表
 - [x] **P0-3 自訂策略積木式編輯器**（`c54dc52`）：`<ConditionsEditor>` 6 大分組（價量/均線/動能/通道/EPS/營收）、AND/OR toggle、最多 10 條件；後端新增 EPS / 月營收 / 年營收 9 個基本面欄位，Lookahead 防護（季 EPS +45d / 月營收 +10d / 年營收 +90d）
@@ -85,6 +85,12 @@
 - [x] **P2-8 DSL 自由式策略**（`e481804`）：`dsl_parser.py` 純 Python 遞迴下降 parser（~410行，無 eval）；允許欄位/函數白名單（ma/ema/rsi/shift/highest/lowest/cross_above/cross_below）；`POST /backtest/dsl/validate`（30/min）；前端 `DSLEditor.tsx` 含語法高亮 overlay（關鍵字/函數/數字不同色）+ 6 個範例模板 + 可收合欄位參考 + 即時驗證（debounce 500ms）
 - [x] **P2-9 全台股池掃描**（`223a0f4`）：`scan_service.py` 含 ~120 支台股池、asyncio background task、ThreadPoolExecutor(8)、in-memory job dict（1h TTL）；`POST /backtest/scan`（2/min）+ `GET /backtest/scan/{job_id}` 輪詢；前端 `ScanPanel.tsx` 3 秒輪詢進度條 + 結果表格（排序/篩選/得分/🥇🥈🥉）
 - [x] **P2-10 組合回測**（`87d9110`）：`portfolio_service.py` 最多 8 個持倉槽，ThreadPoolExecutor 並行，聯集日期 ffill 合併資金曲線；`POST /backtest/portfolio`（3/min）；前端 `PortfolioPanel.tsx` 含槽位滑桿權重分配、彩色堆疊 bar preview、lightweight-charts 疊加曲線、各股貢獻度表格
+- [x] **P3-11 Walk-Forward Analysis**（`4d935ba`）：`walk_forward_service.py` 非重疊窗口分割、IS 參數最佳化、OOS 驗證、效率比（OOS/IS≥0.70 ✅）、OOS 曲線拼接；`POST /backtest/walk-forward`（2/min）；前端 `WalkForwardPanel.tsx` 參數掃描範圍編輯、各窗口手風琴 IS/OOS 對照表、拼接 OOS 資金曲線
+- [x] **P3-12 Monte Carlo Simulation**（`7131285`）：純前端，Mulberry32 PRNG，對交易報酬序列隨機重排 N 次；P5/P25/P50/P75/P95 資金曲線 + 最終報酬/最大回撤直方圖；「🎲 Monte Carlo」回測 tab
+- [x] **P3-13 交易分佈分析**（`8808c84`）：P&L 報酬率直方圖（20bins）、連勝/連敗 SVG bar 視覺化、持倉天數分佈、出場原因比例圖、月份 P&L 熱力圖（年×月）；「📊 交易分佈」回測 tab
+- [x] **P4-14 參數穩健性分析**（前端）：`RobustnessAnalysis` 元件整合入 OptimizePanel；以最佳 metric 為基準計算每個參數組合的 ratio；ratio≥0.8 佔比為穩健分（≥60%=✅ 穩健，35-60%=⚠️ 尚可，<35%=❌ 脆弱）；2參數顯示穩健性熱圖、1參數顯示 bar chart
+- [x] **P4-15 市場環境績效分析**（`_calc_regime_stats`）：`backtest_service.py` 新增函式，依 MA50/MA200 將每筆交易分類為 bull/bear/sideways；`run_backtest` 新增 `regime_stats` 欄位；前端 `RegimeStatsPanel`（三欄卡片：交易數/勝率/平均報酬/淨損益）顯示於 Stats tab 底部
+- [x] **P4-16 即時訊號偵測**（`POST /backtest/live-signal`）：拉近1年日K、加指標、取最後一根訊號；回傳 buy/sell/holding/none + reason + 指標數值；前端 `LiveSignalCard` 在 Stats tab 底部，點「🔍 偵測訊號」即時查詢
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%

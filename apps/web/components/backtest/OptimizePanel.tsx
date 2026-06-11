@@ -5,6 +5,7 @@ import type {
   BacktestRequest,
   OptimizeRequest,
   OptimizeResponse,
+  OptimizeResultItem,
   OptimizeHeatmap,
   OptimizeSortBy,
   BacktestPreset,
@@ -164,6 +165,208 @@ function HeatmapChart({ heatmap }: { heatmap: OptimizeHeatmap }) {
           background: "linear-gradient(to right, hsl(0,70%,45%), hsl(60,70%,47%), hsl(120,70%,45%))",
         }} />
         <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>高</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Robustness Analysis ───────────────────────────────────────────────────────
+
+function RobustnessAnalysis({
+  results,
+  sortBy,
+}: {
+  results:  OptimizeResponse["results"];
+  sortBy:   OptimizeSortBy;
+}) {
+  const { score, robustRatio, heatParams, heatData } = useMemo(() => {
+    if (!results.length) return { score: 0, robustRatio: 0, heatParams: null, heatData: null };
+
+    // Get best metric value
+    const getMetric = (r: OptimizeResultItem): number => {
+      const v = r.stats[sortBy as keyof typeof r.stats];
+      return typeof v === "number" ? v : -Infinity;
+    };
+    const sorted    = [...results].sort((a, b) => getMetric(b) - getMetric(a));
+    const bestVal   = getMetric(sorted[0]);
+    if (!bestVal || bestVal <= 0) return { score: 0, robustRatio: 0, heatParams: null, heatData: null };
+
+    // Compute ratio = combo_metric / best_metric for each result
+    const ratios = results.map(r => ({
+      ...r,
+      ratio: Math.max(0, getMetric(r) / bestVal),
+    }));
+
+    // Robustness score = % of combos with ratio >= 0.8
+    const robustCount = ratios.filter(r => r.ratio >= 0.8).length;
+    const robustRatio = robustCount / ratios.length;
+    const score       = Math.round(robustRatio * 100);
+
+    // Build robustness heatmap for 2-param strategies
+    const paramKeys = Object.keys(results[0].params);
+    if (paramKeys.length < 2) {
+      // 1-param: show bar chart data
+      const sortedByParam = [...ratios].sort((a, b) => a.params[paramKeys[0]] - b.params[paramKeys[0]]);
+      return {
+        score, robustRatio,
+        heatParams: null,
+        heatData: {
+          type: "bar" as const,
+          paramKey: paramKeys[0],
+          bars: sortedByParam.map(r => ({ x: r.params[paramKeys[0]], ratio: r.ratio })),
+        },
+      };
+    }
+
+    // 2+ params: show robustness heatmap (param_x vs param_y)
+    const px = paramKeys[0], py = paramKeys[1];
+    const xVals = [...new Set(results.map(r => r.params[px]))].sort((a, b) => a - b);
+    const yVals = [...new Set(results.map(r => r.params[py]))].sort((a, b) => a - b);
+    const matrix: (number | null)[][] = xVals.map(xv =>
+      yVals.map(yv => {
+        const match = ratios.find(r => r.params[px] === xv && r.params[py] === yv);
+        return match ? match.ratio : null;
+      })
+    );
+    return {
+      score, robustRatio,
+      heatParams: { px, py, xVals, yVals, matrix },
+      heatData: null,
+    };
+  }, [results, sortBy]);
+
+  if (!results.length) return null;
+
+  const badge = score >= 60
+    ? { label: "✅ 穩健", color: "#22c55e", bg: "#166534" }
+    : score >= 35
+    ? { label: "⚠️ 尚可", color: "#f59e0b", bg: "#78350f" }
+    : { label: "❌ 脆弱", color: "#ef4444", bg: "#7f1d1d" };
+
+  // Color: green for ratio ≥ 0.9, yellow 0.7–0.9, red < 0.7
+  function ratioColor(r: number): string {
+    if (r >= 0.9) return "hsl(120,60%,40%)";
+    if (r >= 0.7) return "hsl(45,85%,45%)";
+    return "hsl(0,65%,42%)";
+  }
+
+  const CELL = 38;
+  const LABEL_X = 50, LABEL_Y = 26;
+
+  return (
+    <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+          🔬 參數穩健性分析
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+            {Math.round(robustRatio * 100)}% 組合 ratio≥0.8
+          </span>
+          <span
+            className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: badge.bg + "55", color: badge.color, border: `1px solid ${badge.color}55` }}
+          >
+            {badge.label}（{score}分）
+          </span>
+        </div>
+      </div>
+
+      {/* Score bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-[9px]" style={{ color: "var(--text-tertiary)" }}>
+          <span>脆弱</span><span>穩健</span>
+        </div>
+        <div className="relative h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width:      `${score}%`,
+              background: score >= 60 ? "#22c55e" : score >= 35 ? "#f59e0b" : "#ef4444",
+            }}
+          />
+          {/* Threshold markers */}
+          <div className="absolute top-0 h-full w-px" style={{ left: "35%", background: "#f59e0b88" }} />
+          <div className="absolute top-0 h-full w-px" style={{ left: "60%", background: "#22c55e88" }} />
+        </div>
+      </div>
+
+      {/* Heatmap (2-param) */}
+      {heatParams && (
+        <div style={{ overflowX: "auto" }}>
+          <div className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>
+            穩健性熱圖（顏色 = 相對最佳值比率，綠 ≥ 90% · 黃 70–90% · 紅 &lt; 70%）
+          </div>
+          <svg
+            width={LABEL_X + heatParams.yVals.length * CELL + 8}
+            height={LABEL_Y + heatParams.xVals.length * CELL + 8}
+            style={{ display: "block", fontFamily: "monospace" }}
+          >
+            {heatParams.xVals.map((xv, xi) => (
+              <text key={xi} x={LABEL_X - 4} y={LABEL_Y + xi * CELL + CELL / 2 + 4}
+                textAnchor="end" fontSize={9} fill="var(--text-tertiary)">{xv}</text>
+            ))}
+            {heatParams.yVals.map((yv, yi) => (
+              <text key={yi} x={LABEL_X + yi * CELL + CELL / 2} y={LABEL_Y - 8}
+                textAnchor="middle" fontSize={9} fill="var(--text-tertiary)">{yv}</text>
+            ))}
+            {heatParams.xVals.map((_, xi) =>
+              heatParams.yVals.map((_, yi) => {
+                const ratio = heatParams.matrix[xi]?.[yi];
+                const bg    = ratio !== null ? ratioColor(ratio) : "#2a2a2a";
+                const label = ratio !== null ? `${Math.round(ratio * 100)}%` : "—";
+                return (
+                  <g key={`${xi}-${yi}`}>
+                    <rect x={LABEL_X + yi * CELL} y={LABEL_Y + xi * CELL}
+                      width={CELL - 2} height={CELL - 2} fill={bg} rx={3} />
+                    <text x={LABEL_X + yi * CELL + CELL / 2} y={LABEL_Y + xi * CELL + CELL / 2 + 4}
+                      textAnchor="middle" fontSize={9} fill="#fff" fontWeight={600}>{label}</text>
+                  </g>
+                );
+              })
+            )}
+            <text x={LABEL_X + heatParams.yVals.length * CELL / 2}
+              y={LABEL_Y + heatParams.xVals.length * CELL + 6}
+              textAnchor="middle" fontSize={9} fill="var(--text-tertiary)">{heatParams.py}</text>
+            <text x={8} y={LABEL_Y + heatParams.xVals.length * CELL / 2}
+              textAnchor="middle" fontSize={9} fill="var(--text-tertiary)"
+              transform={`rotate(-90, 8, ${LABEL_Y + heatParams.xVals.length * CELL / 2})`}
+            >{heatParams.px}</text>
+          </svg>
+        </div>
+      )}
+
+      {/* 1-param bar */}
+      {heatData?.type === "bar" && (
+        <div>
+          <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>
+            參數 {heatData.paramKey} 穩健性（各值相對最佳比率）
+          </div>
+          <div className="flex items-end gap-0.5 h-16">
+            {heatData.bars.map(b => (
+              <div key={b.x} className="flex-1 flex flex-col items-center gap-0.5">
+                <div
+                  className="w-full rounded-t-sm"
+                  style={{
+                    height:     `${b.ratio * 100}%`,
+                    background: ratioColor(b.ratio),
+                    minHeight:  "2px",
+                  }}
+                  title={`${heatData.paramKey}=${b.x}: ${Math.round(b.ratio * 100)}%`}
+                />
+                <span className="text-[8px]" style={{ color: "var(--text-tertiary)" }}>{b.x}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Interpretation guide */}
+      <div className="text-[10px] rounded px-2 py-1.5 space-y-0.5" style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
+        <p>• 穩健性 ≥ 60% → 廣域高原：參數稍微偏移仍有效，可信度較高</p>
+        <p>• 穩健性 &lt; 35% → 尖銳孤峰：高度依賴精確參數，可能是曲線擬合</p>
+        <p>• 建議搭配 Walk-Forward 驗證，兩者皆通過才算真正穩健</p>
       </div>
     </div>
   );
@@ -544,6 +747,9 @@ export default function OptimizePanel({ symbol, presets: _presets, lastReq }: Op
               <HeatmapChart heatmap={response.heatmap} />
             </div>
           )}
+
+          {/* Robustness Analysis */}
+          <RobustnessAnalysis results={response.results} sortBy={response.sort_by} />
 
           {/* Top 30 table */}
           <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>

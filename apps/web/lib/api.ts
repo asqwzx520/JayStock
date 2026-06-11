@@ -832,12 +832,20 @@ export interface BacktestMonthlyReturn {
   return_pct: number;
 }
 
+export interface BacktestRegimeStat {
+  trade_count: number;
+  win_rate:    number | null;
+  total_pnl:   number;
+  avg_pnl_pct: number | null;
+}
+
 export interface BacktestResult {
   stats:           BacktestStats;
   equity_curve:    BacktestEquityPoint[];
   benchmark_curve: BacktestBenchmarkPoint[];
   trades:          BacktestTrade[];
   monthly_returns: BacktestMonthlyReturn[];
+  regime_stats?:   { bull: BacktestRegimeStat | null; bear: BacktestRegimeStat | null; sideways: BacktestRegimeStat | null };
 }
 
 export interface BacktestPresetParam {
@@ -1605,6 +1613,32 @@ export async function runCompare(body: CompareRequest): Promise<CompareResponse>
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── P4-16: Live Signal ────────────────────────────────────────────────────────
+
+export interface LiveSignalResult {
+  signal:       "buy" | "sell" | "holding" | "none";
+  reason:       string;
+  latest_date:  string;
+  latest_close: number;
+  indicators:   Record<string, number>;
+}
+
+export async function getLiveSignal(
+  symbol:   string,
+  strategy: BacktestStrategyConfig,
+): Promise<LiveSignalResult> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/live-signal`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ symbol, strategy }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

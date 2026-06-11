@@ -14,8 +14,9 @@ import type {
 import {
   runBacktest, getBacktestPresets, getKline,
   listSavedStrategies, saveStrategy, deleteSavedStrategy,
+  getLiveSignal,
 } from "@/lib/api";
-import type { KlineBar, SavedStrategy, SaveStrategyRequest } from "@/lib/api";
+import type { KlineBar, SavedStrategy, SaveStrategyRequest, LiveSignalResult } from "@/lib/api";
 import DSLEditor, { type DSLStrategy } from "@/components/backtest/DSLEditor";
 import OptimizePanel   from "./OptimizePanel";
 import ComparePanel    from "./ComparePanel";
@@ -471,6 +472,181 @@ function StatRow({ label, value, color }: { label: string; value: string; color?
     <div className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: "var(--border)" }}>
       <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{label}</span>
       <span className="text-xs num font-medium" style={{ color: color ?? "var(--text-primary)" }}>{value}</span>
+    </div>
+  );
+}
+
+function LiveSignalCard({
+  symbol,
+  lastReq,
+}: {
+  symbol:  string;
+  lastReq: BacktestRequest | null;
+}) {
+  const [result,  setResult]  = useState<LiveSignalResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const handleCheck = useCallback(async () => {
+    if (!lastReq) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await getLiveSignal(symbol, lastReq.strategy);
+      setResult(r);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "查詢失敗");
+    } finally {
+      setLoading(false);
+    }
+  }, [symbol, lastReq]);
+
+  const SIGNAL_CONFIG = {
+    buy:     { emoji: "🟢", label: "進場訊號",   color: "#22c55e", bg: "#166534" },
+    sell:    { emoji: "🔴", label: "出場訊號",   color: "#ef4444", bg: "#7f1d1d" },
+    holding: { emoji: "🟡", label: "持倉中",     color: "#f59e0b", bg: "#78350f" },
+    none:    { emoji: "⚪", label: "無訊號",     color: "#888",    bg: "#374151" },
+  };
+
+  return (
+    <div className="rounded-lg p-4 space-y-3 mt-3" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+          📡 即時訊號偵測
+        </div>
+        <button
+          onClick={handleCheck}
+          disabled={loading || !lastReq}
+          className="text-[11px] px-3 py-1 rounded-full font-medium transition-opacity disabled:opacity-40"
+          style={{ background: "var(--color-brand)", color: "#fff" }}
+        >
+          {loading ? "偵測中…" : "🔍 偵測訊號"}
+        </button>
+      </div>
+
+      {!lastReq && (
+        <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+          請先執行一次回測後，再使用即時訊號偵測。
+        </p>
+      )}
+
+      {error && (
+        <p className="text-[11px] rounded px-2 py-1" style={{ background: "var(--color-down-subtle)", color: "var(--color-down)" }}>
+          {error}
+        </p>
+      )}
+
+      {result && !loading && (() => {
+        const cfg = SIGNAL_CONFIG[result.signal];
+        return (
+          <div className="space-y-2">
+            {/* Signal badge */}
+            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5"
+                 style={{ background: cfg.bg + "44", border: `1px solid ${cfg.color}55` }}>
+              <span className="text-2xl">{cfg.emoji}</span>
+              <div>
+                <p className="text-sm font-bold" style={{ color: cfg.color }}>{cfg.label}</p>
+                <p className="text-[11px]" style={{ color: "var(--text-secondary)" }}>{result.reason}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>收盤價</p>
+                <p className="text-sm font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {result.latest_close.toLocaleString()}
+                </p>
+                <p className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>{result.latest_date}</p>
+              </div>
+            </div>
+            {/* Key indicators */}
+            {Object.keys(result.indicators).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(result.indicators).map(([k, v]) => (
+                  <span key={k} className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                    {k}: {v}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+              ⚠️ 訊號僅供參考，基於歷史資料計算，不構成投資建議。
+            </p>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function RegimeStatsPanel({
+  regime,
+}: {
+  regime: NonNullable<import("@/lib/api").BacktestResult["regime_stats"]>;
+}) {
+  const REGIMES = [
+    { key: "bull"     as const, label: "📈 多頭", color: "#22c55e", desc: "close > MA50 > MA200" },
+    { key: "sideways" as const, label: "↔️ 盤整", color: "#a78bfa", desc: "趨勢不明" },
+    { key: "bear"     as const, label: "📉 空頭", color: "#ef4444", desc: "close < MA50 < MA200" },
+  ];
+  const total = Object.values(regime).reduce((s, v) => s + (v?.trade_count ?? 0), 0);
+  if (!total) return null;
+
+  return (
+    <div className="rounded-lg p-4 space-y-3 mt-3" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+        🌐 市場環境績效分析
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {REGIMES.map(({ key, label, color, desc }) => {
+          const d = regime[key];
+          if (!d) return (
+            <div key={key} className="rounded-lg p-3 text-center" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+              <p className="text-[11px] font-semibold" style={{ color }}>{label}</p>
+              <p className="text-[10px] mt-1" style={{ color: "var(--text-tertiary)" }}>無交易</p>
+            </div>
+          );
+          const pct = total ? Math.round(d.trade_count / total * 100) : 0;
+          const wr  = d.win_rate != null ? `${(d.win_rate * 100).toFixed(0)}%` : "—";
+          const avg = d.avg_pnl_pct != null ? `${d.avg_pnl_pct >= 0 ? "+" : ""}${(d.avg_pnl_pct * 100).toFixed(1)}%` : "—";
+          return (
+            <div key={key} className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: `1px solid ${color}44` }}>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold" style={{ color }}>{label}</p>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: color + "22", color }}>
+                  {pct}%
+                </span>
+              </div>
+              <p className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>{desc}</p>
+              <div className="grid grid-cols-2 gap-1 text-[10px]">
+                <div>
+                  <p style={{ color: "var(--text-tertiary)" }}>交易</p>
+                  <p className="font-semibold" style={{ color: "var(--text-primary)" }}>{d.trade_count}筆</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-tertiary)" }}>勝率</p>
+                  <p className="font-semibold" style={{ color: d.win_rate && d.win_rate >= 0.5 ? "#22c55e" : "#ef4444" }}>{wr}</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-tertiary)" }}>平均報酬</p>
+                  <p className="font-semibold font-mono" style={{ color: d.avg_pnl_pct && d.avg_pnl_pct >= 0 ? "#22c55e" : "#ef4444" }}>{avg}</p>
+                </div>
+                <div>
+                  <p style={{ color: "var(--text-tertiary)" }}>淨損益</p>
+                  <p className="font-semibold font-mono text-[9px]" style={{ color: d.total_pnl >= 0 ? "#22c55e" : "#ef4444" }}>
+                    {d.total_pnl >= 0 ? "+" : ""}{(d.total_pnl / 1000).toFixed(0)}K
+                  </p>
+                </div>
+              </div>
+              {/* Win-rate mini bar */}
+              <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                <div className="h-full rounded-full" style={{ width: wr, background: color }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[10px] rounded px-2 py-1.5" style={{ background: "var(--bg-elevated)", color: "var(--text-tertiary)" }}>
+        依進場日期判斷市場環境。多頭環境勝率高但空頭也能獲利 → 策略抗跌性強；空頭勝率大幅下滑 → 建議加入趨勢過濾器。
+      </div>
     </div>
   );
 }
@@ -1711,7 +1887,13 @@ export default function BacktestPanel({ symbol }: Props) {
           {resultTab !== "optimize" && result && !loading && (
             <>
               {resultTab === "stats" && (
-                <StatsPanel stats={result.stats} symbol={symbol} />
+                <>
+                  <StatsPanel stats={result.stats} symbol={symbol} />
+                  {result.regime_stats && (
+                    <RegimeStatsPanel regime={result.regime_stats} />
+                  )}
+                  <LiveSignalCard symbol={symbol} lastReq={lastReq} />
+                </>
               )}
 
               {resultTab === "chart" && (

@@ -1258,6 +1258,65 @@ async def _fetch_tw_ohlcv(symbol: str, start: str, end: str) -> list[dict]:
 
 # ── 主入口 ────────────────────────────────────────────────────────────────────
 
+def _calc_regime_stats(df: pd.DataFrame, trades: list[dict]) -> dict:
+    """
+    Classify each trade entry date as bull/bear/sideways using MA50/MA200.
+      bull      = close > MA50 AND MA50 > MA200
+      bear      = close < MA50 AND MA50 < MA200
+      sideways  = everything else
+    Returns per-regime: trade_count, win_rate, total_pnl, avg_pnl_pct
+    """
+    if not trades or len(df) < 50:
+        return {}
+
+    # Build regime series on df
+    close = df["close"]
+    ma50  = close.rolling(50, min_periods=1).mean()
+    ma200 = close.rolling(200, min_periods=1).mean()
+
+    def _regime(idx):
+        try:
+            c   = float(close.loc[idx])
+            m50 = float(ma50.loc[idx])
+            m200= float(ma200.loc[idx])
+        except KeyError:
+            return "sideways"
+        if c > m50 and m50 > m200:
+            return "bull"
+        if c < m50 and m50 < m200:
+            return "bear"
+        return "sideways"
+
+    # Parse trade entry dates to DatetimeIndex keys
+    date_index = df.index
+    def _closest_idx(date_str: str):
+        target = pd.Timestamp(date_str)
+        pos    = date_index.searchsorted(target)
+        if pos >= len(date_index):
+            pos = len(date_index) - 1
+        return date_index[pos]
+
+    buckets: dict[str, list[dict]] = {"bull": [], "bear": [], "sideways": []}
+    for t in trades:
+        idx     = _closest_idx(t.get("entry_date", ""))
+        regime  = _regime(idx)
+        buckets[regime].append(t)
+
+    result: dict = {}
+    for regime, ts in buckets.items():
+        if not ts:
+            result[regime] = None
+            continue
+        wins = [t for t in ts if float(t.get("pnl", 0)) > 0]
+        result[regime] = {
+            "trade_count": len(ts),
+            "win_rate":    round(len(wins) / len(ts), 4) if ts else None,
+            "total_pnl":   round(sum(float(t.get("pnl", 0)) for t in ts), 2),
+            "avg_pnl_pct": round(sum(float(t.get("pnl_pct", 0)) for t in ts) / len(ts), 4) if ts else None,
+        }
+    return result
+
+
 async def run_backtest(
     symbol: str,
     strategy: dict,
@@ -1354,6 +1413,7 @@ async def run_backtest(
         ]
 
     monthly_returns = _build_monthly_returns(equity_df)
+    regime_stats    = _calc_regime_stats(df, trades)
 
     logger.info(
         "[backtest] %s %s %s~%s trades=%d sharpe=%.2f",
@@ -1367,4 +1427,5 @@ async def run_backtest(
         "benchmark_curve": benchmark_curve,
         "trades":          trades,
         "monthly_returns": monthly_returns,
+        "regime_stats":    regime_stats,
     }
