@@ -1,7 +1,7 @@
 # StockPulse 專案進度追蹤
 
-> **更新日期：** 2026-06-11（UI 修復：拖曳 bug / toolbar 精簡 / 滾動修復 / LeftPanel 清理）  
-> **當前版本：** commit `7718cfb`（移除 LeftPanel 熱門排行子 tab、工具列全螢幕按鈕、ChartTypeSelector；修 drag-revert bug；首頁/分析面板 overflow 修復）  
+> **更新日期：** 2026-06-11（回測升級 Roadmap 建立 + P0-1 交易明細強化）  
+> **當前版本：** commit `7bfb0fd`（回測 trades 加 fee/exit_reason 欄位 + 期末強平 + CSV 匯出 + 出場原因 chip 篩選 + 9 欄表格）  
 > **線上服務：**
 > - 前端：https://jaystock-web.onrender.com
 > - 後端：https://jaystock.onrender.com
@@ -436,6 +436,7 @@
 
 | Commit | 說明 | 狀態 |
 |--------|------|------|
+| `7bfb0fd` | **回測 P0-1：交易明細表格強化 + Roadmap 文件**：新建 `docs/BACKTEST-ROADMAP.md`（15 題 grill-me 完整規格，P0/P1/P2 三階段）；後端 `backtest_service.py` trades 加 `fee`（買 0.1425% + 賣 0.1425% + 證交稅 0.3%）和 `exit_reason`（signal/stop_loss/take_profit/end_of_period），新增 `_close_position()` helper，修復期末強平 bug（原本期末有持倉的交易會消失不在 trades 列表）；前端 `BacktestPanel.tsx` TradeList 重構：2 行統計（總筆數/獲利/虧損/勝率/平均損益 + 平均持倉/總手續費/最佳最差）、出場原因 chip 即時過濾、9 欄表格含彩色 badge、⬇ CSV 匯出（UTF-8 BOM）| ✅ Live |
 | `acce6c6` | **回測 422 Bug 修復**：`backtest.py` 的 `from __future__ import annotations` 導致所有型別標註成為 lazy 字串；slowapi `@limiter.limit()` 裝飾器包裝後，FastAPI `get_type_hints()` 無法解析 `BacktestRequest`，退回把 `body` 當 query param（422）。修復：移除該 import（screener.py 從未有此行）+ 加 `body: BacktestRequest = Body(...)` 明確聲明。前後 5 分鐘 Playwright 驗證：2330/MA5×MA20/5年，總報酬 +96.67%，CAGR 14.73%，正常返回 200 + 完整回測數據 | ✅ Live |
 | `2c5d003` | **30日籌碼明細表 + RightPanel 整合**：`ChipsPanel.tsx` 新增「三大法人 · 近30日明細」Section（每日外資/投信/自營/合計淨買賣數字表格，最新在前，正紅負綠千分位）；`page.tsx` 引入 `RightPanel` 並加入主佈局（lg breakpoint 1024px+），顯示大字股價 + 今日行情卡 + 振幅區間；確認基本面摘要列已存在（市值/本益比/EPS/殖利率/52W/Beta/產業）| ✅ Local |
 | `fa919ce` | **TWSE OpenAPI 批量基本面**：新增 `twse_openapi_service.py`（`BWIBBU_ALL` 一次拉 ~1700 支 PE/PB/殖利率，TTL 4h；`STOCK_DAY_ALL` 全市場日行情快照 TTL 5min）；`fundamental.py` 台股改走 TWSE 批量查詢（單股 O(1)），FinMind `TaiwanStockPER` per-symbol 呼叫全部取代 | ✅ Live |
@@ -510,4 +511,10 @@
 
 ---
 
-*最後更新：2026-06-11 by Claude（回測 422 Bug 修復；commit `acce6c6`；整體評分 96/100）*
+*最後更新：2026-06-11 by Claude（回測 P0-1 交易明細強化 + Roadmap；commit `7bfb0fd`；整體評分 96/100）*
+
+> **回測升級進行中：** 完整規格見 `docs/BACKTEST-ROADMAP.md`  
+> - P0-1 ✅ 交易明細表格強化  
+> - P0-2 🚧 K線圖標記買賣點  
+> - P0-3 ⏳ 自訂策略 A（積木式）  
+> - P0-4 ⏳ 儲存策略 / 我的策略列表  

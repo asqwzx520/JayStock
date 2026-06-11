@@ -11,7 +11,8 @@ import type {
   BacktestStrategyConfig,
   BacktestMonthlyReturn,
 } from "@/lib/api";
-import { runBacktest, getBacktestPresets } from "@/lib/api";
+import { runBacktest, getBacktestPresets, getKline } from "@/lib/api";
+import type { KlineBar } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,190 @@ function DrawdownChart({ equityCurve }: { equityCurve: BacktestResult["equity_cu
   }, [equityCurve]);
 
   return <div ref={containerRef} className="w-full h-full" />;
+}
+
+// ── K 線圖 + 買賣標記（P0-2）─────────────────────────────────────────────────
+
+function TradesKlineChart({
+  symbol,
+  trades,
+  startDate,
+  endDate,
+}: {
+  symbol:    string;
+  trades:    BacktestTrade[];
+  startDate: string;   // YYYY-MM-DD
+  endDate:   string;   // YYYY-MM-DD
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [bars,    setBars]    = useState<KlineBar[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  // Fetch K 線資料
+  useEffect(() => {
+    if (!symbol) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getKline(symbol, "daily")
+      .then(r => {
+        if (cancelled) return;
+        // 篩選回測日期範圍
+        const filtered = (r.data ?? []).filter(b => b.date >= startDate && b.date <= endDate);
+        setBars(filtered);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "K線資料載入失敗");
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [symbol, startDate, endDate]);
+
+  // 繪圖
+  useEffect(() => {
+    if (!containerRef.current || bars.length === 0) return;
+    let chart: ReturnType<typeof import("lightweight-charts")["createChart"]> | null = null;
+
+    import("lightweight-charts").then(({ createChart, ColorType, LineStyle, CandlestickSeries, createSeriesMarkers }) => {
+      if (!containerRef.current) return;
+      const el = containerRef.current;
+      chart = createChart(el, {
+        width:  el.clientWidth,
+        height: el.clientHeight,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor:  "var(--text-secondary)",
+        },
+        grid: {
+          vertLines: { color: "var(--border)", style: LineStyle.Dotted },
+          horzLines: { color: "var(--border)", style: LineStyle.Dotted },
+        },
+        crosshair: { mode: 1 },
+        timeScale: { borderColor: "var(--border)", timeVisible: false },
+        rightPriceScale: { borderColor: "var(--border)" },
+      });
+
+      // 台股慣例：紅漲綠跌
+      const candleSeries = chart.addSeries(CandlestickSeries, {
+        upColor:        "#EF4444",
+        downColor:      "#22C55E",
+        borderUpColor:  "#EF4444",
+        borderDownColor:"#22C55E",
+        wickUpColor:    "#EF4444",
+        wickDownColor:  "#22C55E",
+      });
+
+      candleSeries.setData(bars.map(b => ({
+        time:  b.date as import("lightweight-charts").Time,
+        open:  b.open,
+        high:  b.high,
+        low:   b.low,
+        close: b.close,
+      })));
+
+      // ── 買賣標記 ──
+      type Marker = import("lightweight-charts").SeriesMarker<import("lightweight-charts").Time>;
+      const buyMarkers: Marker[] = trades.map((t, i) => ({
+        time:     t.entry_date as import("lightweight-charts").Time,
+        position: "belowBar" as const,
+        color:    "#3B82F6",
+        shape:    "arrowUp" as const,
+        text:     `B${i + 1}`,
+        size:     1.2,
+      }));
+      const sellMarkers: Marker[] = trades.map((t, i) => {
+        const winColor = t.pnl_pct >= 0 ? "#22C55E" : "#EF4444";
+        return {
+          time:     t.exit_date as import("lightweight-charts").Time,
+          position: "aboveBar" as const,
+          color:    winColor,
+          shape:    "arrowDown" as const,
+          text:     `S${i + 1} ${(t.pnl_pct * 100).toFixed(1)}%`,
+          size:     1.2,
+        };
+      });
+      const markers = [...buyMarkers, ...sellMarkers].sort((a, b) =>
+        a.time < b.time ? -1 : a.time > b.time ? 1 : 0
+      );
+      createSeriesMarkers(candleSeries, markers);
+
+      chart.timeScale().fitContent();
+
+      const ro = new ResizeObserver(() => {
+        if (containerRef.current && chart) {
+          chart.resize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+        }
+      });
+      ro.observe(el);
+      return () => { ro.disconnect(); };
+    });
+
+    return () => { chart?.remove(); };
+  }, [bars, trades]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--text-tertiary)" }}>
+        載入 K 線資料中...
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--color-down)" }}>
+        ⚠ {error}
+      </div>
+    );
+  }
+  if (bars.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-xs" style={{ color: "var(--text-tertiary)" }}>
+        無 K 線資料
+      </div>
+    );
+  }
+  return <div ref={containerRef} className="w-full h-full" />;
+}
+
+// ── 交易明細列表（簡易版本，配合 K 線圖一起顯示）──────────────────────────────
+
+function TradesMiniList({ trades }: { trades: BacktestTrade[] }) {
+  if (trades.length === 0) {
+    return <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>無交易</div>;
+  }
+  return (
+    <div className="overflow-auto rounded" style={{ border: "1px solid var(--border)", maxHeight: 160 }}>
+      <table className="w-full text-[11px]">
+        <thead style={{ background: "var(--bg-elevated)", position: "sticky", top: 0, zIndex: 1 }}>
+          <tr style={{ color: "var(--text-tertiary)" }}>
+            <th className="px-2 py-1 text-left">#</th>
+            <th className="px-2 py-1 text-left">進場日</th>
+            <th className="px-2 py-1 num text-right">進場價</th>
+            <th className="px-2 py-1 text-left">出場日</th>
+            <th className="px-2 py-1 num text-right">出場價</th>
+            <th className="px-2 py-1 num text-right">報酬</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trades.map((t, i) => (
+            <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+              <td className="px-2 py-1" style={{ color: "var(--text-tertiary)" }}>{i + 1}</td>
+              <td className="px-2 py-1 num whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{t.entry_date}</td>
+              <td className="px-2 py-1 num text-right">{t.entry_price.toLocaleString()}</td>
+              <td className="px-2 py-1 num whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{t.exit_date}</td>
+              <td className="px-2 py-1 num text-right">{t.exit_price.toLocaleString()}</td>
+              <td className="px-2 py-1 num text-right font-medium"
+                  style={{ color: t.pnl_pct >= 0 ? "var(--color-up)" : "var(--color-down)" }}>
+                {pct(t.pnl_pct)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 // ── Monthly Returns Heatmap ───────────────────────────────────────────────────
@@ -727,7 +912,7 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "trades" | "monthly";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly";
 
 interface Props {
   symbol: string;
@@ -765,6 +950,7 @@ export default function BacktestPanel({ symbol }: Props) {
   const RESULT_TABS: { id: ResultTab; label: string }[] = [
     { id: "stats",   label: "績效摘要" },
     { id: "chart",   label: "資金曲線" },
+    { id: "kline",   label: "K線標記" },
     { id: "trades",  label: "交易明細" },
     { id: "monthly", label: "月份報酬" },
   ];
@@ -878,6 +1064,40 @@ export default function BacktestPanel({ symbol }: Props) {
                   </div>
                 </div>
               )}
+
+              {resultTab === "kline" && (() => {
+                const ec  = result.equity_curve;
+                const sd  = ec[0]?.time              ?? "";
+                const ed  = ec[ec.length - 1]?.time  ?? "";
+                return (
+                  <div className="flex flex-col gap-3 h-full">
+                    <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                      <span style={{ color: "#3B82F6" }}>▲ 藍 = 買入 (B#)</span>
+                      <span className="mx-2">|</span>
+                      <span style={{ color: "var(--color-up)" }}>▼ 綠 = 獲利出場</span>
+                      <span className="mx-2">|</span>
+                      <span style={{ color: "var(--color-down)" }}>▼ 紅 = 虧損出場</span>
+                      <span className="ml-3" style={{ color: "var(--text-tertiary)" }}>
+                        台股：紅K = 上漲、綠K = 下跌
+                      </span>
+                    </div>
+                    <div style={{ height: 360 }}>
+                      <TradesKlineChart
+                        symbol={symbol}
+                        trades={result.trades}
+                        startDate={sd}
+                        endDate={ed}
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] mb-1" style={{ color: "var(--text-tertiary)" }}>
+                        進出場對照表（編號與 K 線標記對應）
+                      </div>
+                      <TradesMiniList trades={result.trades} />
+                    </div>
+                  </div>
+                );
+              })()}
 
               {resultTab === "trades" && (
                 <TradeList trades={result.trades} />
