@@ -1075,6 +1075,236 @@ function ScorecardPanel({ stats }: { stats: BacktestStats }) {
   );
 }
 
+// ── P8-26: Kelly Criterion ────────────────────────────────────────────────────
+
+function KellyCriterionCard({
+  stats,
+  initialCapital,
+}: {
+  stats:          BacktestStats;
+  initialCapital: number;
+}) {
+  const W  = stats.win_rate      ?? 0;
+  const PF = stats.profit_factor ?? 0;
+  if (W <= 0 || PF <= 0) return null;
+
+  const kelly = Math.max(0, W - (1 - W) / PF);
+  const half    = kelly / 2;
+  const quarter = kelly / 4;
+  const isAggressive = kelly > 0.5;
+
+  const rows = [
+    { label: "Full Kelly",    pct: kelly,   note: isAggressive ? "⚠️ 過激" : "理論最大化",  color: isAggressive ? "#ef4444" : "#3b82f6" },
+    { label: "Half Kelly",    pct: half,    note: "✅ 推薦（平衡風報）",                     color: "#22c55e" },
+    { label: "Quarter Kelly", pct: quarter, note: "🛡️ 保守（低波動優先）",                  color: "#a78bfa" },
+  ];
+
+  return (
+    <div className="rounded-xl p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="text-xs font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+        🎲 Kelly Criterion 最佳持倉比例
+      </div>
+      <div className="text-[10px] mb-3" style={{ color: "var(--text-tertiary)" }}>
+        f* = W − (1−W)/PF = {(kelly * 100).toFixed(1)}%&nbsp;
+        （勝率 {(W * 100).toFixed(1)}%，盈虧比 {PF.toFixed(2)}）
+      </div>
+      <div className="flex flex-col gap-2">
+        {rows.map(r => (
+          <div key={r.label} className="flex items-center gap-3">
+            <div className="text-[10px] shrink-0" style={{ width: 88, color: "var(--text-secondary)" }}>{r.label}</div>
+            <div className="flex-1 h-4 rounded overflow-hidden" style={{ background: "var(--border)" }}>
+              <div className="h-full rounded" style={{ width: `${Math.min(r.pct, 1) * 100}%`, background: r.color, opacity: 0.8 }} />
+            </div>
+            <div className="font-bold font-mono text-xs shrink-0" style={{ width: 40, color: r.color }}>
+              {(r.pct * 100).toFixed(1)}%
+            </div>
+            <div className="text-[10px] shrink-0" style={{ color: "var(--text-tertiary)", width: 140 }}>
+              ≈ ${(initialCapital * r.pct).toLocaleString(undefined, { maximumFractionDigits: 0 })} &nbsp;{r.note}
+            </div>
+          </div>
+        ))}
+      </div>
+      {kelly === 0 && (
+        <div className="mt-2 text-[10px]" style={{ color: "#ef4444" }}>
+          Kelly ≤ 0：當前策略期望值為負，不建議下注。
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── P8-27: Capital Utilization ────────────────────────────────────────────────
+
+function CapitalUtilizationCard({
+  trades,
+  equityCurve,
+}: {
+  trades:      BacktestTrade[];
+  equityCurve: BacktestResult["equity_curve"];
+}) {
+  if (!equityCurve.length || !trades.length) return null;
+
+  const startMs = new Date(equityCurve[0].time).getTime();
+  const endMs   = new Date(equityCurve[equityCurve.length - 1].time).getTime();
+  const totalDays = Math.max(1, Math.round((endMs - startMs) / 86400_000));
+
+  const holdingDays = trades.reduce((a, t) => a + (t.hold_days ?? 0), 0);
+  const holdingRate = Math.min(1, holdingDays / totalDays);
+  const idleDays    = Math.max(0, totalDays - holdingDays);
+  const turnover    = trades.length / (totalDays / 252);   // trades per year
+  const avgHold     = trades.length ? holdingDays / trades.length : 0;
+
+  const stats2 = [
+    { label: "持倉率",         value: `${(holdingRate * 100).toFixed(1)}%`,  note: holdingRate < 0.3 ? "低——資金閒置多" : holdingRate > 0.8 ? "高——持續在場" : "適中" },
+    { label: "閒置天數",       value: `${idleDays}天`,                        note: `共 ${totalDays} 天回測` },
+    { label: "年化換手次數",   value: `${turnover.toFixed(1)}次/年`,          note: "" },
+    { label: "平均持倉天數",   value: `${avgHold.toFixed(1)}天/筆`,           note: "" },
+  ];
+
+  return (
+    <div className="rounded-xl p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <div className="text-xs font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+        💰 資金使用率分析
+      </div>
+
+      {/* Utilization bar */}
+      <div className="flex items-center gap-2 mb-3 mt-2">
+        <div className="text-[10px] shrink-0" style={{ color: "var(--text-tertiary)", width: 36 }}>持倉</div>
+        <div className="flex-1 h-4 rounded overflow-hidden flex" style={{ background: "var(--border)" }}>
+          <div className="h-full" style={{ width: `${holdingRate * 100}%`, background: "#3b82f6", opacity: 0.8 }} />
+          <div className="h-full" style={{ width: `${(1 - holdingRate) * 100}%`, background: "var(--border)" }} />
+        </div>
+        <div className="text-[10px] shrink-0" style={{ color: "var(--text-tertiary)", width: 36 }}>閒置</div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {stats2.map(s => (
+          <div key={s.label} className="rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)" }}>
+            <div className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>{s.label}</div>
+            <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{s.value}</div>
+            {s.note && <div className="text-[9px]" style={{ color: "var(--text-tertiary)" }}>{s.note}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── P8-28: Backtest History (localStorage) ────────────────────────────────────
+
+const HISTORY_KEY = "backtest_history_v1";
+
+interface BacktestSnapshot {
+  id:           string;
+  timestamp:    string;
+  symbol:       string;
+  strategyType: string;
+  total_return: number;
+  sharpe:       number;
+  max_drawdown: number;
+  win_rate:     number;
+  total_trades: number;
+}
+
+function loadHistory(): BacktestSnapshot[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as BacktestSnapshot[]) : [];
+  } catch { return []; }
+}
+
+function saveHistory(snap: BacktestSnapshot) {
+  const list = loadHistory();
+  const updated = [snap, ...list].slice(0, 20);
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+}
+
+function HistoryPanel({
+  current: _current,
+  history,
+  onSelectCompare,
+  compareId,
+}: {
+  current:         BacktestStats;
+  history:         BacktestSnapshot[];
+  onSelectCompare: (id: string | null) => void;
+  compareId:       string | null;
+}) {
+  if (!history.length) {
+    return (
+      <div className="text-xs text-center py-4" style={{ color: "var(--text-tertiary)" }}>
+        尚無歷史記錄，執行回測後自動存檔（最多 20 筆）
+      </div>
+    );
+  }
+
+  const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+
+  return (
+    <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+      {history.map(s => {
+        const isCompare = s.id === compareId;
+        return (
+          <div
+            key={s.id}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors text-xs"
+            style={{
+              background: isCompare ? "rgba(59,130,246,0.1)" : "var(--bg-elevated)",
+              border:     `1px solid ${isCompare ? "var(--color-brand)" : "var(--border)"}`,
+            }}
+            onClick={() => onSelectCompare(isCompare ? null : s.id)}
+          >
+            <div className="shrink-0 text-[10px]" style={{ color: "var(--text-tertiary)", width: 90 }}>
+              {s.timestamp.slice(0, 16).replace("T", " ")}
+            </div>
+            <div className="font-semibold shrink-0" style={{ width: 44 }}>{s.symbol}</div>
+            <div className="shrink-0 text-[10px]" style={{ color: "var(--text-tertiary)", width: 72 }}>
+              {s.strategyType.replace(/_/g, " ")}
+            </div>
+            <div className="flex-1 flex gap-3 justify-end font-mono text-[10px]">
+              <span style={{ color: s.total_return >= 0 ? "#22c55e" : "#ef4444" }}>{fmtPct(s.total_return)}</span>
+              <span style={{ color: "var(--text-secondary)" }}>SR {s.sharpe.toFixed(2)}</span>
+              <span style={{ color: "#ef4444" }}>{fmtPct(s.max_drawdown)}</span>
+            </div>
+            {isCompare && (
+              <div className="shrink-0 text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--color-brand)", color: "#fff" }}>比較中</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompareRow({
+  label,
+  current,
+  prev,
+  isPct,
+  lowerBetter,
+}: {
+  label:       string;
+  current:     number;
+  prev:        number;
+  isPct?:      boolean;
+  lowerBetter?: boolean;
+}) {
+  const diff = current - prev;
+  const improved = lowerBetter ? diff < 0 : diff > 0;
+  const fmt = (v: number) => isPct ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}%` : v.toFixed(3);
+  const fmtDiff = (d: number) => isPct ? `${d >= 0 ? "+" : ""}${(d * 100).toFixed(2)}%` : `${d >= 0 ? "+" : ""}${d.toFixed(3)}`;
+  return (
+    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+      <td className="py-1.5 text-[10px]" style={{ color: "var(--text-tertiary)" }}>{label}</td>
+      <td className="py-1.5 text-right font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{fmt(current)}</td>
+      <td className="py-1.5 text-right font-mono text-[11px]" style={{ color: "var(--text-tertiary)" }}>{fmt(prev)}</td>
+      <td className="py-1.5 text-right font-mono text-[10px]" style={{ color: improved ? "#22c55e" : "#ef4444" }}>
+        {fmtDiff(diff)} {improved ? "▲" : "▼"}
+      </td>
+    </tr>
+  );
+}
+
 // ── Stop Recommendation Card (P6-21) ─────────────────────────────────────────
 
 function StopRecommendCard({ trades }: { trades: BacktestTrade[] }) {
@@ -2369,6 +2599,12 @@ export default function BacktestPanel({ symbol }: Props) {
   const [resultTab, setResultTab] = useState<ResultTab>("stats");
   const [showTrend, setShowTrend] = useState(false);
 
+  // P8-28: 歷史記錄
+  const [history,        setHistory]        = useState<BacktestSnapshot[]>([]);
+  const [showHistory,    setShowHistory]    = useState(false);
+  const [compareId,      setCompareId]      = useState<string | null>(null);
+  const compareSnap = history.find(h => h.id === compareId) ?? null;
+
   // P0-4: 我的策略書
   const [lastReq,         setLastReq]         = useState<BacktestRequest | null>(null);
   const [saveModalOpen,   setSaveModalOpen]   = useState(false);
@@ -2376,11 +2612,12 @@ export default function BacktestPanel({ symbol }: Props) {
   const [savedRefreshKey, setSavedRefreshKey] = useState(0);
   const [loadedStrategy,  setLoadedStrategy]  = useState<SavedStrategy | null>(null);
 
-  // Load presets once
+  // Load presets + history once
   useEffect(() => {
     getBacktestPresets()
       .then(r => setPresets(r.presets))
       .catch(() => setPresets([]));
+    setHistory(loadHistory());
   }, []);
 
   const handleSubmit = useCallback(async (req: BacktestRequest) => {
@@ -2391,6 +2628,20 @@ export default function BacktestPanel({ symbol }: Props) {
       const res = await runBacktest(req);
       setResult(res);
       setResultTab("stats");
+      // P8-28: auto-save snapshot
+      const snap: BacktestSnapshot = {
+        id:           `${Date.now()}`,
+        timestamp:    new Date().toISOString(),
+        symbol:       req.symbol,
+        strategyType: req.strategy.type,
+        total_return: res.stats.total_return,
+        sharpe:       res.stats.sharpe,
+        max_drawdown: res.stats.max_drawdown,
+        win_rate:     res.stats.win_rate,
+        total_trades: res.stats.total_trades,
+      };
+      saveHistory(snap);
+      setHistory(loadHistory());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "回測執行失敗";
       setError(msg);
@@ -2463,9 +2714,32 @@ export default function BacktestPanel({ symbol }: Props) {
           background:  "var(--bg-surface)",
         }}
       >
-        <div className="text-sm font-bold mb-4" style={{ color: "var(--color-brand)" }}>
-          📊 回測設定 — {symbol}
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-sm font-bold" style={{ color: "var(--color-brand)" }}>
+            📊 回測設定 — {symbol}
+          </div>
+          <button
+            onClick={() => setShowHistory(v => !v)}
+            className="text-[10px] px-2 py-0.5 rounded transition-colors"
+            style={{
+              background: showHistory ? "rgba(139,92,246,0.15)" : "var(--bg-elevated)",
+              color:      showHistory ? "#8b5cf6" : "var(--text-tertiary)",
+              border:     `1px solid ${showHistory ? "rgba(139,92,246,0.4)" : "var(--border)"}`,
+            }}
+          >
+            📜 歷史{history.length > 0 ? ` (${history.length})` : ""}
+          </button>
         </div>
+        {showHistory && (
+          <div className="mb-4 rounded-xl p-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+            <HistoryPanel
+              current={result?.stats ?? ({} as BacktestStats)}
+              history={history}
+              onSelectCompare={id => setCompareId(id)}
+              compareId={compareId}
+            />
+          </div>
+        )}
         {presets.length > 0 ? (
           <StrategyConfig
             presets={presets}
@@ -2633,6 +2907,38 @@ export default function BacktestPanel({ symbol }: Props) {
                   <ScorecardPanel stats={result.stats} />
                   <DecayDetectionPanel equityCurve={result.equity_curve} trades={result.trades} />
                   <StatsPanel stats={result.stats} symbol={symbol} />
+                  <KellyCriterionCard
+                    stats={result.stats}
+                    initialCapital={lastReq?.initial_capital ?? 100000}
+                  />
+                  <CapitalUtilizationCard
+                    trades={result.trades}
+                    equityCurve={result.equity_curve}
+                  />
+                  {/* P8-28: 對比前次 */}
+                  {compareSnap && (
+                    <div className="rounded-xl p-4" style={{ border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.05)" }}>
+                      <div className="text-xs font-semibold mb-2" style={{ color: "#8b5cf6" }}>
+                        🔄 對比前次：{compareSnap.symbol} {compareSnap.timestamp.slice(0, 16).replace("T", " ")}
+                      </div>
+                      <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr>
+                            <th className="text-[10px] pb-1.5" style={{ color: "var(--text-tertiary)", width: 100 }}>指標</th>
+                            <th className="text-[10px] pb-1.5 text-right" style={{ color: "var(--text-tertiary)" }}>本次</th>
+                            <th className="text-[10px] pb-1.5 text-right" style={{ color: "var(--text-tertiary)" }}>前次</th>
+                            <th className="text-[10px] pb-1.5 text-right" style={{ color: "var(--text-tertiary)" }}>差異</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <CompareRow label="總報酬"     current={result.stats.total_return} prev={compareSnap.total_return} isPct lowerBetter={false} />
+                          <CompareRow label="Sharpe"    current={result.stats.sharpe}       prev={compareSnap.sharpe}       lowerBetter={false} />
+                          <CompareRow label="最大回撤"   current={result.stats.max_drawdown} prev={compareSnap.max_drawdown} isPct lowerBetter />
+                          <CompareRow label="勝率"       current={result.stats.win_rate}     prev={compareSnap.win_rate}     isPct lowerBetter={false} />
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   {result.regime_stats && (
                     <RegimeStatsPanel regime={result.regime_stats} />
                   )}
