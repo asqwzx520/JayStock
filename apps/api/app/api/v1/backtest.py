@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.core.rate_limit import limiter
 from app.core.supabase_client import get_supabase
 from app.core.validators import require_user
-from app.services.backtest_service import run_backtest, run_optimize, _PRESET_GRIDS
+from app.services.backtest_service import run_backtest, run_optimize, run_compare, _PRESET_GRIDS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -261,6 +261,58 @@ async def optimize_strategy(
     except Exception as e:
         logger.exception("[optimize] failed symbol=%s strategy=%s", body.symbol, body.strategy_type)
         raise HTTPException(status_code=500, detail=f"最佳化失敗：{e}") from e
+
+
+# ─── P1-6: 策略比較 ──────────────────────────────────────────────────────────
+
+class CompareSlot(BaseModel):
+    name:            str   = Field(..., min_length=1, max_length=40)
+    symbol:          str   = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z]+$")
+    strategy:        BacktestStrategy
+    start_date:      str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:        str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
+
+class CompareRequest(BaseModel):
+    slots: list[CompareSlot] = Field(..., min_length=2, max_length=4)
+
+
+@router.post("/backtest/compare")
+@limiter.limit("5/minute")
+async def compare_strategies(
+    request: Request,
+    body: CompareRequest = Body(...),
+):
+    """
+    多策略並排比較。
+
+    - 2–4 個策略（可不同股票、不同日期範圍）
+    - 回傳：並排績效指標 + 正規化資金曲線（base 100）+ 配對 t-test 顯著性
+    """
+    try:
+        slots = [
+            {
+                "name":            s.name,
+                "symbol":          s.symbol.upper(),
+                "strategy":        s.strategy.model_dump(exclude_none=True),
+                "start_date":      s.start_date,
+                "end_date":        s.end_date,
+                "initial_capital": s.initial_capital,
+                "stop_loss_pct":   s.stop_loss_pct,
+                "take_profit_pct": s.take_profit_pct,
+            }
+            for s in body.slots
+        ]
+        result = await run_compare(slots)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("[compare] failed slots=%d", len(body.slots))
+        raise HTTPException(status_code=500, detail=f"策略比較失敗：{e}") from e
 
 
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────

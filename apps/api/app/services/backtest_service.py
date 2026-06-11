@@ -913,6 +913,180 @@ async def run_optimize(
     }
 
 
+# ── P1-6: 策略比較 ────────────────────────────────────────────────────────────
+
+COMPARE_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444"]
+
+
+def _welch_t_test(a: list[float], b: list[float]) -> tuple[float | None, float | None]:
+    """Welch t-test on two samples without scipy. Returns (t_stat, p_value)."""
+    import math
+    na, nb = len(a), len(b)
+    if na < 2 or nb < 2:
+        return None, None
+    mean_a = sum(a) / na
+    mean_b = sum(b) / nb
+    var_a  = sum((x - mean_a) ** 2 for x in a) / (na - 1) if na > 1 else 0.0
+    var_b  = sum((x - mean_b) ** 2 for x in b) / (nb - 1) if nb > 1 else 0.0
+    se     = math.sqrt(var_a / na + var_b / nb)
+    if se < 1e-12:
+        return 0.0, 1.0
+    t = (mean_a - mean_b) / se
+    # Two-tailed p-value via erfc approximation (valid for large df)
+    p = float(math.erfc(abs(t) / math.sqrt(2)))
+    return round(t, 4), round(p, 4)
+
+
+def _backtest_with_curve_sync(
+    df_raw: pd.DataFrame,
+    bench_df: "pd.DataFrame | None",
+    strategy: dict,
+    symbol: str,
+    initial_capital: float,
+    stop_loss_pct: "float | None",
+    take_profit_pct: "float | None",
+) -> "dict | None":
+    """Returns {stats, equity_curve_norm, trade_returns} or None."""
+    try:
+        df = df_raw.copy()
+        df = _add_indicators(df, strategy)
+        df = df.dropna()
+        if len(df) < 10:
+            return None
+        signals = _gen_signals(df, strategy)
+        equity_df, trades = _run_portfolio(
+            df, signals, initial_capital, symbol,
+            stop_loss_pct, take_profit_pct,
+        )
+        stats = _calc_stats(equity_df, trades, bench_df, initial_capital)
+        # Normalise to base 100
+        eq = equity_df["equity"]
+        base = float(eq.iloc[0]) or 1.0
+        step = max(1, len(eq) // 800)
+        eq_s = eq.iloc[::step]
+        equity_curve_norm = [
+            {"time": idx.strftime("%Y-%m-%d"), "value": round(float(v) / base * 100, 2)}
+            for idx, v in eq_s.items()
+        ]
+        trade_returns = [float(t.get("pnl_pct", 0)) for t in trades]
+        return {
+            "stats":             stats,
+            "equity_curve_norm": equity_curve_norm,
+            "trade_returns":     trade_returns,
+        }
+    except Exception as exc:
+        logger.debug("[compare] backtest failed: %s", exc)
+        return None
+
+
+async def run_compare(
+    slots: list[dict],
+) -> dict:
+    """
+    執行多策略比較（2–4 個 slot）。
+
+    每個 slot:
+        name, symbol, strategy, start_date, end_date,
+        initial_capital, stop_loss_pct, take_profit_pct
+    """
+    import asyncio
+
+    if len(slots) < 2 or len(slots) > 4:
+        raise ValueError("比較策略數必須為 2–4 個")
+
+    # 逐個 slot 抓資料（同 symbol+period 可能重複，先用簡單模式各自抓，TTL 快取覆蓋重複請求）
+    async def _fetch_slot(slot: dict) -> tuple[list[dict], list[dict]]:
+        sym   = slot["symbol"]
+        start = slot["start_date"]
+        end   = slot["end_date"]
+        is_tw = _is_tw_symbol(sym)
+        if is_tw:
+            raw, bench_raw = await asyncio.gather(
+                _fetch_tw_ohlcv(sym,    start, end),
+                _fetch_tw_ohlcv("0050", start, end),
+            )
+        else:
+            yf_sym = _yf_symbol(sym)
+            loop   = asyncio.get_running_loop()
+            raw, bench_raw = await asyncio.gather(
+                loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym, start, end),
+                loop.run_in_executor(None, _fetch_ohlcv_sync, "SPY",  start, end),
+            )
+        return raw, bench_raw
+
+    fetches = await asyncio.gather(*[_fetch_slot(s) for s in slots])
+
+    def _run_all() -> list[dict | None]:
+        out = []
+        for slot, (raw, bench_raw) in zip(slots, fetches):
+            if not raw:
+                out.append(None)
+                continue
+            df_raw   = _to_df(raw)
+            bench_df = _to_df(bench_raw) if bench_raw else None
+            if len(df_raw) < 50:
+                out.append(None)
+                continue
+            res = _backtest_with_curve_sync(
+                df_raw, bench_df,
+                slot["strategy"],
+                slot["symbol"],
+                slot.get("initial_capital", 1_000_000.0),
+                slot.get("stop_loss_pct"),
+                slot.get("take_profit_pct"),
+            )
+            out.append(res)
+        return out
+
+    loop    = asyncio.get_running_loop()
+    results = await loop.run_in_executor(None, _run_all)
+
+    strategies = []
+    for i, (slot, res) in enumerate(zip(slots, results)):
+        if res is None:
+            strategies.append({
+                "name":             slot.get("name", f"策略 {i+1}"),
+                "symbol":           slot["symbol"],
+                "color":            COMPARE_COLORS[i % len(COMPARE_COLORS)],
+                "error":            f"無法取得 {slot['symbol']} 資料或資料不足",
+                "stats":            None,
+                "equity_curve_norm": [],
+            })
+        else:
+            strategies.append({
+                "name":             slot.get("name", f"策略 {i+1}"),
+                "symbol":           slot["symbol"],
+                "color":            COMPARE_COLORS[i % len(COMPARE_COLORS)],
+                "stats":            res["stats"],
+                "equity_curve_norm": res["equity_curve_norm"],
+                "error":            None,
+            })
+
+    # 配對顯著性 t-test
+    valid = [(i, res) for i, res in enumerate(results) if res is not None]
+    pairs = []
+    for ai in range(len(valid)):
+        for bi in range(ai + 1, len(valid)):
+            idx_a, res_a = valid[ai]
+            idx_b, res_b = valid[bi]
+            t_stat, p_value = _welch_t_test(res_a["trade_returns"], res_b["trade_returns"])
+            pairs.append({
+                "a":           strategies[idx_a]["name"],
+                "b":           strategies[idx_b]["name"],
+                "t_stat":      t_stat,
+                "p_value":     p_value,
+                "significant": p_value is not None and p_value < 0.05,
+                "note":        "無法計算（交易筆數不足）" if t_stat is None else (
+                    "差異顯著 (p < 0.05)" if p_value < 0.05 else "差異不顯著 (p ≥ 0.05)"
+                ),
+            })
+
+    return {
+        "strategies":    strategies,
+        "significance":  {"pairs": pairs},
+    }
+
+
 def _build_monthly_returns(equity_df: pd.DataFrame) -> list[dict]:
     """計算月度報酬率（用於熱力圖）"""
     eq = equity_df["equity"].copy()

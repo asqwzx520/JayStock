@@ -1537,3 +1537,61 @@ export async function getOptimizePresets(): Promise<Record<string, Record<string
   return r.presets;
 }
 
+// ── P1-6: 策略比較 ──────────────────────────────────────────────────────────
+
+export interface CompareSlotRequest {
+  name:            string;
+  symbol:          string;
+  strategy:        BacktestStrategyConfig;
+  start_date:      string;
+  end_date:        string;
+  initial_capital?: number;
+  stop_loss_pct?:  number;
+  take_profit_pct?: number;
+}
+
+export interface CompareRequest {
+  slots: CompareSlotRequest[];
+}
+
+export interface CompareEquityPoint {
+  time:  string;
+  value: number;   // normalised to base 100
+}
+
+export interface CompareStrategyResult {
+  name:             string;
+  symbol:           string;
+  color:            string;
+  stats:            BacktestStats | null;
+  equity_curve_norm: CompareEquityPoint[];
+  error:            string | null;
+}
+
+export interface ComparePair {
+  a:           string;
+  b:           string;
+  t_stat:      number | null;
+  p_value:     number | null;
+  significant: boolean;
+  note:        string;
+}
+
+export interface CompareResponse {
+  strategies:  CompareStrategyResult[];
+  significance: { pairs: ComparePair[] };
+}
+
+export async function runCompare(body: CompareRequest): Promise<CompareResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/compare`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+

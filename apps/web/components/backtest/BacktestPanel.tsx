@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import type { KlineBar, SavedStrategy, SaveStrategyRequest } from "@/lib/api";
 import OptimizePanel from "./OptimizePanel";
+import ComparePanel  from "./ComparePanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1391,7 +1392,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize" | "compare";
 
 interface Props {
   symbol: string;
@@ -1477,6 +1478,7 @@ export default function BacktestPanel({ symbol }: Props) {
     { id: "trades",   label: "交易明細" },
     { id: "monthly",  label: "月份報酬" },
     { id: "optimize", label: "🔍 最佳化", alwaysEnabled: true },
+    { id: "compare",  label: "⚖️ 比較",   alwaysEnabled: true },
   ];
 
   return (
@@ -1553,10 +1555,17 @@ export default function BacktestPanel({ symbol }: Props) {
 
         {/* Content area */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
-          {/* Optimize tab — always visible regardless of result */}
+          {/* Optimize tab */}
           {resultTab === "optimize" && (
             <div className="-m-4 h-[calc(100%+2rem)]">
               <OptimizePanel symbol={symbol} presets={presets} lastReq={lastReq} />
+            </div>
+          )}
+
+          {/* Compare tab */}
+          {resultTab === "compare" && (
+            <div className="-m-4 h-[calc(100%+2rem)]">
+              <ComparePanel symbol={symbol} presets={presets} lastReq={lastReq} />
             </div>
           )}
 
