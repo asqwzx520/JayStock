@@ -80,6 +80,7 @@
 - [x] **P0-3 自訂策略積木式編輯器**（`c54dc52`）：`<ConditionsEditor>` 6 大分組（價量/均線/動能/通道/EPS/營收）、AND/OR toggle、最多 10 條件；後端新增 EPS / 月營收 / 年營收 9 個基本面欄位，Lookahead 防護（季 EPS +45d / 月營收 +10d / 年營收 +90d）
 - [x] **P0-4 儲存策略 / 我的策略列表**（`1fcfabf`）：`<SaveStrategyModal>` 自訂名稱、`<MyStrategiesDrawer>` 右側抽屜（▶ 一鍵重跑 / 🗑 刪除），Supabase `backtest_strategies` 表 + in-memory fallback（每用戶上限 50 筆）
 - [x] **P1-5 參數最佳化**（`3877b83`）：`run_optimize()` Grid Search，抓一次資料跑所有組合；`POST /backtest/optimize`（限流 3/min）；`<OptimizePanel>` 含模式切換（A 自訂 Grid / B 一鍵預設）、SVG 熱力圖（2 參數時）、Top 30 排行表（🥇🥈🥉），回測 tab bar 新增「🔍 最佳化」永遠可點 tab
+- [x] **P1-6 策略比較**（`bfc7ab8`）：`run_compare()` 支援 2–4 個策略（可不同股票/日期）；`POST /backtest/compare`（限流 5/min）；`<ComparePanel>` 含 A 並排績效卡片（★ 標最佳指標）、B lightweight-charts 疊加資金曲線（base 100 正規化）、C Welch t-test 顯著性（可收合），tab bar 新增「⚖️ 比較」永遠可點 tab
 - [x] **Screener 基本面篩選**（Sprint 6，`7caeeb4`）：
   - 股票池 70 → 127 檔（補高殖利率傳產、生技、ETF：00878/00713/00919/006208/00881 等）
   - 7 個基本面欄位：PE / 殖利率% / 毛利率% / 市值億 / ROE% / EPS成長% / 年營收成長%
