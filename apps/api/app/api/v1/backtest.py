@@ -344,6 +344,59 @@ async def validate_dsl(
     return dsl_validate(body.dsl)
 
 
+# ─── P2-9: 全台股池掃描 ───────────────────────────────────────────────────────
+
+class ScanRequest(BaseModel):
+    strategy:        BacktestStrategy
+    start_date:      str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:        str   = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+    extra_symbols:   list[str] = Field(default_factory=list, max_length=50)
+
+
+@router.post("/backtest/scan")
+@limiter.limit("2/minute")
+async def create_scan(
+    request: Request,
+    body: ScanRequest = Body(...),
+):
+    """
+    啟動全台股池回測掃描（非同步 job）。
+
+    回傳 {job_id}，前端以 GET /backtest/scan/{job_id} 輪詢進度。
+    """
+    from app.services.scan_service import create_scan_job, TW_SCAN_POOL
+    job_id = create_scan_job(
+        strategy        = body.strategy.model_dump(exclude_none=True),
+        start_date      = body.start_date,
+        end_date        = body.end_date,
+        initial_capital = body.initial_capital,
+        stop_loss       = body.stop_loss_pct,
+        take_profit     = body.take_profit_pct,
+        extra_symbols   = [s.upper() for s in (body.extra_symbols or [])],
+    )
+    return {"job_id": job_id, "pool_size": len(TW_SCAN_POOL)}
+
+
+@router.get("/backtest/scan/{job_id}")
+async def get_scan_result(job_id: str):
+    """輪詢掃描進度與結果。"""
+    from app.services.scan_service import get_job
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+    return {
+        "job_id":   job.job_id,
+        "status":   job.status,
+        "progress": job.progress,
+        "total":    job.total,
+        "results":  job.results,
+        "error":    job.error,
+    }
+
+
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
 #
 # Supabase 表：backtest_strategies
