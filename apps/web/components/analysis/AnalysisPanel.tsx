@@ -1896,7 +1896,7 @@ function FinancialSection({ data }: { data: FinancialsData }) {
       {data.quarterly_eps.length > 0 && (
         <Section title="📋 季度 EPS">
           <div className="flex items-end gap-2" style={{ height: 100 }}>
-            {data.quarterly_eps.slice(-8).map((q, i) => {
+            {data.quarterly_eps.slice(-8).map((q, _i) => {
               const v = q.eps ?? 0;
               const maxV = Math.max(...data.quarterly_eps.map(x => Math.abs(x.eps ?? 0)), 1);
               const h = Math.round(Math.abs(v) / maxV * 80);
@@ -1964,7 +1964,7 @@ function DividendHistorySection({
   const barW = Math.max(8, Math.floor(iW / n) - 4);
 
   const toX      = (i: number) => PAD.l + (i + 0.5) * (iW / n);
-  const toDivY   = (v: number) => PAD.t + (1 - v / maxDiv)   * iH;
+  const _toDivY  = (v: number) => PAD.t + (1 - v / maxDiv)   * iH;
   const toYieldY = (v: number) => PAD.t + (1 - v / maxYield) * iH;
 
   const yieldPts = items
@@ -2132,7 +2132,7 @@ export default function AnalysisPanel({ symbol }: Props) {
   const [divData,   setDivData]   = useState<DividendHistoryResponse | null>(null);
   const [earnData,   setEarnData]   = useState<EarningsResponse | null>(null);
   const [faData,     setFaData]     = useState<FinancialAlertsResponse | null>(null);
-  const [customPeers, setCustomPeers] = useState("");
+  const [, setCustomPeers] = useState("");
 
   const [patData,   setPatData]   = useState<CandlePattern[]>([]);
   const [patLoad,   setPatLoad]   = useState(false);

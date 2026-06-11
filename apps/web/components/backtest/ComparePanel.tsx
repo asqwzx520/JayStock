@@ -14,6 +14,9 @@ import { runCompare } from "@/lib/api";
 
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444"];
 
+const _DEFAULT_START = new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
+const _DEFAULT_END   = new Date().toISOString().slice(0, 10);
+
 const STRATEGY_DEFS: Record<string, { label: string; params: { key: string; label: string; default: number }[] }> = {
   ma_cross:     { label: "均線黃金交叉",      params: [{ key: "fast", label: "快線", default: 5 }, { key: "slow", label: "慢線", default: 20 }] },
   rsi_mean_rev: { label: "RSI 超賣反彈",      params: [{ key: "period", label: "週期", default: 14 }, { key: "oversold", label: "超賣線", default: 30 }, { key: "overbought", label: "超買線", default: 70 }] },
@@ -345,9 +348,9 @@ function makeDefaultSlot(idx: number, symbol: string, lastReq: BacktestRequest |
   };
 }
 
-export default function ComparePanel({ symbol, presets, lastReq }: ComparePanelProps) {
-  const defaultStart = lastReq?.start_date ?? new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
-  const defaultEnd   = lastReq?.end_date   ?? new Date().toISOString().slice(0, 10);
+export default function ComparePanel({ symbol, presets: _presets, lastReq }: ComparePanelProps) {
+  const defaultStart = lastReq?.start_date ?? _DEFAULT_START;
+  const defaultEnd   = lastReq?.end_date   ?? _DEFAULT_END;
   const defaultCap   = lastReq?.initial_capital ?? 1_000_000;
 
   const [slots,     setSlots]    = useState<SlotState[]>(() => [

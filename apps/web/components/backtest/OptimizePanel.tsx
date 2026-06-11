@@ -3,7 +3,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type {
   BacktestRequest,
-  BacktestStats,
   OptimizeRequest,
   OptimizeResponse,
   OptimizeHeatmap,
@@ -45,6 +44,17 @@ const STRATEGY_LABELS: Record<string, string> = {
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+
+const _OPT_DEFAULT_START = new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
+const _OPT_DEFAULT_END   = new Date().toISOString().slice(0, 10);
+
+const PRESET_GRIDS: Record<string, Record<string, number[]>> = {
+  ma_cross:     { fast: [3,5,8,10,15,20],  slow: [15,20,30,40,50,60,80] },
+  rsi_mean_rev: { period: [10,14,20,25], oversold: [20,25,30,35], overbought: [65,70,75,80] },
+  macd_signal:  { fast: [8,10,12,15], slow: [20,24,26,30], signal: [7,9,11] },
+  kd_cross:     { k_period: [5,9,14], d_period: [3,5], buy_zone: [20,25,30], sell_zone: [70,75,80] },
+  boll_bounce:  { period: [10,15,20,25,30], std: [1.5,2.0,2.5,3.0] },
+};
 
 function metricColor(val: number, min: number, max: number): string {
   if (max === min) return "hsl(210,60%,50%)";
@@ -301,22 +311,13 @@ export interface OptimizePanelProps {
   lastReq?:  BacktestRequest | null;
 }
 
-export default function OptimizePanel({ symbol, presets, lastReq }: OptimizePanelProps) {
+export default function OptimizePanel({ symbol, presets: _presets, lastReq }: OptimizePanelProps) {
   // Config state
   const [mode,         setMode]        = useState<"preset" | "custom">("preset");
   const [stratType,    setStratType]   = useState<string>(
     lastReq?.strategy?.type && lastReq.strategy.type !== "custom" ? lastReq.strategy.type : "ma_cross"
   );
   const [sortBy,       setSortBy]      = useState<OptimizeSortBy>("sharpe");
-
-  // Built-in preset grids (static — matches backend _PRESET_GRIDS)
-  const PRESET_GRIDS: Record<string, Record<string, number[]>> = {
-    ma_cross:     { fast: [3,5,8,10,15,20],  slow: [15,20,30,40,50,60,80] },
-    rsi_mean_rev: { period: [10,14,20,25], oversold: [20,25,30,35], overbought: [65,70,75,80] },
-    macd_signal:  { fast: [8,10,12,15], slow: [20,24,26,30], signal: [7,9,11] },
-    kd_cross:     { k_period: [5,9,14], d_period: [3,5], buy_zone: [20,25,30], sell_zone: [70,75,80] },
-    boll_bounce:  { period: [10,15,20,25,30], std: [1.5,2.0,2.5,3.0] },
-  };
 
   // Custom grid state (comma-separated strings per param)
   const defaultCustomValues = (type: string): Record<string, string> => {
@@ -331,8 +332,8 @@ export default function OptimizePanel({ symbol, presets, lastReq }: OptimizePane
   };
 
   // Derive param keys for current strategy
-  const currentGrid  = PRESET_GRIDS[stratType] ?? {};
-  const paramKeys    = Object.keys(currentGrid);
+  const currentGrid = useMemo(() => PRESET_GRIDS[stratType] ?? {}, [stratType]);
+  const paramKeys   = useMemo(() => Object.keys(currentGrid), [currentGrid]);
 
   // Count combos
   const countCombos = useCallback(() => {
@@ -345,8 +346,8 @@ export default function OptimizePanel({ symbol, presets, lastReq }: OptimizePane
   }, [mode, currentGrid, paramKeys, customValues]);
 
   // Date range from lastReq or default
-  const defaultStart = useMemo(() => lastReq?.start_date ?? new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10), [lastReq?.start_date]);
-  const defaultEnd   = useMemo(() => lastReq?.end_date   ?? new Date().toISOString().slice(0, 10), [lastReq?.end_date]);
+  const defaultStart = lastReq?.start_date ?? _OPT_DEFAULT_START;
+  const defaultEnd   = lastReq?.end_date   ?? _OPT_DEFAULT_END;
   const defaultCap   = lastReq?.initial_capital ?? 1_000_000;
 
   // Run optimize

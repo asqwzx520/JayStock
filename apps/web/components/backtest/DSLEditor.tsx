@@ -107,7 +107,6 @@ function highlight(text: string): React.ReactNode {
   ranges.sort((a, b) => a.s - b.s || b.e - a.e);
 
   // Emit non-overlapping spans
-  const used = new Set<number>();
   for (const r of ranges) {
     if (r.s < i) continue;
     // Plain text before this range
@@ -272,7 +271,7 @@ function ReferencePanel({ onInsert }: { onInsert: (text: string, target: "entry"
 export default function DSLEditor({ value, onChange }: DSLEditorProps) {
   const [entryVal, setEntryVal] = useState<ValidationResult | null>(null);
   const [exitVal,  setExitVal]  = useState<ValidationResult | null>(null);
-  const [validating, setValidating] = useState(false);
+  const [_validating, setValidating] = useState(false);
 
   const debouncedEntry = useDebounce(value.entry_dsl, 500);
   const debouncedExit  = useDebounce(value.exit_dsl,  500);

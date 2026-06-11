@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   createChart, LineSeries, HistogramSeries, LineStyle,
-  type IChartApi,
 } from "lightweight-charts";
 import type { BacktestTrade } from "@/lib/api";
 
@@ -212,11 +211,10 @@ function EquityPercChart({ curves }: { curves: PercentileCurve[] }) {
 // ── Histogram Chart ───────────────────────────────────────────────────────────
 
 function HistChart({
-  values, label, fmtX, color,
+  values, label, color,
 }: {
   values: number[];
   label:  string;
-  fmtX:   (v: number) => string;
   color:  string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -378,13 +376,13 @@ export default function MonteCarloPanel({ trades, initialCapital }: Props) {
             <HistChart
               values={result.finalReturns}
               label="最終報酬率分佈"
-              fmtX={v => `${(v*100).toFixed(0)}%`}
+
               color="#3b82f6"
             />
             <HistChart
               values={result.maxDrawdowns}
               label="最大回撤分佈"
-              fmtX={v => `${(v*100).toFixed(0)}%`}
+
               color="#ef4444"
             />
           </div>
