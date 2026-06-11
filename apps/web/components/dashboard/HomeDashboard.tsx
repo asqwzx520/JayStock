@@ -177,7 +177,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 // ─── Block ① 自選股報價列表 ──────────────────────────────────────────────────
 
-function WatchlistBlock({
+function _WatchlistBlock({
   symbols,
   data,
   onSelectStock,

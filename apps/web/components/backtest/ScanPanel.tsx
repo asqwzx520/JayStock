@@ -69,10 +69,11 @@ export default function ScanPanel({ presets, onSelectSymbol }: ScanPanelProps) {
   const [extraInput, setExtraInput] = useState("");
 
   // ── Job state ────────────────────────────────────────────────────────────
-  const [jobId,    setJobId]    = useState<string | null>(null);
+  const [, setJobId]       = useState<string | null>(null);
   const [jobState, setJobState] = useState<ScanJobResponse | null>(null);
   const [loading,  setLoading]  = useState(false);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollFnRef  = useRef<((jid: string) => Promise<void>) | null>(null);
 
   // ── Result display ───────────────────────────────────────────────────────
   const [sortKey,  setSortKey]  = useState<SortKey>("score");
@@ -108,7 +109,7 @@ export default function ScanPanel({ presets, onSelectSymbol }: ScanPanelProps) {
       const data: ScanJobResponse = await res.json();
       setJobState(data);
       if (data.status === "running" || data.status === "pending") {
-        pollRef.current = setTimeout(() => poll(jid), 3000);
+        pollRef.current = setTimeout(() => pollFnRef.current?.(jid), 3000);
       } else {
         setLoading(false);
       }
@@ -117,6 +118,7 @@ export default function ScanPanel({ presets, onSelectSymbol }: ScanPanelProps) {
     }
   }, []);
 
+  useEffect(() => { pollFnRef.current = poll; }, [poll]);
   useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current); }, []);
 
   // ── Start scan ───────────────────────────────────────────────────────────
@@ -351,7 +353,6 @@ export default function ScanPanel({ presets, onSelectSymbol }: ScanPanelProps) {
                     </td>
                     {COLS.map(col => {
                       const v = r[col.key] as number;
-                      const isGood = col.good === "high" ? v > 0 : col.good === "low" ? v > -0.2 : null;
                       return (
                         <td
                           key={col.key}

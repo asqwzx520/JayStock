@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import type { StockItem, AlertNotification, WatchlistState } from "@/lib/api";
+import type { StockItem, AlertNotification } from "@/lib/api";
 import { searchStocks, getMarketIndices, alertsApi, watchlistApi } from "@/lib/api";
 import { usePushNotification } from "@/hooks/usePushNotification";
 

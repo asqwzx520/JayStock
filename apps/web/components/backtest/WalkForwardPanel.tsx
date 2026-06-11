@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import {
   createChart, LineSeries, LineStyle,
-  type IChartApi,
 } from "lightweight-charts";
-import type { BacktestPreset, OptimizeRequest } from "@/lib/api";
-import { getOptimizePresets } from "@/lib/api";
+import type { BacktestPreset } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
