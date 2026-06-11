@@ -16,6 +16,7 @@ import {
   listSavedStrategies, saveStrategy, deleteSavedStrategy,
 } from "@/lib/api";
 import type { KlineBar, SavedStrategy, SaveStrategyRequest } from "@/lib/api";
+import OptimizePanel from "./OptimizePanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1390,7 +1391,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "optimize";
 
 interface Props {
   symbol: string;
@@ -1469,12 +1470,13 @@ export default function BacktestPanel({ symbol }: Props) {
     ? `${lastReq.symbol} · ${lastReq.strategy.type} · ${new Date().toISOString().slice(5, 10)}`
     : "";
 
-  const RESULT_TABS: { id: ResultTab; label: string }[] = [
-    { id: "stats",   label: "績效摘要" },
-    { id: "chart",   label: "資金曲線" },
-    { id: "kline",   label: "K線標記" },
-    { id: "trades",  label: "交易明細" },
-    { id: "monthly", label: "月份報酬" },
+  const RESULT_TABS: { id: ResultTab; label: string; alwaysEnabled?: boolean }[] = [
+    { id: "stats",    label: "績效摘要" },
+    { id: "chart",    label: "資金曲線" },
+    { id: "kline",    label: "K線標記" },
+    { id: "trades",   label: "交易明細" },
+    { id: "monthly",  label: "月份報酬" },
+    { id: "optimize", label: "🔍 最佳化", alwaysEnabled: true },
   ];
 
   return (
@@ -1512,12 +1514,12 @@ export default function BacktestPanel({ symbol }: Props) {
               <button
                 key={t.id}
                 onClick={() => setResultTab(t.id)}
-                disabled={!result}
+                disabled={!result && !t.alwaysEnabled}
                 className="px-4 py-2 text-xs font-medium transition-colors shrink-0"
                 style={{
                   color:        resultTab === t.id ? "var(--color-brand)" : "var(--text-tertiary)",
                   borderBottom: resultTab === t.id ? "2px solid var(--color-brand)" : "2px solid transparent",
-                  opacity:      result ? 1 : 0.4,
+                  opacity:      (result || t.alwaysEnabled) ? 1 : 0.4,
                 }}
               >
                 {t.label}
@@ -1551,8 +1553,15 @@ export default function BacktestPanel({ symbol }: Props) {
 
         {/* Content area */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          {/* Optimize tab — always visible regardless of result */}
+          {resultTab === "optimize" && (
+            <div className="-m-4 h-[calc(100%+2rem)]">
+              <OptimizePanel symbol={symbol} presets={presets} lastReq={lastReq} />
+            </div>
+          )}
+
           {/* Initial state */}
-          {!result && !loading && !error && (
+          {resultTab !== "optimize" && !result && !loading && !error && (
             <div className="h-full flex flex-col items-center justify-center gap-3 text-center" style={{ color: "var(--text-tertiary)" }}>
               <span className="text-5xl">📈</span>
               <div className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -1566,7 +1575,7 @@ export default function BacktestPanel({ symbol }: Props) {
           )}
 
           {/* Loading */}
-          {loading && (
+          {resultTab !== "optimize" && loading && (
             <div className="h-full flex flex-col items-center justify-center gap-3">
               <div className="animate-spin text-4xl">⏳</div>
               <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -1579,7 +1588,7 @@ export default function BacktestPanel({ symbol }: Props) {
           )}
 
           {/* Error */}
-          {error && !loading && (
+          {resultTab !== "optimize" && error && !loading && (
             <div className="rounded-lg p-4" style={{ background: "var(--color-down-subtle)", border: "1px solid var(--color-down)" }}>
               <div className="text-sm font-medium mb-1" style={{ color: "var(--color-down)" }}>回測失敗</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{error}</div>
@@ -1587,7 +1596,7 @@ export default function BacktestPanel({ symbol }: Props) {
           )}
 
           {/* Results */}
-          {result && !loading && (
+          {resultTab !== "optimize" && result && !loading && (
             <>
               {resultTab === "stats" && (
                 <StatsPanel stats={result.stats} symbol={symbol} />

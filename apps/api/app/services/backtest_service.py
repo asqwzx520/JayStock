@@ -727,6 +727,192 @@ def _calc_stats(
     }
 
 
+# ── P1-5: 參數最佳化 ──────────────────────────────────────────────────────────
+
+_PRESET_GRIDS: dict[str, dict[str, list]] = {
+    "ma_cross": {
+        "fast": [3, 5, 8, 10, 15, 20],
+        "slow": [15, 20, 30, 40, 50, 60, 80],
+    },
+    "rsi_mean_rev": {
+        "period":     [10, 14, 20, 25],
+        "oversold":   [20, 25, 30, 35],
+        "overbought": [65, 70, 75, 80],
+    },
+    "macd_signal": {
+        "fast":   [8, 10, 12, 15],
+        "slow":   [20, 24, 26, 30],
+        "signal": [7, 9, 11],
+    },
+    "kd_cross": {
+        "k_period":  [5, 9, 14],
+        "d_period":  [3, 5],
+        "buy_zone":  [20, 25, 30],
+        "sell_zone": [70, 75, 80],
+    },
+    "boll_bounce": {
+        "period": [10, 15, 20, 25, 30],
+        "std":    [1.5, 2.0, 2.5, 3.0],
+    },
+}
+
+MAX_OPTIMIZE_COMBOS = 300
+
+
+def _build_param_combos(param_ranges: dict[str, list]) -> list[dict]:
+    import itertools
+    keys   = list(param_ranges.keys())
+    values = [param_ranges[k] for k in keys]
+    return [dict(zip(keys, c)) for c in itertools.product(*values)]
+
+
+def _backtest_core_sync(
+    df_raw: pd.DataFrame,
+    bench_df: "pd.DataFrame | None",
+    strategy: dict,
+    symbol: str,
+    initial_capital: float,
+    stop_loss_pct: "float | None",
+    take_profit_pct: "float | None",
+) -> "dict | None":
+    """Sync core backtest on pre-fetched data. Returns stats dict or None."""
+    try:
+        df = df_raw.copy()
+        df = _add_indicators(df, strategy)
+        df = df.dropna()
+        if len(df) < 10:
+            return None
+        signals = _gen_signals(df, strategy)
+        equity_df, trades = _run_portfolio(
+            df, signals, initial_capital, symbol,
+            stop_loss_pct, take_profit_pct,
+        )
+        return _calc_stats(equity_df, trades, bench_df, initial_capital)
+    except Exception as exc:
+        logger.debug("[optimize] combo %s failed: %s", strategy, exc)
+        return None
+
+
+_SORT_KEYS = {
+    "sharpe":       lambda r: r["stats"].get("sharpe", -999),
+    "total_return": lambda r: r["stats"].get("total_return", -999),
+    "win_rate":     lambda r: r["stats"].get("win_rate", 0),
+    "max_drawdown": lambda r: -r["stats"].get("max_drawdown", 999),
+}
+
+
+async def run_optimize(
+    symbol: str,
+    strategy_type: str,
+    param_ranges: dict[str, list],
+    start_date: str,
+    end_date: str,
+    initial_capital: float = 1_000_000.0,
+    stop_loss_pct: "float | None" = None,
+    take_profit_pct: "float | None" = None,
+    sort_by: str = "sharpe",
+    top_n: int = 30,
+    use_preset: bool = False,
+) -> dict:
+    import asyncio
+
+    effective_ranges = _PRESET_GRIDS.get(strategy_type, {}) if use_preset else param_ranges
+    if not effective_ranges:
+        raise ValueError(f"策略 {strategy_type} 無可用的參數範圍")
+
+    combos = _build_param_combos(effective_ranges)
+    if not combos:
+        raise ValueError("參數範圍不能為空")
+    if len(combos) > MAX_OPTIMIZE_COMBOS:
+        raise ValueError(f"參數組合數（{len(combos)}）超過上限 {MAX_OPTIMIZE_COMBOS}，請縮小範圍")
+
+    yf_sym = _yf_symbol(symbol)
+    is_tw  = _is_tw_symbol(symbol)
+
+    if is_tw:
+        raw, raw_bench = await asyncio.gather(
+            _fetch_tw_ohlcv(symbol,  start_date, end_date),
+            _fetch_tw_ohlcv("0050",  start_date, end_date),
+        )
+    else:
+        loop = asyncio.get_running_loop()
+        raw, raw_bench = await asyncio.gather(
+            loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym, start_date, end_date),
+            loop.run_in_executor(None, _fetch_ohlcv_sync, "SPY",  start_date, end_date),
+        )
+
+    if not raw:
+        raise ValueError(f"無法取得 {symbol} 的歷史資料，請確認代號正確。")
+
+    df_raw   = _to_df(raw)
+    bench_df = _to_df(raw_bench) if raw_bench else None
+    if len(df_raw) < 50:
+        raise ValueError(f"{symbol} 資料不足（{len(df_raw)} 筆），請擴大日期範圍。")
+
+    def _run_all() -> list[dict]:
+        results: list[dict] = []
+        for params in combos:
+            strat = {"type": strategy_type, **params}
+            stats = _backtest_core_sync(df_raw, bench_df, strat, symbol, initial_capital, stop_loss_pct, take_profit_pct)
+            if stats is not None:
+                results.append({"params": params, "stats": stats})
+        return results
+
+    loop = asyncio.get_running_loop()
+    results = await loop.run_in_executor(None, _run_all)
+
+    key_fn = _SORT_KEYS.get(sort_by, _SORT_KEYS["sharpe"])
+    results.sort(key=key_fn, reverse=True)
+
+    top_results = results[:top_n]
+    for i, r in enumerate(top_results):
+        r["rank"] = i + 1
+
+    # 熱力圖（僅 2 參數時）
+    heatmap = None
+    param_keys = list(effective_ranges.keys())
+    if len(param_keys) == 2:
+        px, py = param_keys[0], param_keys[1]
+        x_vals  = effective_ranges[px]
+        y_vals  = effective_ranges[py]
+        result_map: dict[tuple, float] = {}
+        for r in results:
+            k = (r["params"].get(px), r["params"].get(py))
+            result_map[k] = float(key_fn(r))
+        metric_labels = {
+            "sharpe": "Sharpe", "total_return": "總報酬%",
+            "win_rate": "勝率%", "max_drawdown": "MaxDD%",
+        }
+        matrix: list[list] = []
+        for xv in x_vals:
+            row_vals: list = []
+            for yv in y_vals:
+                val = result_map.get((xv, yv))
+                row_vals.append(round(val, 4) if val is not None else None)
+            matrix.append(row_vals)
+        heatmap = {
+            "param_x":     px,
+            "param_y":     py,
+            "x_values":    x_vals,
+            "y_values":    y_vals,
+            "matrix":      matrix,
+            "metric":      sort_by,
+            "metric_label": metric_labels.get(sort_by, sort_by),
+        }
+
+    logger.info(
+        "[optimize] %s %s combos=%d/%d sort=%s",
+        symbol, strategy_type, len(results), len(combos), sort_by,
+    )
+    return {
+        "results":      top_results,
+        "total_combos": len(combos),
+        "valid_combos": len(results),
+        "sort_by":      sort_by,
+        "heatmap":      heatmap,
+    }
+
+
 def _build_monthly_returns(equity_df: pd.DataFrame) -> list[dict]:
     """計算月度報酬率（用於熱力圖）"""
     eq = equity_df["equity"].copy()

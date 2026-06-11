@@ -1477,3 +1477,63 @@ export async function getCalendar(symbols: string[]): Promise<CalendarResponse> 
   return res.json();
 }
 
+// ── P1-5: 參數最佳化 ──────────────────────────────────────────────────────────
+
+export type OptimizeSortBy = "sharpe" | "total_return" | "win_rate" | "max_drawdown";
+
+export interface OptimizeRequest {
+  symbol:          string;
+  strategy_type:   string;
+  param_ranges?:   Record<string, number[]>;
+  use_preset?:     boolean;
+  start_date:      string;
+  end_date:        string;
+  initial_capital?: number;
+  stop_loss_pct?:  number;
+  take_profit_pct?: number;
+  sort_by?:        OptimizeSortBy;
+  top_n?:          number;
+}
+
+export interface OptimizeResultItem {
+  rank:   number;
+  params: Record<string, number>;
+  stats:  BacktestStats;
+}
+
+export interface OptimizeHeatmap {
+  param_x:      string;
+  param_y:      string;
+  x_values:     number[];
+  y_values:     number[];
+  matrix:       (number | null)[][];
+  metric:       OptimizeSortBy;
+  metric_label: string;
+}
+
+export interface OptimizeResponse {
+  results:      OptimizeResultItem[];
+  total_combos: number;
+  valid_combos: number;
+  sort_by:      OptimizeSortBy;
+  heatmap:      OptimizeHeatmap | null;
+}
+
+export async function runOptimize(body: OptimizeRequest): Promise<OptimizeResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/optimize`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getOptimizePresets(): Promise<Record<string, Record<string, number[]>>> {
+  const r = await fetcher<{ presets: Record<string, Record<string, number[]>> }>("/api/v1/backtest/optimize/presets");
+  return r.presets;
+}
+

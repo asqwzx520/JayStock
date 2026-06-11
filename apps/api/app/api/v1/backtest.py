@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.core.rate_limit import limiter
 from app.core.supabase_client import get_supabase
 from app.core.validators import require_user
-from app.services.backtest_service import run_backtest
+from app.services.backtest_service import run_backtest, run_optimize, _PRESET_GRIDS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -190,6 +190,77 @@ async def run_backtest_endpoint(
     except Exception as e:
         logger.exception("[backtest] 執行失敗 symbol=%s strategy=%s", body.symbol, body.strategy.type)
         raise HTTPException(status_code=500, detail=f"回測執行失敗：{e}") from e
+
+
+# ─── P1-5: 參數最佳化 ────────────────────────────────────────────────────────
+
+_VALID_STRATEGY_TYPES = {"ma_cross", "rsi_mean_rev", "macd_signal", "kd_cross", "boll_bounce"}
+_VALID_SORT_BY        = {"sharpe", "total_return", "win_rate", "max_drawdown"}
+
+
+class OptimizeRequest(BaseModel):
+    symbol:          str  = Field(..., min_length=1, max_length=10, pattern=r"^[0-9A-Za-z]+$")
+    strategy_type:   str
+    param_ranges:    Optional[dict[str, list]] = None
+    use_preset:      bool = False
+    start_date:      str  = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date:        str  = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    initial_capital: float = Field(default=1_000_000.0, gt=0)
+    stop_loss_pct:   Optional[float] = None
+    take_profit_pct: Optional[float] = None
+    sort_by:         str  = Field(default="sharpe")
+    top_n:           int  = Field(default=30, ge=5, le=100)
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if self.strategy_type not in _VALID_STRATEGY_TYPES:
+            raise ValueError(f"strategy_type 必須是 {_VALID_STRATEGY_TYPES} 之一")
+        if self.sort_by not in _VALID_SORT_BY:
+            raise ValueError(f"sort_by 必須是 {_VALID_SORT_BY} 之一")
+        if not self.use_preset and not self.param_ranges:
+            raise ValueError("請提供 param_ranges 或設定 use_preset=true")
+        return self
+
+
+@router.get("/backtest/optimize/presets")
+async def get_optimize_presets():
+    """回傳各策略的預設最佳化掃描範圍"""
+    return {"presets": _PRESET_GRIDS}
+
+
+@router.post("/backtest/optimize")
+@limiter.limit("3/minute")
+async def optimize_strategy(
+    request: Request,
+    body: OptimizeRequest = Body(...),
+):
+    """
+    執行參數最佳化（Grid Search）。
+
+    - use_preset=true：使用內建掃描範圍，自動計算所有組合
+    - param_ranges：自訂各參數候選值（A 模式）
+    - 最多 300 組合；回傳 Top N 排行 + 2 參數時附熱力圖矩陣
+    """
+    try:
+        result = await run_optimize(
+            symbol          = body.symbol.upper(),
+            strategy_type   = body.strategy_type,
+            param_ranges    = body.param_ranges or {},
+            start_date      = body.start_date,
+            end_date        = body.end_date,
+            initial_capital = body.initial_capital,
+            stop_loss_pct   = body.stop_loss_pct,
+            take_profit_pct = body.take_profit_pct,
+            sort_by         = body.sort_by,
+            top_n           = body.top_n,
+            use_preset      = body.use_preset,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("[optimize] failed symbol=%s strategy=%s", body.symbol, body.strategy_type)
+        raise HTTPException(status_code=500, detail=f"最佳化失敗：{e}") from e
 
 
 # ─── P0-4: 儲存策略 / 我的策略列表 ────────────────────────────────────────────
