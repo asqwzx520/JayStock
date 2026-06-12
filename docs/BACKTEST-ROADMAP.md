@@ -58,6 +58,9 @@
 | 46 | P16 | 收益歸因分析（ReturnAttributionPanel，按出場原因/多空分解） | ✅ | P16 |
 | 47 | P16 | 連勝連敗風險分析（StreakAnalysisPanel，分佈圖+破產風險） | ✅ | P16 |
 | 48 | P16 | 月報酬日曆熱力圖（CalendarHeatmapPanel，year×month色塊） | ✅ | P16 |
+| 49 | P17 | 市場相關性分析（BetaAlphaPanel，Beta/Alpha/R²/IR/滾動相關） | ✅ | P17 |
+| 50 | P17 | 手續費影響分析（FeeImpactPanel，費損率/折扣模擬/平衡點） | ✅ | P17 |
+| 51 | P17 | 綜合健診報告（DiagnosticReportPanel，評分+旗標+建議+列印） | ✅ | P17 |
 
 ---
 

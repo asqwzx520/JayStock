@@ -35,6 +35,9 @@ import HoldingPeriodPanel      from "./HoldingPeriodPanel";
 import ReturnAttributionPanel  from "./ReturnAttributionPanel";
 import StreakAnalysisPanel      from "./StreakAnalysisPanel";
 import CalendarHeatmapPanel    from "./CalendarHeatmapPanel";
+import BetaAlphaPanel          from "./BetaAlphaPanel";
+import FeeImpactPanel          from "./FeeImpactPanel";
+import DiagnosticReportPanel   from "./DiagnosticReportPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1223,9 +1226,10 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "charts", label: "📈 圖表",
     tabs: [
-      { id: "chart",   label: "資金曲線" },
-      { id: "kline",   label: "K線標記" },
-      { id: "rolling", label: "滾動績效" },
+      { id: "chart",     label: "資金曲線" },
+      { id: "kline",     label: "K線標記" },
+      { id: "rolling",   label: "滾動績效" },
+      { id: "betaalpha", label: "Beta/Alpha" },
     ],
   },
   {
@@ -1250,10 +1254,12 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "tools", label: "🛠 工具",
     tabs: [
-      { id: "optimize",  label: "最佳化", alwaysEnabled: true },
-      { id: "compare",   label: "比較",   alwaysEnabled: true },
-      { id: "scan",      label: "掃描",   alwaysEnabled: true },
-      { id: "portfolio", label: "組合",   alwaysEnabled: true },
+      { id: "optimize",   label: "最佳化",  alwaysEnabled: true },
+      { id: "compare",    label: "比較",    alwaysEnabled: true },
+      { id: "scan",       label: "掃描",    alwaysEnabled: true },
+      { id: "portfolio",  label: "組合",    alwaysEnabled: true },
+      { id: "feeimpact",  label: "手續費分析" },
+      { id: "diagnostic", label: "📋 健診報告" },
     ],
   },
 ];
@@ -2785,7 +2791,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap" | "betaalpha" | "feeimpact" | "diagnostic";
 
 interface Props {
   symbol: string;
@@ -3359,6 +3365,28 @@ export default function BacktestPanel({ symbol }: Props) {
               {/* P16-48: 月報酬日曆熱力圖 */}
               {resultTab === "calendarheatmap" && (
                 <CalendarHeatmapPanel monthlyReturns={result.monthly_returns} />
+              )}
+
+              {/* P17-49: Beta/Alpha 市場相關性 */}
+              {resultTab === "betaalpha" && (
+                <BetaAlphaPanel
+                  equityCurve={result.equity_curve}
+                  benchmarkCurve={result.benchmark_curve}
+                />
+              )}
+
+              {/* P17-50: 手續費影響分析 */}
+              {resultTab === "feeimpact" && (
+                <FeeImpactPanel
+                  trades={result.trades}
+                  stats={result.stats}
+                  initialCapital={lastReq?.initial_capital ?? 1_000_000}
+                />
+              )}
+
+              {/* P17-51: 綜合健診報告 */}
+              {resultTab === "diagnostic" && lastReq && (
+                <DiagnosticReportPanel result={result} request={lastReq} />
               )}
             </>
           )}
