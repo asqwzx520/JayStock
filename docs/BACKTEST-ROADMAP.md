@@ -61,6 +61,9 @@
 | 49 | P17 | 市場相關性分析（BetaAlphaPanel，Beta/Alpha/R²/IR/滾動相關） | ✅ | P17 |
 | 50 | P17 | 手續費影響分析（FeeImpactPanel，費損率/折扣模擬/平衡點） | ✅ | P17 |
 | 51 | P17 | 綜合健診報告（DiagnosticReportPanel，評分+旗標+建議+列印） | ✅ | P17 |
+| 52 | P18 | 波動率分析（VolatilityPanel，滾動HV 20/60日，高低波動期間績效） | ✅ | P18 |
+| 53 | P18 | 交易期望值（TradeEVPanel，EV分解/滾動EV/損益平衡勝率/Kelly/敏感度矩陣） | ✅ | P18 |
+| 54 | P18 | 月份季節性（SeasonalityPanel，跨年彙總1-12月均報酬/勝率/熱力帶） | ✅ | P18 |
 
 ---
 

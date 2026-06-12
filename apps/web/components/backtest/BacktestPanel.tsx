@@ -38,6 +38,9 @@ import CalendarHeatmapPanel    from "./CalendarHeatmapPanel";
 import BetaAlphaPanel          from "./BetaAlphaPanel";
 import FeeImpactPanel          from "./FeeImpactPanel";
 import DiagnosticReportPanel   from "./DiagnosticReportPanel";
+import VolatilityPanel         from "./VolatilityPanel";
+import TradeEVPanel            from "./TradeEVPanel";
+import SeasonalityPanel        from "./SeasonalityPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1216,6 +1219,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
     tabs: [
       { id: "stats",          label: "績效摘要" },
       { id: "monthly",        label: "月份報酬" },
+      { id: "seasonality",    label: "季節性" },
       { id: "calendarheatmap",label: "熱力圖" },
       { id: "annual",         label: "年度報酬" },
       { id: "drawdown",       label: "回撤分析" },
@@ -1228,8 +1232,9 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
     tabs: [
       { id: "chart",     label: "資金曲線" },
       { id: "kline",     label: "K線標記" },
-      { id: "rolling",   label: "滾動績效" },
-      { id: "betaalpha", label: "Beta/Alpha" },
+      { id: "rolling",    label: "滾動績效" },
+      { id: "betaalpha",  label: "Beta/Alpha" },
+      { id: "volatility", label: "波動率分析" },
     ],
   },
   {
@@ -1241,6 +1246,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "exitquality",   label: "出場品質" },
       { id: "holdingperiod", label: "持倉長度" },
       { id: "streak",        label: "連勝連敗" },
+      { id: "tradeev",       label: "期望值分析" },
     ],
   },
   {
@@ -2791,7 +2797,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap" | "betaalpha" | "feeimpact" | "diagnostic";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap" | "betaalpha" | "feeimpact" | "diagnostic" | "volatility" | "tradeev" | "seasonality";
 
 interface Props {
   symbol: string;
@@ -3387,6 +3393,24 @@ export default function BacktestPanel({ symbol }: Props) {
               {/* P17-51: 綜合健診報告 */}
               {resultTab === "diagnostic" && lastReq && (
                 <DiagnosticReportPanel result={result} request={lastReq} />
+              )}
+
+              {/* P18-52: 波動率分析 */}
+              {resultTab === "volatility" && (
+                <VolatilityPanel
+                  equityCurve={result.equity_curve}
+                  benchmarkCurve={result.benchmark_curve ?? []}
+                />
+              )}
+
+              {/* P18-53: 交易期望值分析 */}
+              {resultTab === "tradeev" && (
+                <TradeEVPanel trades={result.trades} />
+              )}
+
+              {/* P18-54: 月份季節性 */}
+              {resultTab === "seasonality" && (
+                <SeasonalityPanel monthly_returns={result.monthly_returns} />
               )}
             </>
           )}
