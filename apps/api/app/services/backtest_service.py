@@ -643,6 +643,10 @@ def _is_tw_symbol(symbol: str) -> bool:
     return s.isdigit() or s.endswith(".TW") or s.endswith(".TWO")
 
 
+DEFAULT_SLIPPAGE = 0.001   # P9-29: 預設滑價 0.1%
+ENGINE_VERSION   = 2       # P9-31: 成交模型版本（v2 = 隔日開盤 + 盤中觸發）
+
+
 def _run_portfolio(
     df: pd.DataFrame,
     signals: pd.Series,
@@ -650,11 +654,19 @@ def _run_portfolio(
     symbol: str,
     stop_loss_pct: float | None,
     take_profit_pct: float | None,
+    slippage_pct: float = DEFAULT_SLIPPAGE,
+    trailing_stop_pct: float | None = None,
+    max_hold_days: int | None = None,
 ) -> tuple[pd.DataFrame, list[dict]]:
     """
-    向量化（偽）投資組合模擬。
-    採用全倉策略：有資金就全買，有持倉就全賣。
-    以收盤價成交（次日開盤亦可，但收盤更保守）。
+    投資組合模擬（引擎 v2，P9/P10）。
+    全倉策略：有資金就全買，有持倉就全賣。
+
+    成交模型（消除前視偏差）：
+      - 訊號於第 T 日收盤產生 → 第 T+1 日「開盤價 ± 滑價」成交
+      - 停損/停利/移動停損：盤中 low/high 觸發、以觸發價成交；
+        開盤即跳空跨越 → 以開盤價成交（吃滿跳空）
+      - 時間停損：持有 >= max_hold_days → 次日開盤強制出場
 
     回傳：
       equity_df — columns: equity, drawdown_pct
@@ -663,31 +675,37 @@ def _run_portfolio(
     is_tw   = _is_tw_symbol(symbol)
     buy_cost  = TW_BUY_COST  if is_tw else US_TRADE_COST
     sell_cost = TW_SELL_COST if is_tw else US_TRADE_COST
+    slip      = max(0.0, float(slippage_pct))
 
     cash     = initial_capital
-    position = 0.0          # 股數（允許小數，模擬整股可用 math.floor）
-    entry_price  = 0.0
+    position = 0.0          # 股數（允許小數）
+    entry_price  = 0.0      # 含滑價的實際成交價
     entry_date   = None
-    entry_cost   = 0.0       # 進場時的買入手續費（元）
+    entry_cost   = 0.0      # 進場買入手續費（元）
+    peak_price   = 0.0      # P10-32: 持倉期間盤中最高價（以 high 更新）
+
+    pending_buy  = False    # 前一日訊號，今日開盤執行
+    pending_sell: str | None = None   # 出場原因（signal / time_stop）
 
     equity_list: list[tuple] = []
     trades: list[dict]        = []
 
     def _close_position(date, price, reason: str):
-        """結算一筆交易並寫入 trades；回傳新的 cash 餘額"""
-        nonlocal position, entry_price, entry_date, entry_cost
-        proceeds  = position * price * (1 - sell_cost)
+        """以 price（已含滑價調整前的市場價）結算；回傳新 cash"""
+        nonlocal position, entry_price, entry_date, entry_cost, peak_price
+        fill = price * (1 - slip)               # 賣出滑價：成交價略低
+        proceeds  = position * fill * (1 - sell_cost)
         gross_buy = position * entry_price
         pnl       = proceeds - gross_buy - entry_cost
-        pnl_pct   = (price * (1 - sell_cost) - entry_price * (1 + buy_cost)) / (entry_price * (1 + buy_cost))
+        pnl_pct   = (fill * (1 - sell_cost) - entry_price * (1 + buy_cost)) / (entry_price * (1 + buy_cost))
         hold_days = (date - entry_date).days if entry_date else 0
-        sell_fee  = position * price * sell_cost
+        sell_fee  = position * fill * sell_cost
         total_fee = entry_cost + sell_fee
         trades.append({
             "entry_date":   entry_date.strftime("%Y-%m-%d") if entry_date else "",
             "exit_date":    date.strftime("%Y-%m-%d"),
             "entry_price":  round(entry_price, 2),
-            "exit_price":   round(price, 2),
+            "exit_price":   round(fill, 2),
             "shares":       round(position, 4),
             "pnl":          round(pnl, 2),
             "pnl_pct":      round(pnl_pct, 6),
@@ -701,42 +719,79 @@ def _run_portfolio(
         entry_price = 0.0
         entry_date  = None
         entry_cost  = 0.0
+        peak_price  = 0.0
         return new_cash
 
     for date, row in df.iterrows():
-        price = float(row["close"])
-        if price <= 0 or math.isnan(price):
-            equity_list.append((date, cash if position == 0 else cash + position * price))
+        close = float(row["close"])
+        if close <= 0 or math.isnan(close):
+            equity_list.append((date, cash if position == 0 else cash + position * close))
             continue
+        open_ = float(row.get("open", close)) or close
+        high  = float(row.get("high", close)) or close
+        low   = float(row.get("low",  close)) or close
+        if open_ <= 0 or math.isnan(open_):
+            open_, high, low = close, close, close
 
-        sig = int(signals.get(date, 0))
-        exit_reason = "signal"
+        # ── 1) 執行前一日訊號（今日開盤成交） ──
+        if pending_sell is not None and position > 0:
+            cash = _close_position(date, open_, pending_sell)
+        pending_sell = None
 
-        # ── 停損/停利 ──
-        if position > 0 and entry_price > 0:
-            chg = (price - entry_price) / entry_price
-            if stop_loss_pct  is not None and chg <= -abs(stop_loss_pct):
-                sig = -1
-                exit_reason = "stop_loss"
-            elif take_profit_pct is not None and chg >= abs(take_profit_pct):
-                sig = -1
-                exit_reason = "take_profit"
-
-        # ── 買入 ──
-        if sig == 1 and position == 0 and cash > 0:
-            cost     = price * (1 + buy_cost)
+        if pending_buy and position == 0 and cash > 0:
+            fill     = open_ * (1 + slip)       # 買入滑價：成交價略高
+            cost     = fill * (1 + buy_cost)
             shares   = cash / cost
             position = shares
-            entry_cost  = shares * price * buy_cost
+            entry_cost  = shares * fill * buy_cost
             cash     = 0.0
-            entry_price = price
+            entry_price = fill
             entry_date  = date
+            peak_price  = high                  # 進場日即以當日 high 起算峰值
+        pending_buy = False
 
-        # ── 賣出 ──
+        # ── 2) 盤中停損/停利/移動停損（P9-30 / P10-32） ──
+        if position > 0 and entry_price > 0:
+            # 有效停損價 = 固定停損與移動停損取較高者（先觸發者優先）
+            stops: list[tuple[float, str]] = []
+            if stop_loss_pct is not None:
+                stops.append((entry_price * (1 - abs(stop_loss_pct)), "stop_loss"))
+            if trailing_stop_pct is not None and peak_price > 0:
+                stops.append((peak_price * (1 - abs(trailing_stop_pct)), "trailing_stop"))
+            stop_price, stop_reason = max(stops, default=(0.0, ""), key=lambda t: t[0])
+
+            tp_price = entry_price * (1 + abs(take_profit_pct)) if take_profit_pct is not None else None
+
+            if stop_price > 0 and open_ <= stop_price:
+                # 跳空跨越停損 → 以開盤價成交（吃滿跳空損失）
+                cash = _close_position(date, open_, f"{stop_reason}_gap")
+            elif tp_price is not None and open_ >= tp_price:
+                cash = _close_position(date, open_, "take_profit")
+            elif stop_price > 0 and low <= stop_price:
+                cash = _close_position(date, stop_price, stop_reason)
+            elif tp_price is not None and high >= tp_price:
+                cash = _close_position(date, tp_price, "take_profit")
+
+        # ── 3) 更新峰值（移動停損用，盤中 high 基準） ──
+        if position > 0:
+            peak_price = max(peak_price, high)
+
+        # ── 4) 收盤後讀取今日訊號 → 排程明日開盤執行 ──
+        sig = int(signals.get(date, 0))
+        if sig == 1 and position == 0:
+            pending_buy = True
         elif sig == -1 and position > 0:
-            cash = _close_position(date, price, exit_reason)
+            pending_sell = "signal"
 
-        equity = cash + position * price
+        # ── 5) 時間停損（P10-33）：持有達上限 → 明日開盤強制出場 ──
+        if (
+            position > 0 and max_hold_days is not None and entry_date is not None
+            and (date - entry_date).days >= max_hold_days
+            and pending_sell is None
+        ):
+            pending_sell = "time_stop"
+
+        equity = cash + position * close
         equity_list.append((date, equity))
 
     # ── 期末強平：若回測結束時仍有持倉，以最後收盤價結算 ──
@@ -1325,6 +1380,9 @@ async def run_backtest(
     initial_capital: float = 1_000_000.0,
     stop_loss_pct: float | None = None,
     take_profit_pct: float | None = None,
+    slippage_pct: float = DEFAULT_SLIPPAGE,
+    trailing_stop_pct: float | None = None,
+    max_hold_days: int | None = None,
 ) -> dict:
     """
     執行完整回測並回傳結果。
@@ -1379,10 +1437,13 @@ async def run_backtest(
     # 生成訊號
     signals = _gen_signals(df, strategy)
 
-    # 執行模擬
+    # 執行模擬（引擎 v2：隔日開盤成交 + 盤中觸發）
     equity_df, trades = _run_portfolio(
         df, signals, initial_capital, symbol,
         stop_loss_pct, take_profit_pct,
+        slippage_pct=slippage_pct,
+        trailing_stop_pct=trailing_stop_pct,
+        max_hold_days=max_hold_days,
     )
 
     # 計算績效
@@ -1428,4 +1489,5 @@ async def run_backtest(
         "trades":          trades,
         "monthly_returns": monthly_returns,
         "regime_stats":    regime_stats,
+        "engine_version":  ENGINE_VERSION,   # P9-31
     }

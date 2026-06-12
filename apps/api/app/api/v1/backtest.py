@@ -141,6 +141,10 @@ class BacktestRequest(BaseModel):
     initial_capital: float = Field(default=1_000_000.0, gt=0, le=1_000_000_000)
     stop_loss_pct:   Optional[float] = Field(default=None, ge=0.01, le=0.5)
     take_profit_pct: Optional[float] = Field(default=None, ge=0.01, le=5.0)
+    # P9-29 滑價 / P10-32 移動停損 / P10-33 時間停損
+    slippage_pct:      float           = Field(default=0.001, ge=0.0, le=0.005)
+    trailing_stop_pct: Optional[float] = Field(default=None, ge=0.01, le=0.5)
+    max_hold_days:     Optional[int]   = Field(default=None, ge=1, le=365)
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -195,6 +199,9 @@ async def run_backtest_endpoint(
             initial_capital = body.initial_capital,
             stop_loss_pct   = body.stop_loss_pct,
             take_profit_pct = body.take_profit_pct,
+            slippage_pct      = body.slippage_pct,
+            trailing_stop_pct = body.trailing_stop_pct,
+            max_hold_days     = body.max_hold_days,
         )
         return result
     except ValueError as e:
