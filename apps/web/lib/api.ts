@@ -1670,6 +1670,31 @@ export interface StopRecommendResult {
   p95_gain:             number;
 }
 
+// P11-35: 一鍵體檢 AI 總結
+export interface HealthCheckItem {
+  name:   string;
+  status: "pass" | "warn" | "fail" | "skip";
+  detail: string;
+}
+
+export async function getBacktestAiSummary(payload: {
+  symbol:        string;
+  strategy_type: string;
+  stats:         BacktestStats;
+  checks:        HealthCheckItem[];
+}): Promise<{ summary: string; source: "gemini" | "rule" }> {
+  const res = await fetch(`${API_BASE}/api/v1/backtest/ai-summary`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function getStopRecommendation(trades: BacktestTrade[]): Promise<StopRecommendResult> {
   const res = await fetch(`${API_BASE}/api/v1/backtest/stop-recommendation`, {
     method:  "POST",

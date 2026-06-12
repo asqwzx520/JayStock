@@ -802,3 +802,90 @@ async def delete_strategy(
     arr = _mem_strategies.get(user_id, [])
     _mem_strategies[user_id] = [s for s in arr if s.get("id") != strategy_id]
     return {"ok": True}
+
+
+# ─── P11-35: 一鍵體檢 AI 白話總結 ────────────────────────────────────────────
+
+class HealthCheckItem(BaseModel):
+    name:   str
+    status: str          # pass / warn / fail / skip
+    detail: str = ""
+
+
+class AiSummaryRequest(BaseModel):
+    symbol:        str = Field(..., min_length=1, max_length=10)
+    strategy_type: str = Field(default="", max_length=40)
+    stats:         dict
+    checks:        list[HealthCheckItem] = []
+
+
+def _rule_based_summary(body: "AiSummaryRequest") -> str:
+    """Gemini 不可用時的規則式 fallback"""
+    s = body.stats
+    parts: list[str] = []
+    sharpe = float(s.get("sharpe", 0) or 0)
+    mdd    = abs(float(s.get("max_drawdown", 0) or 0))
+    wr     = float(s.get("win_rate", 0) or 0)
+    if sharpe >= 1.0:
+        parts.append(f"策略風險調整後報酬良好（Sharpe {sharpe:.2f}）。")
+    elif sharpe >= 0.5:
+        parts.append(f"策略表現中等（Sharpe {sharpe:.2f}），仍有優化空間。")
+    else:
+        parts.append(f"策略風險調整後報酬偏弱（Sharpe {sharpe:.2f}），不建議直接實盤。")
+    if mdd > 0.25:
+        parts.append(f"最大回撤 {mdd*100:.1f}% 偏深，注意資金控管。")
+    fails = [c.name for c in body.checks if c.status == "fail"]
+    warns = [c.name for c in body.checks if c.status == "warn"]
+    if fails:
+        parts.append("未通過項目：" + "、".join(fails) + "，建議先解決再考慮實盤。")
+    elif warns:
+        parts.append("注意項目：" + "、".join(warns) + "。")
+    else:
+        parts.append(f"各項體檢均通過，勝率 {wr*100:.0f}%，可進一步用 Walk-Forward 驗證穩健性。")
+    return " ".join(parts)
+
+
+@router.post("/backtest/ai-summary")
+@limiter.limit("10/minute")
+async def backtest_ai_summary(
+    request: Request,
+    body: AiSummaryRequest = Body(...),
+):
+    """體檢報告 AI 白話總結（Gemini 1.5 Flash；失敗時規則式 fallback）"""
+    from app.core.config import settings
+
+    text = ""
+    if settings.gemini_api_key:
+        try:
+            import asyncio
+
+            import google.generativeai as genai  # type: ignore
+            genai.configure(api_key=settings.gemini_api_key)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            s = body.stats
+            checks_txt = "\n".join(
+                f"- {c.name}: {c.status} {c.detail}" for c in body.checks
+            )
+            prompt = (
+                "你是專業量化交易顧問。以下是一個台股/美股回測策略的體檢結果，"
+                "請用繁體中文寫 3~5 句白話總結：這策略勝在哪、最大風險是什麼、下一步建議調什麼。"
+                "不要列點，用流暢段落；不要免責聲明。\n\n"
+                f"股票：{body.symbol}　策略：{body.strategy_type}\n"
+                f"總報酬 {float(s.get('total_return',0))*100:.1f}%，"
+                f"CAGR {float(s.get('cagr',0))*100:.1f}%，"
+                f"Sharpe {float(s.get('sharpe',0)):.2f}，"
+                f"最大回撤 {float(s.get('max_drawdown',0))*100:.1f}%，"
+                f"勝率 {float(s.get('win_rate',0))*100:.0f}%，"
+                f"交易次數 {int(s.get('total_trades',0))}\n"
+                f"體檢項目：\n{checks_txt}"
+            )
+            loop = asyncio.get_running_loop()
+            resp = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
+            text = (resp.text or "").strip()
+        except Exception as exc:
+            logger.warning("[backtest] AI summary failed: %s", exc)
+
+    if not text:
+        text = _rule_based_summary(body)
+        return {"summary": text, "source": "rule"}
+    return {"summary": text, "source": "gemini"}

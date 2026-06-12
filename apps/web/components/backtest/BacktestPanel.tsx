@@ -26,6 +26,7 @@ import WalkForwardPanel  from "./WalkForwardPanel";
 import MonteCarloPanel   from "./MonteCarloPanel";
 import TradeDistPanel    from "./TradeDistPanel";
 import RollingPanel      from "./RollingPanel";
+import HealthCheckPanel  from "./HealthCheckPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1223,6 +1224,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "validate", label: "🧪 驗證",
     tabs: [
+      { id: "health",      label: "🩺 體檢" },
       { id: "walkforward", label: "Walk-Forward", alwaysEnabled: true },
       { id: "montecarlo",  label: "Monte Carlo" },
     ],
@@ -2682,7 +2684,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health";
 
 interface Props {
   symbol: string;
@@ -3006,6 +3008,15 @@ export default function BacktestPanel({ symbol }: Props) {
             <MonteCarloPanel
               trades={result.trades}
               initialCapital={lastReq?.initial_capital ?? 1_000_000}
+            />
+          )}
+
+          {/* P11-35: 一鍵體檢 */}
+          {resultTab === "health" && result && (
+            <HealthCheckPanel
+              result={result}
+              symbol={lastReq?.symbol ?? localSymbol}
+              lastReq={lastReq}
             />
           )}
 
