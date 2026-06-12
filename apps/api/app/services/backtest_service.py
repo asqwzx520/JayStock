@@ -669,6 +669,7 @@ def _run_portfolio(
     slippage_pct: float = DEFAULT_SLIPPAGE,
     trailing_stop_pct: float | None = None,
     max_hold_days: int | None = None,
+    position_size_pct: float = 1.0,   # P13-39: 倉位比例（0.25~1.0）
 ) -> tuple[pd.DataFrame, list[dict]]:
     """
     投資組合模擬（引擎 v2，P9/P10）。
@@ -679,6 +680,7 @@ def _run_portfolio(
       - 停損/停利/移動停損：盤中 low/high 觸發、以觸發價成交；
         開盤即跳空跨越 → 以開盤價成交（吃滿跳空）
       - 時間停損：持有 >= max_hold_days → 次日開盤強制出場
+      - position_size_pct：每次進場使用總資金比例（預設 100% = 全倉）
 
     回傳：
       equity_df — columns: equity, drawdown_pct
@@ -688,6 +690,7 @@ def _run_portfolio(
     buy_cost  = TW_BUY_COST  if is_tw else US_TRADE_COST
     sell_cost = TW_SELL_COST if is_tw else US_TRADE_COST
     slip      = max(0.0, float(slippage_pct))
+    pos_ratio = max(0.01, min(1.0, float(position_size_pct)))  # P13-39
 
     cash     = initial_capital
     position = 0.0          # 股數（允許小數）
@@ -753,10 +756,11 @@ def _run_portfolio(
         if pending_buy and position == 0 and cash > 0:
             fill     = open_ * (1 + slip)       # 買入滑價：成交價略高
             cost     = fill * (1 + buy_cost)
-            shares   = cash / cost
+            invest   = cash * pos_ratio          # P13-39: 依倉位比例決定投入金額
+            shares   = invest / cost
             position = shares
             entry_cost  = shares * fill * buy_cost
-            cash     = 0.0
+            cash     = cash - invest             # 剩餘現金保留（pos_ratio<1 時不為 0）
             entry_price = fill
             entry_date  = date
             peak_price  = high                  # 進場日即以當日 high 起算峰值
@@ -1396,6 +1400,7 @@ async def run_backtest(
     trailing_stop_pct: float | None = None,
     max_hold_days: int | None = None,
     benchmark_symbol: str | None = None,  # P12: 自訂基準
+    position_size_pct: float | None = None,  # P13-39: 倉位比例
 ) -> dict:
     """
     執行完整回測並回傳結果。
@@ -1463,6 +1468,7 @@ async def run_backtest(
         slippage_pct=slippage_pct,
         trailing_stop_pct=trailing_stop_pct,
         max_hold_days=max_hold_days,
+        position_size_pct=position_size_pct if position_size_pct is not None else 1.0,
     )
 
     # 計算績效

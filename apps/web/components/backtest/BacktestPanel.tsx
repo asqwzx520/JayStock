@@ -27,6 +27,7 @@ import MonteCarloPanel   from "./MonteCarloPanel";
 import TradeDistPanel    from "./TradeDistPanel";
 import RollingPanel      from "./RollingPanel";
 import HealthCheckPanel  from "./HealthCheckPanel";
+import DrawdownPanel     from "./DrawdownPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1203,9 +1204,10 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "perf", label: "📊 績效",
     tabs: [
-      { id: "stats",   label: "績效摘要" },
-      { id: "monthly", label: "月份報酬" },
-      { id: "annual",  label: "年度報酬" },
+      { id: "stats",    label: "績效摘要" },
+      { id: "monthly",  label: "月份報酬" },
+      { id: "annual",   label: "年度報酬" },
+      { id: "drawdown", label: "回撤分析" },
     ],
   },
   {
@@ -2195,6 +2197,7 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [trailingStop,     setTrailingStop]     = useState("");
   const [maxHoldDays,      setMaxHoldDays]      = useState("");
   const [benchmarkSymbol,  setBenchmarkSymbol]  = useState("");
+  const [positionSizePct,  setPositionSizePct]  = useState("1.0");  // P13-39
 
   // P0-3 自訂策略 state
   const [entryConds, setEntryConds] = useState<Cond[]>([
@@ -2278,6 +2281,7 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
       trailing_stop_pct: trailingStop ? parseFloat(trailingStop) / 100 : undefined,
       max_hold_days:     maxHoldDays  ? parseInt(maxHoldDays, 10)      : undefined,
       benchmark_symbol:  benchmarkSymbol || undefined,
+      position_size_pct: parseFloat(positionSizePct) || 1.0,
     });
   }
 
@@ -2490,6 +2494,21 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
                 <option value="IWM">IWM（羅素2000）</option>
               </>
             )}
+          </select>
+        </label>
+        {/* P13-39: 倉位比例 */}
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>倉位比例</span>
+          <select
+            value={positionSizePct}
+            onChange={(e) => setPositionSizePct(e.target.value)}
+            className="text-xs px-2 py-1 rounded outline-none"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          >
+            <option value="1.0">100%（全倉，預設）</option>
+            <option value="0.75">75%</option>
+            <option value="0.5">50%</option>
+            <option value="0.25">25%</option>
           </select>
         </label>
         <div className="text-[9px] mt-1" style={{ color: "var(--text-tertiary)" }}>
@@ -2718,7 +2737,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown";
 
 interface Props {
   symbol: string;
@@ -3249,6 +3268,11 @@ export default function BacktestPanel({ symbol }: Props) {
                     benchmarkSymbol={result.benchmark_symbol}
                   />
                 </div>
+              )}
+
+              {/* P13-38: 回撤分析 */}
+              {resultTab === "drawdown" && (
+                <DrawdownPanel equityCurve={result.equity_curve} />
               )}
             </>
           )}

@@ -147,6 +147,8 @@ class BacktestRequest(BaseModel):
     max_hold_days:     Optional[int]   = Field(default=None, ge=1, le=365)
     # P12 自訂基準（TW: 0050/0056/006208，US: SPY/QQQ/DIA/IWM）
     benchmark_symbol:  Optional[str]   = Field(default=None, max_length=10)
+    # P13-39 倉位比例（0.25~1.0，預設 1.0 全倉）
+    position_size_pct: Optional[float] = Field(default=None, ge=0.01, le=1.0)
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -205,6 +207,7 @@ async def run_backtest_endpoint(
             trailing_stop_pct = body.trailing_stop_pct,
             max_hold_days     = body.max_hold_days,
             benchmark_symbol  = body.benchmark_symbol,
+            position_size_pct = body.position_size_pct,
         )
         return result
     except ValueError as e:

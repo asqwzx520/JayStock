@@ -47,6 +47,8 @@
 | 35 | P11 | 手機版設定欄收折 | ✅ | `41800ff` |
 | 36 | P12 | 自訂基準選擇（0050/0056/SPY/QQQ 等） | ✅ | `dd0251f` |
 | 37 | P12 | 修復 httpx 2y 上限 bug + query2 fallback | ✅ | `9cdc9b7` |
+| 38 | P13 | 回撤分析面板（DrawdownPanel + 水下曲線） | ✅ | P13 |
+| 39 | P13 | 倉位比例設定（position_size_pct 25~100%） | ✅ | P13 |
 
 ---
 

@@ -782,6 +782,7 @@ export interface BacktestRequest {
   trailing_stop_pct?: number | null;  // P10-32 移動停損
   max_hold_days?:     number | null;  // P10-33 時間停損
   benchmark_symbol?:  string | null;  // P12 自訂基準
+  position_size_pct?: number | null;  // P13-39 倉位比例
 }
 
 export interface BacktestStats {
