@@ -49,6 +49,9 @@
 | 37 | P12 | 修復 httpx 2y 上限 bug + query2 fallback | ✅ | `9cdc9b7` |
 | 38 | P13 | 回撤分析面板（DrawdownPanel + 水下曲線） | ✅ | P13 |
 | 39 | P13 | 倉位比例設定（position_size_pct 25~100%） | ✅ | P13 |
+| 40 | P14 | 手續費折扣設定（fee_discount_pct，只折扣券商佣金） | ✅ | P14 |
+| 41 | P14 | 日報酬分析面板（DailyReturnsPanel，60日bar + 分佈圖） | ✅ | P14 |
+| 42 | P14 | 做空策略支援（allow_short，負部位引擎 + 反向停損） | ✅ | P14 |
 
 ---
 

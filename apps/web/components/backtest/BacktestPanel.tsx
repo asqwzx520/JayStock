@@ -28,6 +28,7 @@ import TradeDistPanel    from "./TradeDistPanel";
 import RollingPanel      from "./RollingPanel";
 import HealthCheckPanel  from "./HealthCheckPanel";
 import DrawdownPanel     from "./DrawdownPanel";
+import DailyReturnsPanel from "./DailyReturnsPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1208,6 +1209,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "monthly",  label: "月份報酬" },
       { id: "annual",   label: "年度報酬" },
       { id: "drawdown", label: "回撤分析" },
+      { id: "daily",    label: "日報酬" },
     ],
   },
   {
@@ -2198,6 +2200,8 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [maxHoldDays,      setMaxHoldDays]      = useState("");
   const [benchmarkSymbol,  setBenchmarkSymbol]  = useState("");
   const [positionSizePct,  setPositionSizePct]  = useState("1.0");  // P13-39
+  const [feeDiscount,      setFeeDiscount]      = useState("0");    // P14-40
+  const [allowShort,       setAllowShort]       = useState(false);  // P14-42
 
   // P0-3 自訂策略 state
   const [entryConds, setEntryConds] = useState<Cond[]>([
@@ -2282,6 +2286,8 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
       max_hold_days:     maxHoldDays  ? parseInt(maxHoldDays, 10)      : undefined,
       benchmark_symbol:  benchmarkSymbol || undefined,
       position_size_pct: parseFloat(positionSizePct) || 1.0,
+      allow_short:       allowShort,
+      fee_discount_pct:  parseFloat(feeDiscount) || 0.0,
     });
   }
 
@@ -2511,6 +2517,36 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
             <option value="0.25">25%</option>
           </select>
         </label>
+        {/* P14-40: 手續費折扣 */}
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>手續費折扣</span>
+          <select
+            value={feeDiscount}
+            onChange={(e) => setFeeDiscount(e.target.value)}
+            className="text-xs px-2 py-1 rounded outline-none"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          >
+            <option value="0">原價（0.1425%）</option>
+            <option value="0.4">6折（0.0855%）</option>
+            <option value="0.5">5折（0.07125%）</option>
+            <option value="0.6">4折（0.057%）</option>
+            <option value="0.7">3折（0.04275%）</option>
+            <option value="0.8">2折（0.0285%）</option>
+            <option value="0.9">1折（0.01425%）</option>
+          </select>
+        </label>
+        {/* P14-42: 做空支援 */}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allowShort}
+            onChange={(e) => setAllowShort(e.target.checked)}
+            className="w-3 h-3 rounded"
+          />
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
+            啟用做空（空頭訊號 -1 開空）
+          </span>
+        </label>
         <div className="text-[9px] mt-1" style={{ color: "var(--text-tertiary)" }}>
           引擎 v2：訊號隔日開盤成交；停損/停利以盤中價觸發，跳空以開盤價成交
         </div>
@@ -2737,7 +2773,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily";
 
 interface Props {
   symbol: string;
@@ -3273,6 +3309,11 @@ export default function BacktestPanel({ symbol }: Props) {
               {/* P13-38: 回撤分析 */}
               {resultTab === "drawdown" && (
                 <DrawdownPanel equityCurve={result.equity_curve} />
+              )}
+
+              {/* P14-41: 日報酬分析 */}
+              {resultTab === "daily" && (
+                <DailyReturnsPanel equityCurve={result.equity_curve} />
               )}
             </>
           )}

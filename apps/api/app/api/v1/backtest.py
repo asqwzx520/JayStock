@@ -149,6 +149,10 @@ class BacktestRequest(BaseModel):
     benchmark_symbol:  Optional[str]   = Field(default=None, max_length=10)
     # P13-39 倉位比例（0.25~1.0，預設 1.0 全倉）
     position_size_pct: Optional[float] = Field(default=None, ge=0.01, le=1.0)
+    # P14-42 做空支援
+    allow_short: bool = Field(default=False)
+    # P14-40 手續費折扣（0.0=無折扣，0.9=1折；只折扣券商佣金，證交稅不折扣）
+    fee_discount_pct: Optional[float] = Field(default=None, ge=0.0, le=0.95)
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -208,6 +212,8 @@ async def run_backtest_endpoint(
             max_hold_days     = body.max_hold_days,
             benchmark_symbol  = body.benchmark_symbol,
             position_size_pct = body.position_size_pct,
+            allow_short       = body.allow_short,
+            fee_discount_pct  = body.fee_discount_pct if body.fee_discount_pct is not None else 0.0,
         )
         return result
     except ValueError as e:
