@@ -1204,6 +1204,7 @@ interface BacktestSnapshot {
   max_drawdown: number;
   win_rate:     number;
   total_trades: number;
+  engine_version?: number;   // P9-31：無此欄 = v1（同日收盤成交）
 }
 
 function loadHistory(): BacktestSnapshot[] {
@@ -1684,10 +1685,14 @@ function TradeTableHeader({
 }
 
 const EXIT_REASON_META: Record<string, { label: string; color: string; bg: string }> = {
-  signal:        { label: "訊號",   color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
-  stop_loss:     { label: "停損",   color: "#ef4444", bg: "rgba(239,68,68,0.15)"   },
-  take_profit:   { label: "停利",   color: "#10b981", bg: "rgba(16,185,129,0.15)"  },
-  end_of_period: { label: "期末強平", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+  signal:            { label: "訊號",     color: "#94a3b8", bg: "rgba(148,163,184,0.15)" },
+  stop_loss:         { label: "停損",     color: "#ef4444", bg: "rgba(239,68,68,0.15)"   },
+  stop_loss_gap:     { label: "跳空停損", color: "#dc2626", bg: "rgba(220,38,38,0.2)"    },
+  take_profit:       { label: "停利",     color: "#10b981", bg: "rgba(16,185,129,0.15)"  },
+  trailing_stop:     { label: "移動停損", color: "#f97316", bg: "rgba(249,115,22,0.15)"  },
+  trailing_stop_gap: { label: "跳空移停", color: "#ea580c", bg: "rgba(234,88,12,0.2)"    },
+  time_stop:         { label: "時間停損", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)"  },
+  end_of_period:     { label: "期末強平", color: "#f59e0b", bg: "rgba(245,158,11,0.15)"  },
 };
 
 function ExitReasonBadge({ reason }: { reason?: string }) {
@@ -2135,6 +2140,10 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [capital, setCapital]       = useState("1000000");
   const [stopLoss, setStopLoss]     = useState("");
   const [takeProfit, setTakeProfit] = useState("");
+  // P9-29 / P10-32 / P10-33
+  const [slippage,     setSlippage]     = useState("0.1");
+  const [trailingStop, setTrailingStop] = useState("");
+  const [maxHoldDays,  setMaxHoldDays]  = useState("");
 
   // P0-3 自訂策略 state
   const [entryConds, setEntryConds] = useState<Cond[]>([
@@ -2214,6 +2223,9 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
       initial_capital: parseFloat(capital) || 1_000_000,
       stop_loss_pct:   stopLoss   ? parseFloat(stopLoss)   / 100 : undefined,
       take_profit_pct: takeProfit ? parseFloat(takeProfit) / 100 : undefined,
+      slippage_pct:      slippage !== "" && !isNaN(parseFloat(slippage)) ? parseFloat(slippage) / 100 : 0.001,
+      trailing_stop_pct: trailingStop ? parseFloat(trailingStop) / 100 : undefined,
+      max_hold_days:     maxHoldDays  ? parseInt(maxHoldDays, 10)      : undefined,
     });
   }
 
@@ -2361,6 +2373,45 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
               style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
             />
           </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>移動停損 (%)</span>
+            <input
+              type="number"
+              placeholder="峰值回落"
+              value={trailingStop}
+              onChange={(e) => setTrailingStop(e.target.value)}
+              min={1} max={50}
+              className="text-xs px-2 py-1 rounded outline-none"
+              style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>最長持倉 (天)</span>
+            <input
+              type="number"
+              placeholder="不限"
+              value={maxHoldDays}
+              onChange={(e) => setMaxHoldDays(e.target.value)}
+              min={1} max={365}
+              className="text-xs px-2 py-1 rounded outline-none"
+              style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>滑價 (%)</span>
+            <input
+              type="number"
+              step="0.05"
+              value={slippage}
+              onChange={(e) => setSlippage(e.target.value)}
+              min={0} max={0.5}
+              className="text-xs px-2 py-1 rounded outline-none"
+              style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+            />
+          </label>
+        </div>
+        <div className="text-[9px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+          引擎 v2：訊號隔日開盤成交；停損/停利以盤中價觸發，跳空以開盤價成交
         </div>
       </div>
 
@@ -2651,6 +2702,7 @@ export default function BacktestPanel({ symbol }: Props) {
         max_drawdown: res.stats.max_drawdown,
         win_rate:     res.stats.win_rate,
         total_trades: res.stats.total_trades,
+        engine_version: res.engine_version ?? 2,
       };
       saveHistory(snap);
       setHistory(loadHistory());
@@ -2950,6 +3002,11 @@ export default function BacktestPanel({ symbol }: Props) {
                       <div className="text-xs font-semibold mb-2" style={{ color: "#8b5cf6" }}>
                         🔄 對比前次：{compareSnap.symbol} {compareSnap.timestamp.slice(0, 16).replace("T", " ")}
                       </div>
+                      {(compareSnap.engine_version ?? 1) !== (result.engine_version ?? 2) && (
+                        <div className="text-[10px] mb-2 px-2 py-1 rounded" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)" }}>
+                          ⚠️ 成交模型版本不同（v{compareSnap.engine_version ?? 1} vs v{result.engine_version ?? 2}），數字不可直接比較
+                        </div>
+                      )}
                       <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
                         <thead>
                           <tr>

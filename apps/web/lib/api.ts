@@ -778,6 +778,9 @@ export interface BacktestRequest {
   initial_capital?: number;
   stop_loss_pct?:   number | null;
   take_profit_pct?: number | null;
+  slippage_pct?:      number;         // P9-29 滑價（預設 0.001 = 0.1%）
+  trailing_stop_pct?: number | null;  // P10-32 移動停損
+  max_hold_days?:     number | null;  // P10-33 時間停損
 }
 
 export interface BacktestStats {
@@ -810,7 +813,9 @@ export interface BacktestBenchmarkPoint {
   value: number;
 }
 
-export type BacktestExitReason = "signal" | "stop_loss" | "take_profit" | "end_of_period";
+export type BacktestExitReason =
+  | "signal" | "stop_loss" | "take_profit" | "end_of_period"
+  | "stop_loss_gap" | "trailing_stop" | "trailing_stop_gap" | "time_stop";  // 引擎 v2
 
 export interface BacktestTrade {
   entry_date:  string;
@@ -846,6 +851,7 @@ export interface BacktestResult {
   trades:          BacktestTrade[];
   monthly_returns: BacktestMonthlyReturn[];
   regime_stats?:   { bull: BacktestRegimeStat | null; bear: BacktestRegimeStat | null; sideways: BacktestRegimeStat | null };
+  engine_version?: number;   // P9-31：成交模型版本（v2 = 隔日開盤 + 盤中觸發）
 }
 
 export interface BacktestPresetParam {
