@@ -43,27 +43,39 @@ TRADING_DAYS   = 252
 def _fetch_ohlcv_httpx(yf_symbol: str, start: str, end: str) -> list[dict]:
     """
     直連 Yahoo Finance v8/chart API（同步 httpx）。
-    作為 yfinance 的保底 fallback，不耗 FinMind quota。
+    使用 period1/period2 epoch timestamp，支援任意長度區間（修正 range_str 2y 上限 bug）。
+    主動嘗試 query1 → query2 兩個端點，提升 Render 部署可靠度。
     """
     import httpx as _httpx
     from datetime import datetime, timezone, timedelta
 
-    start_dt = datetime.strptime(start, "%Y-%m-%d")
-    end_dt   = datetime.strptime(end,   "%Y-%m-%d")
-    days     = (end_dt - start_dt).days
-    range_str = "2y" if days > 730 else ("1y" if days > 365 else ("6mo" if days > 180 else "3mo"))
-
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}"
-    params = {"interval": "1d", "range": range_str, "events": ""}
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-    }
     tz = timezone(timedelta(hours=8))
+    start_dt = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=tz)
+    end_dt   = datetime.strptime(end,   "%Y-%m-%d").replace(tzinfo=tz)
+    # period2 需要多抓一天確保包含 end 當天
+    p1 = int(start_dt.timestamp())
+    p2 = int((end_dt + timedelta(days=1)).timestamp())
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
+    data: dict = {}
+    for host in hosts:
+        url = f"https://{host}/v8/finance/chart/{yf_symbol}"
+        params = {"interval": "1d", "period1": p1, "period2": p2, "events": ""}
+        try:
+            resp = _httpx.get(url, params=params, headers=headers, timeout=20, follow_redirects=True)
+            resp.raise_for_status()
+            data = resp.json()
+            if (data.get("chart", {}).get("result") or []):
+                break   # success
+        except Exception as exc:
+            logger.debug("[backtest] httpx %s %s failed: %s", host, yf_symbol, exc)
+            data = {}
     try:
-        resp = _httpx.get(url, params=params, headers=headers, timeout=20, follow_redirects=True)
-        resp.raise_for_status()
-        data    = resp.json()
         results = data.get("chart", {}).get("result") or []
         if not results:
             return []

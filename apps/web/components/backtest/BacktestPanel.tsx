@@ -439,9 +439,11 @@ function TradesMiniList({ trades }: { trades: BacktestTrade[] }) {
 function AnnualReturnsChart({
   monthlyReturns,
   benchmarkCurve,
+  benchmarkSymbol,
 }: {
   monthlyReturns:  BacktestMonthlyReturn[];
   benchmarkCurve:  BacktestResult["benchmark_curve"];
+  benchmarkSymbol?: string;
 }) {
   // Compound monthly returns into yearly
   const yearMap: Record<number, number> = {};
@@ -560,7 +562,7 @@ function AnnualReturnsChart({
         </svg>
       </div>
       <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-        ■ 策略年報酬 &nbsp; — 基準年報酬（灰線）&nbsp; - - 策略平均（紫虛線）
+        ■ 策略年報酬 &nbsp; — {benchmarkSymbol ?? "大盤基準"}年報酬（灰線）&nbsp; - - 策略平均（紫虛線）
       </div>
     </div>
   );
@@ -3094,9 +3096,14 @@ export default function BacktestPanel({ symbol }: Props) {
 
           {/* Error */}
           {resultTab !== "optimize" && error && !loading && (
-            <div className="rounded-lg p-4" style={{ background: "var(--color-down-subtle)", border: "1px solid var(--color-down)" }}>
-              <div className="text-sm font-medium mb-1" style={{ color: "var(--color-down)" }}>回測失敗</div>
+            <div className="rounded-lg p-4 flex flex-col gap-2" style={{ background: "var(--color-down-subtle)", border: "1px solid var(--color-down)" }}>
+              <div className="text-sm font-medium" style={{ color: "var(--color-down)" }}>回測失敗</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{error}</div>
+              <div className="text-[10px] mt-1 space-y-0.5" style={{ color: "var(--text-tertiary)" }}>
+                <div>• 確認股票代號正確（台股：如 2330，美股：如 AAPL）</div>
+                <div>• 嘗試縮短回測期間（較短範圍可能有更好的資料覆蓋）</div>
+                <div>• 若問題持續，可能是外部資料源暫時不可用，請稍後再試</div>
+              </div>
             </div>
           )}
 
@@ -3239,6 +3246,7 @@ export default function BacktestPanel({ symbol }: Props) {
                   <AnnualReturnsChart
                     monthlyReturns={result.monthly_returns}
                     benchmarkCurve={result.benchmark_curve}
+                    benchmarkSymbol={result.benchmark_symbol}
                   />
                 </div>
               )}
