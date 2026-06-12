@@ -1192,6 +1192,52 @@ function CapitalUtilizationCard({
 
 // ── P8-28: Backtest History (localStorage) ────────────────────────────────────
 
+// ── P11-34: 兩層式 Tab 導航 ────────────────────────────────────────────────────
+
+interface TabDef { id: ResultTab; label: string; alwaysEnabled?: boolean }
+
+const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
+  {
+    id: "perf", label: "📊 績效",
+    tabs: [
+      { id: "stats",   label: "績效摘要" },
+      { id: "monthly", label: "月份報酬" },
+      { id: "annual",  label: "年度報酬" },
+    ],
+  },
+  {
+    id: "charts", label: "📈 圖表",
+    tabs: [
+      { id: "chart",   label: "資金曲線" },
+      { id: "kline",   label: "K線標記" },
+      { id: "rolling", label: "滾動績效" },
+    ],
+  },
+  {
+    id: "tradesGrp", label: "📋 交易",
+    tabs: [
+      { id: "trades",    label: "交易明細" },
+      { id: "tradedist", label: "交易分佈" },
+    ],
+  },
+  {
+    id: "validate", label: "🧪 驗證",
+    tabs: [
+      { id: "walkforward", label: "Walk-Forward", alwaysEnabled: true },
+      { id: "montecarlo",  label: "Monte Carlo" },
+    ],
+  },
+  {
+    id: "tools", label: "🛠 工具",
+    tabs: [
+      { id: "optimize",  label: "最佳化", alwaysEnabled: true },
+      { id: "compare",   label: "比較",   alwaysEnabled: true },
+      { id: "scan",      label: "掃描",   alwaysEnabled: true },
+      { id: "portfolio", label: "組合",   alwaysEnabled: true },
+    ],
+  },
+];
+
 const HISTORY_KEY = "backtest_history_v1";
 
 interface BacktestSnapshot {
@@ -2662,6 +2708,12 @@ export default function BacktestPanel({ symbol }: Props) {
     }
   }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // P11-36: 手機版設定欄收折（<1024px 預設收起）
+  const [configOpen, setConfigOpen] = useState(true);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) setConfigOpen(false);
+  }, []);
+
   // P8-28: 歷史記錄
   const [history,        setHistory]        = useState<BacktestSnapshot[]>([]);
   const [showHistory,    setShowHistory]    = useState(false);
@@ -2706,6 +2758,8 @@ export default function BacktestPanel({ symbol }: Props) {
       };
       saveHistory(snap);
       setHistory(loadHistory());
+      // P11-36: 手機上跑完自動收起設定欄，讓結果全寬
+      if (typeof window !== "undefined" && window.innerWidth < 1024) setConfigOpen(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "回測執行失敗";
       setError(msg);
@@ -2750,28 +2804,13 @@ export default function BacktestPanel({ symbol }: Props) {
     ? `${lastReq.symbol} · ${lastReq.strategy.type} · ${new Date().toISOString().slice(5, 10)}`
     : "";
 
-  const RESULT_TABS: { id: ResultTab; label: string; alwaysEnabled?: boolean }[] = [
-    { id: "stats",    label: "績效摘要" },
-    { id: "chart",    label: "資金曲線" },
-    { id: "kline",    label: "K線標記" },
-    { id: "trades",   label: "交易明細" },
-    { id: "monthly",  label: "月份報酬" },
-    { id: "annual",   label: "📅 年度報酬" },
-    { id: "optimize",  label: "🔍 最佳化", alwaysEnabled: true },
-    { id: "compare",   label: "⚖️ 比較",   alwaysEnabled: true },
-    { id: "scan",        label: "🔭 掃描",      alwaysEnabled: true },
-    { id: "portfolio",   label: "📦 組合",      alwaysEnabled: true },
-    { id: "walkforward", label: "🔄 Walk-Fwd",   alwaysEnabled: true },
-    { id: "montecarlo",  label: "🎲 Monte Carlo" },
-    { id: "tradedist",   label: "📊 交易分佈" },
-    { id: "rolling",     label: "📈 滾動績效" },
-  ];
+  const activeGroup = TAB_GROUPS.find(g => g.tabs.some(t => t.id === resultTab)) ?? TAB_GROUPS[0];
 
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-0 overflow-hidden">
-      {/* ── Left: Config ── */}
+      {/* ── Left: Config（P11-36：<lg 可收折） ── */}
       <div
-        className="shrink-0 overflow-y-auto p-4"
+        className={`${configOpen ? "" : "hidden"} lg:block shrink-0 overflow-y-auto p-4`}
         style={{
           width: "clamp(260px, 28%, 320px)",
           borderRight: "1px solid var(--border)",
@@ -2835,15 +2874,68 @@ export default function BacktestPanel({ symbol }: Props) {
 
       {/* ── Right: Results ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {/* Result tab bar + P0-4 toolbar */}
-        <div className="shrink-0 flex items-center border-b" style={{ borderColor: "var(--border)" }}>
-          <div className="flex flex-1 min-w-0 overflow-x-auto">
-            {RESULT_TABS.map(t => (
+        {/* P11-34: 兩層式 Tab 導航 + P0-4 toolbar */}
+        <div className="shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
+          {/* 第一層：分組 */}
+          <div className="flex items-center">
+            <div className="flex flex-1 min-w-0 overflow-x-auto">
+              {TAB_GROUPS.map(g => {
+                const groupEnabled = !!result || g.tabs.some(t => t.alwaysEnabled);
+                const isActive     = g.id === activeGroup.id;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      const first = g.tabs.find(t => result || t.alwaysEnabled) ?? g.tabs[0];
+                      setResultTab(first.id);
+                    }}
+                    disabled={!groupEnabled}
+                    className="px-4 py-2 text-xs font-semibold transition-colors shrink-0"
+                    style={{
+                      color:        isActive ? "var(--color-brand)" : "var(--text-tertiary)",
+                      borderBottom: isActive ? "2px solid var(--color-brand)" : "2px solid transparent",
+                      opacity:      groupEnabled ? 1 : 0.4,
+                    }}
+                  >
+                    {g.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="shrink-0 flex items-center gap-1 px-2">
+              <button
+                onClick={() => setConfigOpen(v => !v)}
+                className="lg:hidden text-[11px] px-2 py-1 rounded transition-colors"
+                style={{
+                  background: configOpen ? "rgba(59,130,246,0.15)" : "var(--bg-elevated)",
+                  color:      configOpen ? "var(--color-brand)" : "var(--text-secondary)",
+                  border:     "1px solid var(--border)",
+                }}
+                title="顯示/隱藏回測設定"
+              >⚙ 設定</button>
+              <button
+                onClick={() => setSaveModalOpen(true)}
+                disabled={!result || !lastReq}
+                className="text-[11px] px-2 py-1 rounded transition-colors disabled:opacity-40"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+                title="儲存目前策略設定"
+              >💾 儲存</button>
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="text-[11px] px-2 py-1 rounded transition-colors"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+                title="開啟我的策略列表"
+              >📁 我的策略</button>
+            </div>
+          </div>
+          {/* 第二層：組內 tab */}
+          <div className="flex overflow-x-auto px-2" style={{ background: "var(--bg-elevated)" }}>
+            {activeGroup.tabs.map(t => (
               <button
                 key={t.id}
                 onClick={() => setResultTab(t.id)}
                 disabled={!result && !t.alwaysEnabled}
-                className="px-4 py-2 text-xs font-medium transition-colors shrink-0"
+                className="px-3 py-1.5 text-[11px] font-medium transition-colors shrink-0"
                 style={{
                   color:        resultTab === t.id ? "var(--color-brand)" : "var(--text-tertiary)",
                   borderBottom: resultTab === t.id ? "2px solid var(--color-brand)" : "2px solid transparent",
@@ -2853,21 +2945,6 @@ export default function BacktestPanel({ symbol }: Props) {
                 {t.label}
               </button>
             ))}
-          </div>
-          <div className="shrink-0 flex items-center gap-1 px-2">
-            <button
-              onClick={() => setSaveModalOpen(true)}
-              disabled={!result || !lastReq}
-              className="text-[11px] px-2 py-1 rounded transition-colors disabled:opacity-40"
-              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-              title="儲存目前策略設定"
-            >💾 儲存</button>
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="text-[11px] px-2 py-1 rounded transition-colors"
-              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-              title="開啟我的策略列表"
-            >📁 我的策略</button>
           </div>
         </div>
 
