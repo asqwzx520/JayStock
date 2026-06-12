@@ -581,7 +581,7 @@ export default function Home() {
           )}
 
           {/* ── 主圖區 ──────────────────────────────────── */}
-          <div className="flex-1 min-h-0 relative">
+          <div className="flex flex-col flex-1 min-h-0 relative">
 
             {/* 首頁：280px 自選股側欄 + 右側儀錶板 */}
             <div className={viewTab !== "home" ? "hidden" : "flex h-full min-h-0"}>
@@ -812,7 +812,7 @@ export default function Home() {
 
             {/* 籌碼面板（首次訪問才掛載，之後 keep-alive）*/}
             {mountedTabs.has("chips") && (
-              <div className={viewTab !== "chips" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "chips" ? "hidden" : "flex flex-col flex-1"}>
                 <ChipsPanel
                   symbol={symbol}
                   days={chipsDays}
@@ -833,7 +833,7 @@ export default function Home() {
 
             {/* M5 市場儀錶板 */}
             {mountedTabs.has("market") && (
-              <div className={viewTab !== "market" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "market" ? "hidden" : "flex-1"}>
                 <MarketDashboard onSelectStock={(sym, name) => {
                   handleSelectStock(sym, name);
                   switchTab("kline");
@@ -843,7 +843,7 @@ export default function Home() {
 
             {/* 選股器 */}
             {mountedTabs.has("screener") && (
-              <div className={viewTab !== "screener" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "screener" ? "hidden" : "flex-1"}>
                 <ScreenerPanel
                   onSelectStock={(sym, name) => {
                     handleSelectStock(sym, name);
@@ -855,33 +855,33 @@ export default function Home() {
 
             {/* 個股新聞 */}
             {mountedTabs.has("news") && (
-              <div className={viewTab !== "news" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "news" ? "hidden" : "flex-1 overflow-y-auto"}>
                 <StockNews symbol={symbol} />
               </div>
             )}
 
             {/* 回測 */}
             {mountedTabs.has("backtest") && (
-              <div className={viewTab !== "backtest" ? "hidden" : "h-full"}>
+              <div className={viewTab !== "backtest" ? "hidden" : "flex-1"}>
                 <BacktestPanel symbol={symbol} />
               </div>
             )}
 
             {/* 分析（初始即掛載，keep-alive）*/}
-            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 min-h-0 overflow-y-auto"}>
+            <div className={viewTab !== "analysis" ? "hidden" : "flex-1 overflow-y-auto"}>
               <AnalysisPanel symbol={symbol} />
             </div>
 
             {/* 多股比較 */}
             {mountedTabs.has("compare") && (
-              <div className={viewTab !== "compare" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "compare" ? "hidden" : "flex-1"}>
                 <CompareChart initialSymbol={symbol} />
               </div>
             )}
 
             {/* 財報/除權息月曆 */}
             {mountedTabs.has("calendar") && (
-              <div className={viewTab !== "calendar" ? "hidden" : "flex-1 min-h-0"}>
+              <div className={viewTab !== "calendar" ? "hidden" : "flex-1 overflow-y-auto"}>
                 <CalendarView />
               </div>
             )}
