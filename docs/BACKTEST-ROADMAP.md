@@ -55,6 +55,9 @@
 | 43 | P15 | 危機期間分析（CrisisPanel，標記重大事件 + 各期績效） | ✅ | P15 |
 | 44 | P15 | MAE/MFE 出場品質分析（ExitQualityPanel，散佈圖） | ✅ | P15 |
 | 45 | P15 | 持倉長度最佳化（HoldingPeriodPanel，分群報酬/勝率） | ✅ | P15 |
+| 46 | P16 | 收益歸因分析（ReturnAttributionPanel，按出場原因/多空分解） | ✅ | P16 |
+| 47 | P16 | 連勝連敗風險分析（StreakAnalysisPanel，分佈圖+破產風險） | ✅ | P16 |
+| 48 | P16 | 月報酬日曆熱力圖（CalendarHeatmapPanel，year×month色塊） | ✅ | P16 |
 
 ---
 

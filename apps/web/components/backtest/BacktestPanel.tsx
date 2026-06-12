@@ -31,7 +31,10 @@ import DrawdownPanel     from "./DrawdownPanel";
 import DailyReturnsPanel   from "./DailyReturnsPanel";
 import ExitQualityPanel    from "./ExitQualityPanel";
 import CrisisPanel         from "./CrisisPanel";
-import HoldingPeriodPanel  from "./HoldingPeriodPanel";
+import HoldingPeriodPanel      from "./HoldingPeriodPanel";
+import ReturnAttributionPanel  from "./ReturnAttributionPanel";
+import StreakAnalysisPanel      from "./StreakAnalysisPanel";
+import CalendarHeatmapPanel    from "./CalendarHeatmapPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1208,12 +1211,13 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "perf", label: "📊 績效",
     tabs: [
-      { id: "stats",    label: "績效摘要" },
-      { id: "monthly",  label: "月份報酬" },
-      { id: "annual",   label: "年度報酬" },
-      { id: "drawdown",     label: "回撤分析" },
-      { id: "daily",        label: "日報酬" },
-      { id: "crisis",       label: "危機期間" },
+      { id: "stats",          label: "績效摘要" },
+      { id: "monthly",        label: "月份報酬" },
+      { id: "calendarheatmap",label: "熱力圖" },
+      { id: "annual",         label: "年度報酬" },
+      { id: "drawdown",       label: "回撤分析" },
+      { id: "daily",          label: "日報酬" },
+      { id: "crisis",         label: "危機期間" },
     ],
   },
   {
@@ -1229,8 +1233,10 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
     tabs: [
       { id: "trades",        label: "交易明細" },
       { id: "tradedist",     label: "交易分佈" },
+      { id: "attribution",   label: "收益歸因" },
       { id: "exitquality",   label: "出場品質" },
       { id: "holdingperiod", label: "持倉長度" },
+      { id: "streak",        label: "連勝連敗" },
     ],
   },
   {
@@ -2779,7 +2785,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap";
 
 interface Props {
   symbol: string;
@@ -3338,6 +3344,21 @@ export default function BacktestPanel({ symbol }: Props) {
               {/* P15-45: 持倉長度最佳化 */}
               {resultTab === "holdingperiod" && (
                 <HoldingPeriodPanel trades={result.trades} />
+              )}
+
+              {/* P16-46: 收益歸因分析 */}
+              {resultTab === "attribution" && (
+                <ReturnAttributionPanel trades={result.trades} />
+              )}
+
+              {/* P16-47: 連勝連敗風險分析 */}
+              {resultTab === "streak" && (
+                <StreakAnalysisPanel trades={result.trades} />
+              )}
+
+              {/* P16-48: 月報酬日曆熱力圖 */}
+              {resultTab === "calendarheatmap" && (
+                <CalendarHeatmapPanel monthlyReturns={result.monthly_returns} />
               )}
             </>
           )}
