@@ -1664,9 +1664,9 @@ function RegimeStatsPanel({
   );
 }
 
-function StatsPanel({ stats, symbol }: { stats: BacktestStats; symbol: string }) {
+function StatsPanel({ stats, symbol, benchmarkSymbol }: { stats: BacktestStats; symbol: string; benchmarkSymbol?: string }) {
   const isUS = !/^\d+$/.test(symbol.toUpperCase()) && !symbol.toUpperCase().endsWith(".TW");
-  const bench = isUS ? "SPY" : "0050";
+  const bench = benchmarkSymbol || (isUS ? "SPY" : "0050");
 
   return (
     <div className="space-y-4">
@@ -2189,9 +2189,10 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
   const [stopLoss, setStopLoss]     = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   // P9-29 / P10-32 / P10-33
-  const [slippage,     setSlippage]     = useState("0.1");
-  const [trailingStop, setTrailingStop] = useState("");
-  const [maxHoldDays,  setMaxHoldDays]  = useState("");
+  const [slippage,         setSlippage]         = useState("0.1");
+  const [trailingStop,     setTrailingStop]     = useState("");
+  const [maxHoldDays,      setMaxHoldDays]      = useState("");
+  const [benchmarkSymbol,  setBenchmarkSymbol]  = useState("");
 
   // P0-3 自訂策略 state
   const [entryConds, setEntryConds] = useState<Cond[]>([
@@ -2274,6 +2275,7 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
       slippage_pct:      slippage !== "" && !isNaN(parseFloat(slippage)) ? parseFloat(slippage) / 100 : 0.001,
       trailing_stop_pct: trailingStop ? parseFloat(trailingStop) / 100 : undefined,
       max_hold_days:     maxHoldDays  ? parseInt(maxHoldDays, 10)      : undefined,
+      benchmark_symbol:  benchmarkSymbol || undefined,
     });
   }
 
@@ -2458,6 +2460,36 @@ function StrategyConfig({ presets, symbol, onSubmit, loading }: ConfigProps) {
             />
           </label>
         </div>
+        {/* P12: 基準選擇 */}
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
+            比較基準
+            <span className="ml-1 opacity-60">
+              {/^\d{4}$/.test(symbol) ? "（台股）" : "（美股）"}
+            </span>
+          </span>
+          <select
+            value={benchmarkSymbol}
+            onChange={(e) => setBenchmarkSymbol(e.target.value)}
+            className="text-xs px-2 py-1 rounded outline-none"
+            style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          >
+            {/^\d{4}$/.test(symbol) ? (
+              <>
+                <option value="">0050（元大台灣50，預設）</option>
+                <option value="0056">0056（元大高股息）</option>
+                <option value="006208">006208（富邦台50）</option>
+              </>
+            ) : (
+              <>
+                <option value="">SPY（S&P 500，預設）</option>
+                <option value="QQQ">QQQ（那斯達克100）</option>
+                <option value="DIA">DIA（道瓊工業）</option>
+                <option value="IWM">IWM（羅素2000）</option>
+              </>
+            )}
+          </select>
+        </label>
         <div className="text-[9px] mt-1" style={{ color: "var(--text-tertiary)" }}>
           引擎 v2：訊號隔日開盤成交；停損/停利以盤中價觸發，跳空以開盤價成交
         </div>
@@ -3075,7 +3107,7 @@ export default function BacktestPanel({ symbol }: Props) {
                 <>
                   <ScorecardPanel stats={result.stats} />
                   <DecayDetectionPanel equityCurve={result.equity_curve} trades={result.trades} />
-                  <StatsPanel stats={result.stats} symbol={lastReq?.symbol ?? localSymbol} />
+                  <StatsPanel stats={result.stats} symbol={lastReq?.symbol ?? localSymbol} benchmarkSymbol={result.benchmark_symbol} />
                   <KellyCriterionCard
                     stats={result.stats}
                     initialCapital={lastReq?.initial_capital ?? 100000}
@@ -3129,7 +3161,7 @@ export default function BacktestPanel({ symbol }: Props) {
                   <div style={{ height: 300 }}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-                        — 策略淨值　— — 大盤基準　▲ 買入　▼ 賣出
+                        — 策略淨值　— — {result.benchmark_symbol ?? "大盤基準"}　▲ 買入　▼ 賣出
                       </div>
                       <button
                         onClick={() => setShowTrend(v => !v)}

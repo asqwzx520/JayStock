@@ -1383,6 +1383,7 @@ async def run_backtest(
     slippage_pct: float = DEFAULT_SLIPPAGE,
     trailing_stop_pct: float | None = None,
     max_hold_days: int | None = None,
+    benchmark_symbol: str | None = None,  # P12: 自訂基準
 ) -> dict:
     """
     執行完整回測並回傳結果。
@@ -1402,16 +1403,22 @@ async def run_backtest(
     is_tw  = _is_tw_symbol(symbol)
 
     # ── 資料抓取：台股用 FinMind，美股用 yfinance ──
+    # P12: 自訂基準；未指定時台股預設 0050，美股預設 SPY
+    _TW_BENCHMARKS = {"0050", "0056", "006208"}
+    _US_BENCHMARKS = {"SPY", "QQQ", "DIA", "IWM"}
+
     if is_tw:
+        bm_sym = benchmark_symbol if benchmark_symbol and benchmark_symbol.upper() in _TW_BENCHMARKS else "0050"
         raw, raw_bench = await asyncio.gather(
-            _fetch_tw_ohlcv(symbol,  start_date, end_date),
-            _fetch_tw_ohlcv("0050",  start_date, end_date),
+            _fetch_tw_ohlcv(symbol,   start_date, end_date),
+            _fetch_tw_ohlcv(bm_sym,   start_date, end_date),
         )
     else:
         loop = asyncio.get_running_loop()
+        bm_sym = benchmark_symbol if benchmark_symbol and benchmark_symbol.upper() in _US_BENCHMARKS else "SPY"
         raw, raw_bench = await asyncio.gather(
-            loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym, start_date, end_date),
-            loop.run_in_executor(None, _fetch_ohlcv_sync, "SPY",  start_date, end_date),
+            loop.run_in_executor(None, _fetch_ohlcv_sync, yf_sym,          start_date, end_date),
+            loop.run_in_executor(None, _fetch_ohlcv_sync, bm_sym.upper(),  start_date, end_date),
         )
 
     if not raw:
@@ -1483,11 +1490,12 @@ async def run_backtest(
     )
 
     return {
-        "stats":           stats,
-        "equity_curve":    equity_curve,
-        "benchmark_curve": benchmark_curve,
-        "trades":          trades,
-        "monthly_returns": monthly_returns,
-        "regime_stats":    regime_stats,
-        "engine_version":  ENGINE_VERSION,   # P9-31
+        "stats":             stats,
+        "equity_curve":      equity_curve,
+        "benchmark_curve":   benchmark_curve,
+        "trades":            trades,
+        "monthly_returns":   monthly_returns,
+        "regime_stats":      regime_stats,
+        "engine_version":    ENGINE_VERSION,  # P9-31
+        "benchmark_symbol":  bm_sym,          # P12
     }

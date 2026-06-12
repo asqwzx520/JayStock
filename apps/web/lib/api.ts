@@ -781,6 +781,7 @@ export interface BacktestRequest {
   slippage_pct?:      number;         // P9-29 滑價（預設 0.001 = 0.1%）
   trailing_stop_pct?: number | null;  // P10-32 移動停損
   max_hold_days?:     number | null;  // P10-33 時間停損
+  benchmark_symbol?:  string | null;  // P12 自訂基準
 }
 
 export interface BacktestStats {
@@ -850,8 +851,9 @@ export interface BacktestResult {
   benchmark_curve: BacktestBenchmarkPoint[];
   trades:          BacktestTrade[];
   monthly_returns: BacktestMonthlyReturn[];
-  regime_stats?:   { bull: BacktestRegimeStat | null; bear: BacktestRegimeStat | null; sideways: BacktestRegimeStat | null };
-  engine_version?: number;   // P9-31：成交模型版本（v2 = 隔日開盤 + 盤中觸發）
+  regime_stats?:    { bull: BacktestRegimeStat | null; bear: BacktestRegimeStat | null; sideways: BacktestRegimeStat | null };
+  engine_version?:  number;  // P9-31：成交模型版本（v2 = 隔日開盤 + 盤中觸發）
+  benchmark_symbol?: string; // P12：實際使用的基準代號
 }
 
 export interface BacktestPresetParam {

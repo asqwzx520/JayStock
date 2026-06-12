@@ -145,6 +145,8 @@ class BacktestRequest(BaseModel):
     slippage_pct:      float           = Field(default=0.001, ge=0.0, le=0.005)
     trailing_stop_pct: Optional[float] = Field(default=None, ge=0.01, le=0.5)
     max_hold_days:     Optional[int]   = Field(default=None, ge=1, le=365)
+    # P12 自訂基準（TW: 0050/0056/006208，US: SPY/QQQ/DIA/IWM）
+    benchmark_symbol:  Optional[str]   = Field(default=None, max_length=10)
 
     @model_validator(mode="after")
     def _check_dates(self):
@@ -202,6 +204,7 @@ async def run_backtest_endpoint(
             slippage_pct      = body.slippage_pct,
             trailing_stop_pct = body.trailing_stop_pct,
             max_hold_days     = body.max_hold_days,
+            benchmark_symbol  = body.benchmark_symbol,
         )
         return result
     except ValueError as e:
