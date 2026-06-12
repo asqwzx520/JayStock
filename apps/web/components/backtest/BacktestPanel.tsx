@@ -28,7 +28,10 @@ import TradeDistPanel    from "./TradeDistPanel";
 import RollingPanel      from "./RollingPanel";
 import HealthCheckPanel  from "./HealthCheckPanel";
 import DrawdownPanel     from "./DrawdownPanel";
-import DailyReturnsPanel from "./DailyReturnsPanel";
+import DailyReturnsPanel   from "./DailyReturnsPanel";
+import ExitQualityPanel    from "./ExitQualityPanel";
+import CrisisPanel         from "./CrisisPanel";
+import HoldingPeriodPanel  from "./HoldingPeriodPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1208,8 +1211,9 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "stats",    label: "績效摘要" },
       { id: "monthly",  label: "月份報酬" },
       { id: "annual",   label: "年度報酬" },
-      { id: "drawdown", label: "回撤分析" },
-      { id: "daily",    label: "日報酬" },
+      { id: "drawdown",     label: "回撤分析" },
+      { id: "daily",        label: "日報酬" },
+      { id: "crisis",       label: "危機期間" },
     ],
   },
   {
@@ -1223,8 +1227,10 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
   {
     id: "tradesGrp", label: "📋 交易",
     tabs: [
-      { id: "trades",    label: "交易明細" },
-      { id: "tradedist", label: "交易分佈" },
+      { id: "trades",        label: "交易明細" },
+      { id: "tradedist",     label: "交易分佈" },
+      { id: "exitquality",   label: "出場品質" },
+      { id: "holdingperiod", label: "持倉長度" },
     ],
   },
   {
@@ -2773,7 +2779,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod";
 
 interface Props {
   symbol: string;
@@ -3314,6 +3320,24 @@ export default function BacktestPanel({ symbol }: Props) {
               {/* P14-41: 日報酬分析 */}
               {resultTab === "daily" && (
                 <DailyReturnsPanel equityCurve={result.equity_curve} />
+              )}
+
+              {/* P15-43: 危機期間分析 */}
+              {resultTab === "crisis" && (
+                <CrisisPanel
+                  equityCurve={result.equity_curve}
+                  benchmarkCurve={result.benchmark_curve}
+                />
+              )}
+
+              {/* P15-44: 出場品質分析 */}
+              {resultTab === "exitquality" && (
+                <ExitQualityPanel trades={result.trades} />
+              )}
+
+              {/* P15-45: 持倉長度最佳化 */}
+              {resultTab === "holdingperiod" && (
+                <HoldingPeriodPanel trades={result.trades} />
               )}
             </>
           )}

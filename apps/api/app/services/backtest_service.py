@@ -710,6 +710,8 @@ def _run_portfolio(
     entry_date    = None
     entry_cost    = 0.0       # 進場手續費（元）
     peak_price    = 0.0       # 多頭：持倉期間 high 峰值（移動停損用）
+    hold_min_low  = float("inf")   # P15-44: 持倉期間最低價（MAE 用）
+    hold_max_high = 0.0            # P15-44: 持倉期間最高價（MFE 用）
 
     pending_buy   = False
     pending_sell: str | None  = None   # 出場原因（signal / time_stop）
@@ -722,6 +724,7 @@ def _run_portfolio(
     def _close_position(date, price, reason: str):
         """結算持倉（多空通用），直接修改 cash。"""
         nonlocal position, entry_price, entry_date, entry_cost, peak_price, cash
+        nonlocal hold_min_low, hold_max_high
         if position == 0.0:
             return
 
@@ -737,6 +740,9 @@ def _run_portfolio(
             hold_days = (date - entry_date).days if entry_date else 0
             sell_fee  = position * fill * sell_cost
             total_fee = entry_cost + sell_fee
+            # P15-44: MAE（最大不利偏移）/ MFE（最大有利偏移），以進場價為基準
+            mae_pct = (hold_min_low - entry_price) / entry_price if entry_price > 0 else 0.0
+            mfe_pct = (hold_max_high - entry_price) / entry_price if entry_price > 0 else 0.0
             trades.append({
                 "entry_date":  entry_date.strftime("%Y-%m-%d") if entry_date else "",
                 "exit_date":   date.strftime("%Y-%m-%d"),
@@ -749,13 +755,15 @@ def _run_portfolio(
                 "side":        "long",
                 "fee":         round(total_fee, 2),
                 "exit_reason": reason,
+                "mae_pct":     round(mae_pct, 6),  # P15-44
+                "mfe_pct":     round(mfe_pct, 6),  # P15-44
             })
-            cash += proceeds  # 修正：累加 proceeds（不覆蓋剩餘現金）
+            cash += proceeds
 
         else:
             # ── 空頭回補（P14-42）────────────────────────────────────────────
             shares    = -position
-            fill      = price * (1 + slip)           # 回補略高於市場價
+            fill      = price * (1 + slip)
             cover_pay = shares * fill * (1 + buy_cost)
             buy_fee   = shares * fill * buy_cost
             total_fee = entry_cost + buy_fee
@@ -765,6 +773,9 @@ def _run_portfolio(
                 (entry_price * (1 - sell_cost) - fill * (1 + buy_cost))
                 / (entry_price * (1 - sell_cost))
             ) if entry_price > 0 else 0.0
+            # 空頭 MAE = 持倉期間最高價偏離（不利 = 漲）/ MFE = 最低價偏離（有利 = 跌）
+            mae_pct = (hold_max_high - entry_price) / entry_price if entry_price > 0 else 0.0
+            mfe_pct = (entry_price - hold_min_low)  / entry_price if entry_price > 0 else 0.0
             trades.append({
                 "entry_date":  entry_date.strftime("%Y-%m-%d") if entry_date else "",
                 "exit_date":   date.strftime("%Y-%m-%d"),
@@ -777,14 +788,18 @@ def _run_portfolio(
                 "side":        "short",
                 "fee":         round(total_fee, 2),
                 "exit_reason": reason,
+                "mae_pct":     round(mae_pct, 6),  # P15-44
+                "mfe_pct":     round(mfe_pct, 6),  # P15-44
             })
             cash -= cover_pay
 
-        position    = 0.0
-        entry_price = 0.0
-        entry_date  = None
-        entry_cost  = 0.0
-        peak_price  = 0.0
+        position      = 0.0
+        entry_price   = 0.0
+        entry_date    = None
+        entry_cost    = 0.0
+        peak_price    = 0.0
+        hold_min_low  = float("inf")
+        hold_max_high = 0.0
 
     for date, row in df.iterrows():
         close = float(row["close"])
@@ -814,21 +829,25 @@ def _run_portfolio(
             position    = shares
             entry_cost  = shares * fill * buy_cost
             cash       -= invest
-            entry_price = fill
-            entry_date  = date
-            peak_price  = high
+            entry_price   = fill
+            entry_date    = date
+            peak_price    = high
+            hold_min_low  = low     # P15-44: 初始化
+            hold_max_high = high    # P15-44: 初始化
         pending_buy = False
 
         if pending_short and position == 0 and cash > 0:  # P14-42: 開空
-            fill        = open_ * (1 - slip)               # 放空以略低價成交
+            fill        = open_ * (1 - slip)
             invest      = cash * pos_ratio
             shares      = invest / fill
-            position    = -shares                          # 負數 = 空頭
-            entry_cost  = shares * fill * sell_cost        # 賣出佣金（含稅）
-            cash       += shares * fill * (1 - sell_cost)  # 收到放空款項
-            entry_price = fill
-            entry_date  = date
-            peak_price  = 0.0                              # 空頭不追蹤多頭峰值
+            position    = -shares
+            entry_cost  = shares * fill * sell_cost
+            cash       += shares * fill * (1 - sell_cost)
+            entry_price   = fill
+            entry_date    = date
+            peak_price    = 0.0
+            hold_min_low  = low     # P15-44: 初始化
+            hold_max_high = high    # P15-44: 初始化
         pending_short = False
 
         # ── 2a) 多頭盤中停損/停利/移動停損 ──────────────────────────────────────
@@ -871,9 +890,14 @@ def _run_portfolio(
             elif tp_price_s is not None and low <= tp_price_s:
                 _close_position(date, tp_price_s, "take_profit")
 
-        # ── 3) 更新多頭峰值（移動停損用）────────────────────────────────────────
+        # ── 3) 更新峰值與 MAE/MFE 追蹤 ─────────────────────────────────────────
         if position > 0:
-            peak_price = max(peak_price, high)
+            peak_price    = max(peak_price, high)
+            hold_min_low  = min(hold_min_low, low)    # P15-44
+            hold_max_high = max(hold_max_high, high)  # P15-44
+        elif position < 0:
+            hold_min_low  = min(hold_min_low, low)    # P15-44 空頭
+            hold_max_high = max(hold_max_high, high)  # P15-44 空頭
 
         # ── 4) 收盤後讀取今日訊號 → 排程明日開盤執行 ─────────────────────────────
         sig = int(signals.get(date, 0))

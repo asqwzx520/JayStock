@@ -52,6 +52,9 @@
 | 40 | P14 | 手續費折扣設定（fee_discount_pct，只折扣券商佣金） | ✅ | P14 |
 | 41 | P14 | 日報酬分析面板（DailyReturnsPanel，60日bar + 分佈圖） | ✅ | P14 |
 | 42 | P14 | 做空策略支援（allow_short，負部位引擎 + 反向停損） | ✅ | P14 |
+| 43 | P15 | 危機期間分析（CrisisPanel，標記重大事件 + 各期績效） | ✅ | P15 |
+| 44 | P15 | MAE/MFE 出場品質分析（ExitQualityPanel，散佈圖） | ✅ | P15 |
+| 45 | P15 | 持倉長度最佳化（HoldingPeriodPanel，分群報酬/勝率） | ✅ | P15 |
 
 ---
 

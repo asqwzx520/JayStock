@@ -831,8 +831,10 @@ export interface BacktestTrade {
   pnl_pct:     number;
   hold_days:   number;
   side:        "long" | "short";
-  fee?:        number;              // 手續費總額（買入 + 賣出 + 證交稅，元）
-  exit_reason?: BacktestExitReason; // signal / stop_loss / take_profit / end_of_period
+  fee?:        number;
+  exit_reason?: BacktestExitReason;
+  mae_pct?:    number;  // P15-44: 持倉期間最大不利偏移（負值為多頭不利）
+  mfe_pct?:    number;  // P15-44: 持倉期間最大有利偏移（正值為多頭有利）
 }
 
 export interface BacktestMonthlyReturn {
