@@ -165,10 +165,10 @@
 | 31 | P10 | 移動停損（trailing stop，峰值 high 更新） | ✅ | `d1c96dd` |
 | 32 | P10 | 時間停損（max hold days，次日開盤出場） | ✅ | `d1c96dd` |
 | 33 | P11 | 兩層式 Tab 導航（5 組，第二層顯示組內 tab） | ✅ | `41800ff` |
-| 34 | P11 | 一鍵體檢 + Gemini AI 白話解讀 | 🔲 | — |
+| 34 | P11 | 一鍵體檢 + Gemini AI 白話解讀 | ✅ | `aa088f2` |
 | 35 | P11 | 手機版設定欄收折（< 1024px 抽屜化） | ✅ | `41800ff` |
 
-> **唯一待實作：** item 34（一鍵體檢 + AI 白話解讀），需整合 Gemini API 對策略指標做自然語言分析。
+> **P0–P11 共 35 項全數完成（2026-06-12）。** 體檢 = `HealthCheckPanel` 五項檢查（樣本數/Sharpe/回撤/退化/Monte Carlo）+ `POST /backtest/ai-summary`（Gemini 1.5 Flash，規則式 fallback）。引擎 v2 起所有結果帶 `engine_version: 2`。
 
 ---
 
