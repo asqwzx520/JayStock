@@ -67,6 +67,9 @@
 | 55 | P19 | 逐次回撤明細（DrawdownRecoveryPanel，深度/谷底/恢復日/水下天數表格） | ✅ | P19 |
 | 56 | P19 | 報酬分佈品質（ReturnQualityPanel，直方圖+常態疊加/偏度/峰度/VaR/CVaR） | ✅ | P19 |
 | 57 | P19 | 交易頻率分析（TurnoverPanel，月度熱力圖/年化週轉率/成本拖累） | ✅ | P19 |
+| 58 | P20 | 市場環境分析（MarketRegimePanel，多頭/空頭/盤整各自勝率與報酬） | ✅ | P20 |
+| 59 | P20 | 倉位模擬比較（PositionSizingSimPanel，固定/Half Kelly/波動率目標資金曲線） | ✅ | P20 |
+| 60 | P20 | 盈虧瀑布圖（PnLWaterfallPanel，累積PnL+Pareto 80/20+最大贏輸家） | ✅ | P20 |
 
 ---
 

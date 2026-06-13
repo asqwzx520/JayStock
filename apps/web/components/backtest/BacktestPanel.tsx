@@ -44,6 +44,9 @@ import SeasonalityPanel        from "./SeasonalityPanel";
 import DrawdownRecoveryPanel   from "./DrawdownRecoveryPanel";
 import ReturnQualityPanel      from "./ReturnQualityPanel";
 import TurnoverPanel           from "./TurnoverPanel";
+import MarketRegimePanel       from "./MarketRegimePanel";
+import PositionSizingSimPanel  from "./PositionSizingSimPanel";
+import PnLWaterfallPanel       from "./PnLWaterfallPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1240,6 +1243,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "rolling",    label: "滾動績效" },
       { id: "betaalpha",  label: "Beta/Alpha" },
       { id: "volatility", label: "波動率分析" },
+      { id: "regime",     label: "市場環境" },
     ],
   },
   {
@@ -1253,6 +1257,7 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "streak",        label: "連勝連敗" },
       { id: "tradeev",       label: "期望值分析" },
       { id: "turnover",      label: "交易頻率" },
+      { id: "pnlwaterfall",  label: "盈虧瀑布圖" },
     ],
   },
   {
@@ -1270,8 +1275,9 @@ const TAB_GROUPS: { id: string; label: string; tabs: TabDef[] }[] = [
       { id: "compare",    label: "比較",    alwaysEnabled: true },
       { id: "scan",       label: "掃描",    alwaysEnabled: true },
       { id: "portfolio",  label: "組合",    alwaysEnabled: true },
-      { id: "feeimpact",  label: "手續費分析" },
-      { id: "diagnostic", label: "📋 健診報告" },
+      { id: "feeimpact",    label: "手續費分析" },
+      { id: "positionsim",  label: "倉位模擬" },
+      { id: "diagnostic",   label: "📋 健診報告" },
     ],
   },
 ];
@@ -2803,7 +2809,7 @@ function MyStrategiesDrawer({
 
 // ── Main BacktestPanel ────────────────────────────────────────────────────────
 
-type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap" | "betaalpha" | "feeimpact" | "diagnostic" | "volatility" | "tradeev" | "seasonality" | "ddrecovery" | "returnquality" | "turnover";
+type ResultTab = "stats" | "chart" | "kline" | "trades" | "monthly" | "annual" | "optimize" | "compare" | "scan" | "portfolio" | "walkforward" | "montecarlo" | "tradedist" | "rolling" | "health" | "drawdown" | "daily" | "exitquality" | "crisis" | "holdingperiod" | "attribution" | "streak" | "calendarheatmap" | "betaalpha" | "feeimpact" | "diagnostic" | "volatility" | "tradeev" | "seasonality" | "ddrecovery" | "returnquality" | "turnover" | "regime" | "positionsim" | "pnlwaterfall";
 
 interface Props {
   symbol: string;
@@ -3437,6 +3443,32 @@ export default function BacktestPanel({ symbol }: Props) {
                 <TurnoverPanel
                   trades={result.trades}
                   stats={result.stats}
+                  initialCapital={lastReq?.initial_capital ?? 1_000_000}
+                />
+              )}
+
+              {/* P20-58: 市場環境分析 */}
+              {resultTab === "regime" && (
+                <MarketRegimePanel
+                  trades={result.trades}
+                  benchmarkCurve={result.benchmark_curve}
+                />
+              )}
+
+              {/* P20-59: 倉位大小模擬 */}
+              {resultTab === "positionsim" && (
+                <PositionSizingSimPanel
+                  trades={result.trades}
+                  stats={result.stats}
+                  initialCapital={lastReq?.initial_capital ?? 1_000_000}
+                  positionSizePct={lastReq?.position_size_pct ?? 1.0}
+                />
+              )}
+
+              {/* P20-60: 累積盈虧瀑布圖 */}
+              {resultTab === "pnlwaterfall" && (
+                <PnLWaterfallPanel
+                  trades={result.trades}
                   initialCapital={lastReq?.initial_capital ?? 1_000_000}
                 />
               )}
