@@ -64,6 +64,9 @@
 | 52 | P18 | 波動率分析（VolatilityPanel，滾動HV 20/60日，高低波動期間績效） | ✅ | P18 |
 | 53 | P18 | 交易期望值（TradeEVPanel，EV分解/滾動EV/損益平衡勝率/Kelly/敏感度矩陣） | ✅ | P18 |
 | 54 | P18 | 月份季節性（SeasonalityPanel，跨年彙總1-12月均報酬/勝率/熱力帶） | ✅ | P18 |
+| 55 | P19 | 逐次回撤明細（DrawdownRecoveryPanel，深度/谷底/恢復日/水下天數表格） | ✅ | P19 |
+| 56 | P19 | 報酬分佈品質（ReturnQualityPanel，直方圖+常態疊加/偏度/峰度/VaR/CVaR） | ✅ | P19 |
+| 57 | P19 | 交易頻率分析（TurnoverPanel，月度熱力圖/年化週轉率/成本拖累） | ✅ | P19 |
 
 ---
 
